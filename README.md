@@ -6721,6 +6721,16 @@ the Ask popup and the search bars); nothing new is kept:
 At most `CHECKED` products and requests are checked against the catalogue
 each time, so the page stays quick.
 
+**Ask Rip to watch a price** (the owner picked it on 15 Nov 2026). Rip's
+reply has `watch` ("price" or "stock") and `watch_price`: "tell me when the
+Prismatic ETB drops under £50" names that one product with `watch` "price"
+and 50. From the list builder, the Ask popup, a search bar or the
+microphone it opens that product's own price alert with the price filled in
+(`?track=50#track`, the form the product page already has), or its back in
+stock alert (`#alert`) for "tell me when it is back" (`rip_list.watch_target`).
+Nothing new is kept: the alert forms are the product page's own. A product
+the site's search cannot find, or several products, go to the usual list.
+
 **Does Rip earn his keep** (the owner picked it on 15 Nov 2026). When Rip
 helps someone (answers a product question, finds products or a list, or
 replies to small talk), `askrip.mark_helped` notes it in the cache under the

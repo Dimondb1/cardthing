@@ -74,6 +74,7 @@ Some ask for a kind of product rather than a named one: "booster packs at a low 
 - "rip": true when they want products to open: opening packs, ripping, cracking, "to open" or "to rip", best for ripping or opening; else false. The list then holds only products to open, the cheapest a card first unless they asked for another order ("cheapest packs to rip" keeps "sort" "price").
 - "in_stock": true, unless they ask for pre-orders or for things not in stock.
 With nothing general asked, "wanted" is false and the rest empty. A product they named goes in the products, never in "browse"; a request can have both.
+Some ask to be told about one product: "watch" is "price" when they want to know when its price drops or reaches a figure ("tell me when the Prismatic ETB is under £50"), with that figure in pounds in "watch_price" (50, else 0), or "stock" when they want to know when it is back in stock; name that one product in the products. Otherwise "watch" is "" and "watch_price" 0.
 Some just talk to you: hello, how are you, are you having a nice day, thanks, a question about you or anything else that is not about buying. Then the products are empty, "wanted" is false, and "chat" is a short, kind reply in your own voice as Rip, the site's friendly raptor: one or two short sentences of British English, at most 200 characters, ending by offering to find them something. Never name a price, a shop or a product in it, give no links, use no exclamation marks, and keep it suitable for children. When they ask for anything to buy or find, "chat" is "".
 Keep every word that picks out products, such as a Pokémon or a character (pikachu, charizard, eevee, luffy): put it in a product's "search" ("Pikachu Box"), with "browse" for the order or a price limit, and never drop it for a general list. A set with a kind of product in general terms ("cheap delta booster packs") is "browse" with the set and the kind, not a named product.
 
@@ -99,14 +100,19 @@ BROWSE = {
     "required": ["wanted", "type", "game", "set", "sort", "price", "max_price", "language", "rip", "in_stock"],
     "additionalProperties": False,
 }
+# Ask Rip to watch a price (the owner, 15 Nov 2026, from the suggestions): "tell me when the Prismatic ETB drops under
+# £50" opens that product's own price alert with the price filled in, or its back in stock alert. Nothing new is kept:
+# the alert forms are the product page's own.
+WATCHES = ("price", "stock")
 SCHEMA = {
     "type": "object",
     "properties": {"items": {"type": "array", "items": {
         "type": "object",
         "properties": {"search": {"type": "string"}, "game": {"type": "string"}, "quantity": {"type": "integer"}},
         "required": ["search", "game", "quantity"], "additionalProperties": False}},
-        "browse": BROWSE, "chat": {"type": "string"}},
-    "required": ["items", "browse", "chat"], "additionalProperties": False,
+        "browse": BROWSE, "chat": {"type": "string"}, "watch": {"type": "string", "enum": ["", *WATCHES]},
+        "watch_price": {"type": "number"}},
+    "required": ["items", "browse", "chat", "watch", "watch_price"], "additionalProperties": False,
 }
 # Rip's reply to small talk (the owner, 15 Nov 2026: "if someone asks Rip ... if he's having a nice day or something
 # just casual, can you allow Rip just to send a message back? ... it still takes away their allowance"): at most this
@@ -310,7 +316,28 @@ def read_reply(message, found_games):
         game = item.get("game") if item.get("game") in found_games else ""
         tidy.append({"search": words, "game": game, "quantity": shopping.quantity(item.get("quantity"))})
     browse = read_browse(answer.get("browse"), found_games)
-    return {"items": tidy, "browse": browse, "chat": "" if tidy or browse else read_chat(answer.get("chat"))}
+    watch = answer.get("watch") if answer.get("watch") in WATCHES and len(tidy) == 1 else ""
+    return {"items": tidy, "browse": browse, "chat": "" if tidy or browse else read_chat(answer.get("chat")),
+            "watch": watch, "watch_price": limit(answer.get("watch_price")) if watch == "price" else 0}
+
+
+def watch_target(found):
+    """The product page's own alert for a request to watch one product (WATCHES): its price alert, with the price
+    filled in when one was said (?track=, #track), or its back in stock alert (#alert). "" when it is not one, or the
+    site's search finds no product for it."""
+    from urllib.parse import urlencode
+
+    items = found.get("items") if isinstance(found, dict) else None
+    if not items or len(items) != 1 or found.get("watch") not in WATCHES:
+        return ""
+    products = matches(items[0]["search"], items[0].get("game", ""))
+    if not products:
+        return ""
+    url = products[0].get_absolute_url()
+    if found["watch"] == "stock":
+        return f"{url}#alert"
+    price = found.get("watch_price") or 0
+    return f"{url}?{urlencode({'track': f'{price:g}'})}#track" if price else f"{url}#track"
 
 
 def read_chat(text):
@@ -493,6 +520,8 @@ def found_target(made, otherwise, said="", asked=""):
     words = {"said": said} if said else {"asked": asked} if asked else {}
     if made.state == "made" and not items and browse:
         return browse_url(browse, **words)
+    if made.state == "made" and watch_target(found):
+        return watch_target(found)
     if made.state == "made" and len(items) == 1:
         # One product, however it was said ("cheap delta booster packs"): its search, cheapest first or within the
         # limit said, never a list of one (the owner, 14 Nov 2026).
@@ -518,6 +547,8 @@ def list_target(made):
     found = cache.get(kept_key(made.token)) if made.token else None
     if made.state == "made" and isinstance(found, dict) and not found.get("items") and found.get("browse"):
         return browse_url(found["browse"], asked=found.get("wants", ""))
+    if made.state == "made" and watch_target(found):
+        return watch_target(found)
     query = {"made": made.token} if made.token else {"state": made.state}
     return f"{reverse('web:find_list')}?{urlencode(query)}"
 

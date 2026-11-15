@@ -69,7 +69,8 @@ class PhotoTests(ListCase):
         ask = ClaudeAsk.objects.get()
         self.assertEqual(ask.evidence, {"list": "", "photo": True})
         self.assertEqual(ask.set_answer, {"items": [{"search": "Surging Sparks Booster Box", "game": "pokemon",
-                                                     "quantity": 2}], "browse": None, "chat": ""})
+                                                     "quantity": 2}], "browse": None, "chat": "", "watch": "",
+                                                     "watch_price": 0})
         sent = self.fake.sent[0]["messages"][0]["content"][0]["source"]["data"]
         stored = json.dumps([getattr(ask, f.attname) for f in ClaudeAsk._meta.concrete_fields], default=str)
         self.assertNotIn(sent[:200], stored)
@@ -754,6 +755,58 @@ class EarnsHisKeepTests(ListCase):
         page = self.client.get(reverse("claude")).content.decode()
         self.assertIn("<b>Shop clicks after Rip helped:</b> 1 this month and 1 today", page)
         self.assertIn("a click. <a href=\"/admin/catalogue/outboundclick/?via_rip__exact=1\">See the clicks</a>", page)
+
+
+def watching(search, watch, price=0):
+    """Rip's reply to a request to watch one product."""
+    return json.dumps({"items": [{"search": search, "game": "pokemon", "quantity": 1}], "browse": None, "chat": "",
+                       "watch": watch, "watch_price": price})
+
+
+class WatchTests(ListCase):
+    """The owner, 15 Nov 2026, from the suggestions: "Ask Rip to watch a price". "Tell me when the Prismatic ETB drops
+    under £50" opens that product's own price alert with the price filled in."""
+
+    def test_a_price_to_watch_opens_the_price_alert_filled_in(self):
+        self.fake.answer = watching("Surging Sparks Booster Box", "price", 120)
+        location = self.build("tell me when the surging sparks box is under 120")["Location"]
+        self.assertEqual(location, self.box.get_absolute_url() + "?track=120#track")
+        from .tests_alerts import MAIL
+
+        with self.settings(**MAIL):   # the price alert form shows while the site can send email
+            self.assertContains(self.client.get(location), 'value="120"')   # the form, filled in
+        # Spoken or typed into a search bar, the same.
+        self.fake.answer = watching("Surging Sparks Booster Box", "price", 99.5)
+        said = self.client.get(reverse("web:voice_search"), {"q": "let me know when surging sparks drops below 99.50",
+                                                            "via": "box"}, REMOTE_ADDR="203.0.113.7")["Location"]
+        self.assertEqual(said, self.box.get_absolute_url() + "?track=99.5#track")
+
+    def test_no_price_said_or_back_in_stock(self):
+        self.fake.answer = watching("Surging Sparks Booster Box", "price")
+        self.assertEqual(self.build("watch the price of the surging sparks box")["Location"],
+                         self.box.get_absolute_url() + "#track")
+        self.fake.answer = watching("Surging Sparks Booster Box", "stock")
+        self.assertEqual(self.build("tell me when the surging sparks box is back")["Location"],
+                         self.box.get_absolute_url() + "#alert")
+
+    def test_a_product_the_site_does_not_have_or_several_are_the_usual_list(self):
+        self.fake.answer = watching("Phantasmal Flames Booster Box", "price", 100)
+        token, _ = self.made(self.build("tell me when phantasmal flames boxes are under 100"))
+        self.assertTrue(token)   # the list builder's page, which says it found nothing for it
+        self.fake.answer = json.dumps({"items": [{"search": "Surging Sparks Booster Box", "game": "pokemon",
+                                                  "quantity": 1}] * 2, "browse": None, "chat": "", "watch": "price",
+                                       "watch_price": 100})
+        token, _ = self.made(self.build("two surging sparks boxes, tell me when under 100"))
+        self.assertEqual(rip_list.kept_browse(token), None)
+        self.assertEqual(rip_list.watch_target(rip_list.cache.get(rip_list.kept_key(token))), "")
+
+    def test_rip_is_told_how(self):
+        self.build("tell me when it is cheaper")
+        sent = self.fake.sent[0]
+        self.assertIn('"watch" is "price" when they want to know when its price drops', sent["system"][0]["text"])
+        schema = sent["output_config"]["format"]["schema"]
+        self.assertEqual(schema["properties"]["watch"], {"type": "string", "enum": ["", "price", "stock"]})
+        self.assertIn("watch_price", schema["required"])
 
 
 class OwnerTests(ListCase):

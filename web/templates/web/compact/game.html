@@ -9,10 +9,8 @@
 {% include "web/includes/feed_sprite.svg" %}
 {% include "web/includes/feed_dock.html" with feed=dock %}
 {% include "web/includes/compact_status.html" %}
-<section class="cx-hero cx-hero--game">
-  <h1 class="cx-hero__title">{% copy "browse.hub.answer.title" game=game.name %}</h1>
-  {% if stock_line %}<p class="cx-hero__lead">{{ stock_line }}</p>{% endif %}
-</section>
+{# The owner, 15 Nov 2026: "Talk about waffle central ... only the necessary": the heading is for search engines and screen readers only, and the counts sentence is at the foot (web/proof.py reads it there). #}
+<h1 class="visually-hidden">{% copy "browse.hub.answer.title" game=game.name %}</h1>
 {% include "web/includes/compact_strip.html" %}
 <section class="cx-section" aria-labelledby="cx-sets-title">
   <div class="cx-section__head"><h2 id="cx-sets-title" class="cx-section__title">{% copy "compact.game.sets" game=game.display_short %}</h2><a class="cx-section__all" href="{{ all_url }}">{% copy "compact.game.all_products" game=game.display_short %}</a></div>
@@ -34,4 +32,5 @@
   {% if guides_live %}<p class="hub-faq__more"><a href="{% url 'web:guide_compare' %}">{% copy "browse.hub.answer.guide" %}</a></p>{% endif %}
 </section>
 {% endif %}
+{% if stock_line %}<p class="cx-facts">{{ stock_line }}</p>{% endif %}
 {% endblock %}

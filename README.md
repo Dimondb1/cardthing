@@ -3682,6 +3682,18 @@ server rendered and in the sitemap. These used to sit on the home page;
 they moved here so the home page stays short. Its lists are cached like
 the home page's and cleared by imports.
 
+**No waffle at the top** (the owner, 15 Nov 2026: "Talk about waffle
+central. Minimise ai guff text to only the necessary really needed", and
+of the headings, "Kill them"). The Deals page and a game's page (the
+compact layout) show no heading: it is still there for search engines and
+screen readers (`visually-hidden`), and the browser tab's title is
+unchanged. The Deals page keeps one small line, "Delivered prices, checked
+{time} · Cheapest per card" (every price must say when it was checked),
+and its sections have no notes under their headings. A game's page counts
+sentence ("1,816 sealed Pokémon products in stock at 106 UK shops, out of
+...") is at its foot (`.cx-facts`), where `web/proof.py` reads it to check
+the counts agree with the description and llms.txt.
+
 **Lowest in 90 days** sits under the savings: products whose
 cheapest confirmed delivered price now is at or below the lowest we recorded
 in the 90 days before today, with at least 14 of those days, and at least 5%

@@ -93,7 +93,7 @@ def game(html, llms_line=""):
               for block in of_type(found, "FAQPage") for entry in block.get("mainEntity", [])]
     lists = [block["mainEntity"] for block in of_type(found, "CollectionPage")
              if (block.get("mainEntity") or {}).get("@type") == "ItemList"]
-    line = shown((re.search(r'<p class="cx-hero__lead">(.*?)</p>', html, re.S) or [None, ""])[1])
+    line = shown((re.search(r'<p class="cx-facts">(.*?)</p>', html, re.S) or [None, ""])[1])   # at the foot
     counts = {"description": STOCK.search(description(html)), "page": STOCK.search(line)}
     counts = {name: match.groups() if match else None for name, match in counts.items()}
     said = re.search(r"([\d,]+) in stock now at ([\d,]+) UK shops?", llms_line)

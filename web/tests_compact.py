@@ -262,10 +262,11 @@ class DeskTests(CompactCase):
 class GamePageTests(CompactCase):
     def test_a_game_lists_its_sets_newest_first_and_links_every_product(self):
         html = self.page(self.pokemon.get_absolute_url())
-        # The heading says what the page compares, and the line under it gives the counts its description gives
-        # (web/answers.py): products in stock, the shops with one, every product listed and its sets.
-        self.assertIn('<h1 class="cx-hero__title">Pokémon sealed product prices in the UK</h1>', html)
-        self.assertIn('<p class="cx-hero__lead">3 sealed Pokémon products in stock at 2 UK shops, out of 5 listed '
+        # The heading says what the page compares, for search engines and screen readers only, and the line at the
+        # foot gives the counts its description gives (web/answers.py): products in stock, the shops with one, every
+        # product listed and its sets. The owner, 15 Nov 2026: "only the necessary really needed".
+        self.assertIn('<h1 class="visually-hidden">Pokémon sealed product prices in the UK</h1>', html)
+        self.assertIn('<p class="cx-facts">3 sealed Pokémon products in stock at 2 UK shops, out of 5 listed '
                       'across 2 sets. Every price includes UK delivery.</p>', html)
         self.assertIn('<p class="cx-status">4 prices in stock at 2 UK shops<span aria-hidden="true"> · </span>'
                       '<span class="visually-hidden">, </span>Checked 1 hour ago</p>', html)

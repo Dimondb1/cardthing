@@ -100,12 +100,15 @@ class AnswersCase(TestCase):
 class GameAnswerTests(AnswersCase):
     def test_the_heading_says_what_the_page_compares_and_the_line_counts_it(self):
         html = self.page(self.pokemon.get_absolute_url())
-        self.assertIn('<h1 class="cx-hero__title">Pokémon sealed product prices in the UK</h1>', html)
+        # For search engines and screen readers, not shown (the owner, 15 Nov 2026: "Talk about waffle central").
+        self.assertIn('<h1 class="visually-hidden">Pokémon sealed product prices in the UK</h1>', html)
         self.assertEqual(html.count("<h1"), 1)
         # Five products are in stock (the Japanese box too), at three UK shops (eBay is not one), six are listed, in
-        # one set.
-        self.assertIn('<p class="cx-hero__lead">5 sealed Pokémon products in stock at 3 UK shops, out of 6 listed across '
+        # one set: said at the foot, after the listings, not under a heading.
+        self.assertIn('<p class="cx-facts">5 sealed Pokémon products in stock at 3 UK shops, out of 6 listed across '
                       '1 set. Every price includes UK delivery.</p>', html)
+        self.assertGreater(html.index('class="cx-facts"'), html.index('class="cx-sets"'))
+        self.assertNotIn("cx-hero__lead", html)
 
     def test_the_listings_come_before_the_words_for_search_engines(self):
         """The owner, 11 Nov 2026: the cheapest block "is hiding the actual listings". The deals strip and the sets
@@ -201,7 +204,7 @@ class GameAnswerTests(AnswersCase):
         # The owner, 9 Nov 2026: the description said 1,901 in stock at 101 shops, the page 535 at 130, llms.txt 5772.
         html = self.page(self.pokemon.get_absolute_url())
         description = re.search(r'<meta name="description" content="([^"]*)"', html).group(1)
-        line = shown_text(section(html, '<p class="cx-hero__lead">', "</p>"))
+        line = shown_text(section(html, '<p class="cx-facts">', "</p>"))
         llms = self.client.get("/llms.txt").content.decode()
         self.assertTrue(description.startswith("5 sealed Pokémon products in stock at 3 UK shops, from £4.50 delivered."))
         self.assertTrue(line.startswith("5 sealed Pokémon products in stock at 3 UK shops, out of 6 listed"))
@@ -241,7 +244,7 @@ class GameAnswerTests(AnswersCase):
                                   ("Final Fantasy Bundle", BUNDLE, "55.00")):
             self.offer(self.item(name, kind, product_set=fin), self.harbour, price)
         html = self.page(magic.get_absolute_url())
-        self.assertIn('<h1 class="cx-hero__title">Magic: The Gathering sealed product prices in the UK</h1>', html)
+        self.assertIn('<h1 class="visually-hidden">Magic: The Gathering sealed product prices in the UK</h1>', html)
         block = section(html, '<section class="hub-answer"', "</section>")
         self.assertEqual(re.findall(r'<span class="hub-answer__kind">(.*?)</span>', block),
                          ["Play booster box", "Collector booster box", "Commander deck", "Bundle"])

@@ -444,7 +444,7 @@ ENTRIES = [
     Entry(
         "home.price_drops.intro", T, "Price drops explanation",
         "Cheapest delivered price now, compared with {days} days ago.",
-        "Short line under the price drops heading explaining the comparison. "
+        "Short line under the home page's price drops heading explaining the comparison (not on the Deals page). "
         "Leave empty to hide it.",
         placeholders=("days",),
         optional=True,
@@ -1427,11 +1427,11 @@ ENTRIES = [
     # is filled in from the catalogue as the page is built, and the questions are given again as FAQPage structured
     # data word for word, so edit a question or an answer here and both change together.
     Entry("browse.hub.answer.title", H, "Game page heading", "{game} sealed product prices in the UK",
-          "The heading of a game's page. {game} is the game's full name. Says what the page compares, in the words "
-          "people search with.", placeholders=("game",)),
+          "The heading of a game's page, for search engines and screen readers: not shown. {game} is the game's full "
+          "name. Says what the page compares, in the words people search with.", placeholders=("game",)),
     Entry("browse.hub.answer.stock", T, "Game page line: what is in stock",
           "{products} in stock at {shops}, out of {listed} listed across {sets}. Every price includes UK delivery.",
-          "Under a game's heading while a shop has something in stock. {products} is how many of the game's products "
+          "At the foot of a game's page while a shop has something in stock. {products} is how many of the game's products "
           "are in stock now (as 1,901 sealed Pokémon products), {shops} the shops with one in stock, {listed} every "
           "product listed and {sets} its sets. The search engine description and llms.txt quote the same counts.",
           placeholders=("products", "shops", "listed", "sets")),
@@ -1439,7 +1439,7 @@ ENTRIES = [
     Entry("browse.hub.answer.sets.other", T, "Set count (more than one)", "{count} sets",
           "How many sets a game's line counts.", placeholders=("count",)),
     Entry("browse.hub.answer.cheapest", H, "Game page: cheapest of each kind heading", "Cheapest {game} prices in stock now",
-          "Over the short list under a game's heading: the cheapest product of each main kind in stock.",
+          "Over the short list on a game's page: the cheapest product of each main kind in stock.",
           placeholders=("game",)),
     Entry("browse.hub.answer.price", T, "Game page: a cheapest price", "delivered at {shop}",
           "After the price in the list of cheapest prices on a game's page.", placeholders=("shop",)),
@@ -3275,32 +3275,24 @@ ENTRIES = [
     Entry(
         "deals.title", H, "Deals page heading",
         "Today's best sealed TCG deals in the UK",
-        "Heading of the deals page.",
+        "Heading of the deals page, for search engines and screen readers: not shown.",
     ),
     Entry(
         "deals.intro", T, "Deals page introduction",
-        "The biggest gaps between the cheapest shop and the next one, this week's price drops, the most "
-        "clicked products and what just came back in stock. Delivered prices, latest shop check {time}.",
-        "Under the deals page heading.",
+        "Delivered prices, checked {time}",
+        "The one line at the top of the deals page, before the Cheapest per card link. Every price must say when "
+        "it was checked.",
         placeholders=("time",),
     ),
-    Entry("deals.percard", B, "Cheapest per card link", "Ripping packs? See the cheapest per card",
-          "Link under the Deals page intro to the Cheapest per card page."),
+    Entry("deals.percard", B, "Cheapest per card link", "Cheapest per card",
+          "Link at the top of the Deals page, after when the prices were checked, to the Cheapest per card page."),
     Entry("deals.savings.title", H, "Deals savings heading", "Biggest savings right now", "Deals page section heading."),
     Entry("deals.drops.title", H, "Deals drops heading", "Biggest price drops", "Deals page section heading."),
     Entry("deals.lowest.title", H, "Deals lowest heading", "Lowest in 90 days", "Deals page section heading."),
-    Entry("deals.lowest.note", T, "Lowest in 90 days explanation",
-          "Products at their cheapest delivered price in 90 days, and well under their average.",
-          "Under the Lowest in 90 days heading on the Deals page."),
     Entry("deals.lowest.average", T, "Average price", "Average {price}",
           "Above the price on each Lowest in 90 days row: the product's average cheapest price over those days.",
           placeholders=("price",)),
     Entry("deals.restock.title", H, "Deals restock heading", "Back in stock", "Deals page section heading."),
-    Entry(
-        "deals.restock.note", T, "Restock log explanation",
-        "Every time a shop we check went from sold out to in stock in the last 7 days. Marketplaces are left out.",
-        "Under the Back in stock heading on the deals page.",
-    ),
     Entry(
         "deals.restock.again", T, "Sold out again marker",
         "sold out again",

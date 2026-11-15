@@ -804,7 +804,9 @@ class RestockRecordPageTests(PageTestCase):
         Restock.objects.create(product=self.etb, retailer=self.harbour, listing=self.cheap, at=recent, price="54.99")
         Restock.objects.create(product=self.sold_out, retailer=self.harbour, listing=sold, at=now - timedelta(days=1, hours=2), price="140.00")
         body = self.client.get(reverse("web:deals")).content.decode()
-        self.assertIn("Every time a shop we check went from sold out to in stock", body)
+        # The heading alone says what the list is (the owner, 15 Nov 2026: "only the necessary really needed").
+        self.assertIn('<h2 id="restock-title" class="section-head__title">Back in stock</h2>', body)
+        self.assertNotIn("Every time a shop we check", body)
         self.assertIn(timezone.localtime(recent).strftime("%A %-d %B"), body)
         self.assertIn("sold out again", body)
         self.assertLess(body.index(self.etb.name + "</span>"), body.index(self.sold_out.name + "</span>"))
@@ -1176,6 +1178,18 @@ class DealsAndAliasTests(PageTestCase):
         self.assertContains(response, '"@type": "BreadcrumbList"')
         self.assertContains(self.client.get(reverse("web:home")), 'href="/deals/"')
         self.assertContains(self.client.get("/sitemap.xml"), "http://testserver/deals/")
+
+    def test_deals_page_says_only_what_is_needed_at_its_top(self):
+        # The owner, 15 Nov 2026: "Talk about waffle central. Minimise ai guff text to only the necessary", and of the
+        # headings, "Kill them". The heading stays for search engines and screen readers; one short line says when the
+        # prices were checked, which every price must, and links to Cheapest per card.
+        html = self.client.get(reverse("web:deals")).content.decode()
+        self.assertIn('<h1 class="visually-hidden">Today&#x27;s best sealed TCG deals in the UK</h1>', html)
+        top = html[html.index('<div class="page-head">'):html.index("</div>", html.index('<div class="page-head">'))]
+        self.assertIn('<p class="page-head__line">Delivered prices, checked ', top)
+        self.assertIn(f'<a href="{reverse("web:per_card")}">Cheapest per card</a></p>', top)
+        self.assertNotIn("page-intro", top)
+        self.assertNotIn("biggest gaps", html)
 
     def test_deals_page_copes_with_nothing_to_show(self):
         Listing.objects.all().delete()

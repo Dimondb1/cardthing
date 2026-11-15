@@ -84,6 +84,8 @@ ul, ol { margin: 0; padding: 0; }
 .page-title { font-size: var(--text-page-title); margin: var(--rhythm-page-top) 0 var(--rhythm-title); }
 .page-head .page-title, .page-title:has(+ .prose--lead) { margin-bottom: var(--space-2); }   /* an intro under the title is its subtitle */
 .page-intro { max-width: 44rem; margin-bottom: var(--rhythm-title); color: var(--color-ink-muted); }
+.page-head__line { margin: 0 0 var(--rhythm-title); color: var(--color-ink-muted); font-size: var(--text-sm); }   /* the one line a page keeps at its top */
+.page-head__line a { color: var(--color-brand-text); font-weight: var(--weight-strong); }
 /* A page's link to a part further down it (the watchlist's Your alerts). */
 .page-head .page-jump { margin-top: calc(-1 * var(--space-3)); margin-bottom: var(--rhythm-title); font-weight: var(--weight-strong); }
 .page-jump a { color: var(--color-brand-text); }
@@ -3065,6 +3067,7 @@ li + li > .checker__option { border-top: var(--border-width) solid var(--color-l
 .cx-hero__mark { flex: none; }
 .cx-hero--game .cx-hero__title { font-size: var(--text-xl); }
 .cx-hero__lead { margin: 0; font-size: var(--text-sm); color: var(--color-ink-muted); }
+.cx-facts { margin: var(--space-5) 0 0; color: var(--color-ink-muted); font-size: var(--text-sm); }   /* a game page's counts in words, at its foot */
 .cx-checked { justify-self: start; display: inline-flex; align-items: center; gap: var(--space-2); margin: var(--space-1) 0 0; padding: var(--space-1) var(--space-2); border-radius: var(--radius-pill); background: var(--color-price-soft); color: var(--color-price); font-size: var(--text-xs); font-weight: var(--weight-strong); }
 .cx-checked__dot { width: var(--stock-dot); height: var(--stock-dot); border-radius: 50%; background: var(--color-in-stock); }
 

@@ -557,12 +557,15 @@ class AskSheetTests(ListCase):
                 self.assertIn('<clipPath id="rip-neck-sheet">', sheet)
                 self.assertIn('clip-path="url(#rip-neck-sheet)"', sheet)
                 self.assertIn('<g class="rip__eye rip__eye--normal"><path class="rip__fill-paper"', sheet)   # white eye
-                self.assertIn('<span class="ask-sheet__bubble" aria-hidden="true">Hi</span>', sheet)
+                # The bubble's tail is drawn inside it, so one shadow follows the whole shape.
+                self.assertIn('<span class="ask-sheet__bubble" aria-hidden="true"><svg class="ask-sheet__bubble-tail" '
+                              'viewBox="0 0 14 12" focusable="false">', sheet)
+                self.assertIn("</svg>Hi</span>", sheet)
                 # Five examples take turns in the empty box.
                 self.assertIn('data-try="Try: {example}"', sheet)
-                self.assertIn('<ul hidden data-ask-examples><li>cheap Delta Reign booster packs</li><li>ETBs under £50</li>'
-                              '<li>a Pikachu gift under £30</li><li>two bundles and a mini tin</li>'
-                              '<li>One Piece booster boxes in stock</li></ul>', sheet)
+                self.assertIn('<ul hidden data-ask-examples><li>cheap Delta Reign packs</li><li>ETBs under £50</li>'
+                              '<li>Pikachu gifts under £30</li><li>two bundles and a tin</li>'
+                              '<li>One Piece boxes in stock</li></ul>', sheet)
                 self.assertIn('<button class="ask-sheet__close" type="button" data-ask-close aria-label="Close">', sheet)
                 self.assertIn(f'<form class="ask-sheet__form" action="{VOICE_URL}" method="get" role="search"', sheet)
                 self.assertIn('<input type="hidden" name="via" value="typed">', sheet)
@@ -750,8 +753,36 @@ class AskSheetTests(ListCase):
         self.assertIn("var EXAMPLE_MS = 3500;", sheet)
         # Never over the microphone's own words, or what is typed.
         self.assertIn('if (!examples.length || box.value || sheetForm.classList.contains("is-listening")', sheet)
-        self.assertIn('box.setAttribute("placeholder", tryLine.replace("{example}", examples[turn % examples.length]));',
-                      sheet)
+        # Only one that fits the box on one line, measured in its own type (the owner, 15 Nov 2026, of one that
+        # wrapped and was cut off: "the text isn't fitting in the box"): without Try: where that is too long, passed
+        # over where it still is.
+        self.assertIn("return ruler.measureText(words).width <= box.clientWidth - parseFloat(style.paddingLeft) "
+                      "- parseFloat(style.paddingRight);", sheet)
+        self.assertIn('var line = tryLine.replace("{example}", example);\n        if (!fits(line)) line = example;\n'
+                      "        if (fits(line)) {", sheet)
+        css = open(finders.find("css/site.css"), encoding="utf-8").read()
+        self.assertIn(".ask-sheet__input::placeholder { overflow: hidden; color: var(--color-ink-muted); "
+                      "text-overflow: ellipsis; white-space: nowrap; }", css)
+
+    def test_the_examples_are_short_enough_for_a_phones_box(self):
+        from content.registry import REGISTRY
+
+        for n in range(1, 6):
+            with self.subTest(example=n):
+                self.assertLessEqual(len(REGISTRY[f"askrip.sheet.example_{n}"].default), 24)
+
+    def test_the_bubble_is_one_shape_clear_of_rips_nose(self):
+        css = open(finders.find("css/site.css"), encoding="utf-8").read()
+        bubble = css[css.index(".ask-sheet__bubble { position: absolute;"):css.index(".ask-sheet__bubble-tail {")]
+        # Its foot a fixed way above the sheet, so a longer word grows up, never over the heading.
+        self.assertIn("bottom: calc(100% + var(--ask-bubble-lift));", bubble)
+        self.assertIn("left: calc(var(--gutter) + var(--ask-sheet-rip) + var(--ask-bubble-gap));", bubble)
+        self.assertIn("max-width: calc(100% - 2 * var(--gutter) - var(--ask-sheet-rip) - var(--ask-bubble-gap));", bubble)
+        self.assertIn("filter: drop-shadow(var(--ask-bubble-shadow));", bubble)
+        self.assertIn(".ask-sheet__bubble-tail { position: absolute; right: calc(100% - var(--border-width));", css)
+        tokens = open(finders.find("css/tokens.css"), encoding="utf-8").read()
+        # Rip's neck sits on the sheet's edge whatever his size.
+        self.assertIn("--ask-sheet-peek: calc(var(--ask-sheet-rip) * 0.81);", tokens)
 
     def test_a_product_page_draws_rip_twice_with_ids_of_their_own(self):
         self.new_home()
@@ -770,7 +801,9 @@ class AskSheetTests(ListCase):
             script = handle.read()
         self.assertIn('document.querySelectorAll("textarea[data-grow]")', script)
         # Measured while hidden a box is 0 high: it keeps its rows, so the example in it is not cut off.
-        self.assertIn('if (field.scrollHeight) field.style.height = field.scrollHeight + "px";', script)
+        self.assertIn("if (!field.scrollHeight) return;   // a hidden box measures 0: left to its rows", script)
+        # A scrollbar only once the words pass the tallest the box may be: none beside a box that shows them all.
+        self.assertIn('field.style.overflowY = field.scrollHeight > field.clientHeight + 1 ? "auto" : "hidden";', script)
         self.assertIn('panel.className = "voice-words";', script)
         css = open(finders.find("css/site.css"), encoding="utf-8").read()
         self.assertIn("max-height: var(--voice-words-max);", css)

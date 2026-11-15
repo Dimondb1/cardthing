@@ -7,7 +7,7 @@ Hidden until the script opens it; without script the Ask button opens the Find p
   <section class="ask-sheet__panel" role="dialog" aria-labelledby="ask-sheet-title" tabindex="-1" data-ask-panel data-mood="idle">
     <span class="ask-sheet__grip" aria-hidden="true" data-ask-grip></span>
     <span class="ask-sheet__rip" aria-hidden="true">{% include "web/includes/rip_bot.html" with rip_id="-sheet" %}</span>
-    <span class="ask-sheet__bubble" aria-hidden="true">{% copy "askrip.sheet.hello" %}</span>
+    <span class="ask-sheet__bubble" aria-hidden="true"><svg class="ask-sheet__bubble-tail" viewBox="0 0 14 12" focusable="false"><path d="M14 .5C9 2 4 6 0 12c6-.5 11-2.5 14-5z"/></svg>{% copy "askrip.sheet.hello" %}</span>
     <div class="ask-sheet__head" data-ask-grip>
       <div class="ask-sheet__heading">
         <h2 class="ask-sheet__title" id="ask-sheet-title" data-ask-title data-title-all="{% copy 'askrip.sheet.title' %}" data-title-listening="{% copy 'askrip.sheet.listen_title' %}" data-title-searching="{% copy 'askrip.sheet.searching_title' %}" data-title-search="{% copy 'askrip.voice.searching' words='{words}' %}" data-title-opening="{% copy 'askrip.sheet.opening' what='{what}' %}">{% if request.resolver_match.url_name == "product" and product and ask.open and ask.left and ask.suggestions %}{% copy "askrip.sheet.product_title" %}{% else %}{% copy "askrip.sheet.title" %}{% endif %}</h2>

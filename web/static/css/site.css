@@ -2950,8 +2950,10 @@ li + li > .checker__option { border-top: var(--border-width) solid var(--color-l
    word in a white speech bubble beside him while he waits (the owner, 15 Nov 2026); the heading starts at the left. */
 .ask-sheet__rip { position: absolute; top: calc(-1 * var(--ask-sheet-peek)); left: var(--gutter); width: var(--ask-sheet-rip); height: var(--ask-sheet-rip); pointer-events: none; }
 .ask-sheet__rip .rip { width: 100%; height: 100%; }
-.ask-sheet__bubble { position: absolute; top: calc(var(--ask-bubble-top) - var(--ask-sheet-peek)); left: calc(var(--gutter) + var(--ask-sheet-rip) - var(--space-2)); padding: var(--space-1) var(--space-3); border-radius: var(--radius-card); background: var(--color-paper); box-shadow: var(--shadow-lift); color: var(--color-ink); font-size: var(--text-base); font-weight: var(--weight-heading); line-height: var(--leading-snug); pointer-events: none; transform-origin: left bottom; transition: opacity var(--motion-fast) var(--ease-standard); }
-.ask-sheet__bubble::before { content: ""; position: absolute; left: calc(-1 * var(--space-2)); bottom: var(--space-2); border-style: solid; border-width: var(--space-1) var(--space-2) var(--space-1) 0; border-color: transparent var(--color-paper) transparent transparent; }
+/* The bubble sits clear of his nose, level with his mouth, its bottom a fixed way above the sheet so a longer word grows
+   up, never over the heading. Its tail is drawn (ask_sheet.html), so one soft shadow follows the whole shape. */
+.ask-sheet__bubble { position: absolute; bottom: calc(100% + var(--ask-bubble-lift)); left: calc(var(--gutter) + var(--ask-sheet-rip) + var(--ask-bubble-gap)); max-width: calc(100% - 2 * var(--gutter) - var(--ask-sheet-rip) - var(--ask-bubble-gap)); padding: var(--space-2) var(--space-4); border-radius: var(--radius-card); background: var(--color-paper); filter: drop-shadow(var(--ask-bubble-shadow)); color: var(--color-ink); font-size: var(--text-lg); font-weight: var(--weight-price); line-height: var(--leading-snug); overflow-wrap: anywhere; pointer-events: none; transform-origin: left bottom; transition: opacity var(--motion-fast) var(--ease-standard); }
+.ask-sheet__bubble-tail { position: absolute; right: calc(100% - var(--border-width)); bottom: var(--space-1); width: var(--ask-bubble-tail); height: auto; fill: var(--color-paper); }
 .ask-sheet__panel:not([data-mood="idle"]) .ask-sheet__bubble { opacity: 0; }   /* his thinking marks need the room */
 .ask-sheet__head { flex: none; display: flex; align-items: flex-start; gap: var(--space-2); min-height: var(--tap); touch-action: none; }
 .ask-sheet__heading { flex: 1; min-width: 0; padding-top: var(--space-2); }
@@ -2967,8 +2969,10 @@ li + li > .checker__option { border-top: var(--border-width) solid var(--color-l
 .ask-sheet__box:focus-within { border-color: var(--color-brand); }
 .ask-sheet__icon { flex: none; width: var(--icon-button); height: var(--icon-button); margin-top: var(--space-3); color: var(--color-ink-subtle); }
 .ask-sheet__form.is-searching .ask-sheet__icon { -webkit-mask: none; mask: none; background: none; border: var(--voice-ring) solid var(--color-brand); border-right-color: transparent; border-radius: 50%; animation: voice-spin var(--motion-slow) linear infinite; }
-.ask-sheet__input { flex: 1; min-width: 0; min-height: var(--tap); max-height: var(--ask-box-max); padding: var(--space-3) 0; border: 0; outline: 0; background: transparent; color: var(--color-ink); font: inherit; font-size: var(--text-base); line-height: var(--leading-snug); resize: none; overflow-y: auto; }
-.ask-sheet__input::placeholder { color: var(--color-ink-muted); }
+/* No scrollbar until the words pass the box's tallest (ask-input.js grow); the example in the empty box is one line,
+   cut with dots rather than wrapped out of sight if it ever cannot fit. */
+.ask-sheet__input { flex: 1; min-width: 0; min-height: var(--tap); max-height: var(--ask-box-max); padding: var(--space-3) 0; border: 0; outline: 0; background: transparent; color: var(--color-ink); font: inherit; font-size: var(--text-base); line-height: var(--leading-snug); resize: none; overflow-y: hidden; }
+.ask-sheet__input::placeholder { overflow: hidden; color: var(--color-ink-muted); text-overflow: ellipsis; white-space: nowrap; }
 .ask-sheet__tools { display: flex; flex: none; align-items: center; gap: var(--space-1); min-height: var(--tap); }
 .ask-sheet__form.is-listening .ask-sheet__camera, .ask-sheet__form.is-searching .ask-sheet__camera, .ask-sheet__form.has-words .ask-sheet__camera { display: none; }
 .ask-sheet__send { display: none; align-items: center; justify-content: center; flex: none; width: var(--search-tool); height: var(--search-tool); padding: 0; border: 0; border-radius: 50%; background: var(--color-brand-action); color: var(--color-brand-ink); cursor: pointer; }

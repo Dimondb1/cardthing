@@ -6567,7 +6567,19 @@ list count and today's top deal.
   heading reads Ask me anything, from the left. Five examples take turns
   in the empty box every 3.5 seconds, "Try: ETBs under £50"
   (`askrip.sheet.example_1` to `_5`, `askrip.sheet.try`), never over the
-  microphone's words or what is typed. It all fits a
+  microphone's words or what is typed.
+- **Nothing cut off** (the owner, 15 Nov 2026, of the first bubble and an
+  example that wrapped out of sight: "The speech bubble isn't good quality
+  the text isn't fitting in the box"). An example shows only if it fits
+  the box on one line, measured in the box's own type: with "Try:" where
+  there is room, alone where there is not, passed over if still too long
+  (keep them to about 24 letters; a test holds the defaults to that). The
+  box has no scrollbar until its words pass its tallest (`grow`). The
+  bubble sits clear of Rip's nose, level with his mouth, with a drawn
+  tail so one soft shadow follows the whole shape (`--ask-bubble-*`); its
+  foot is a fixed way above the sheet, so a longer word wraps and grows
+  up. Rip's neck sits on the sheet's edge whatever his size
+  (`--ask-sheet-peek` is 81% of `--ask-sheet-rip`). It all fits a
   phone's screen without scrolling (the owner: "no excuse for this to not
   all fit"), checked down to 360 by 640; a swipe down on its top closes it
   (only its position changes while the finger moves). **Wider screens**

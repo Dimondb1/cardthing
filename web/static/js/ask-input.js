@@ -24,7 +24,10 @@
   var grow = function (field) {
     if (field.tagName !== "TEXTAREA") return;
     field.style.height = "auto";
-    if (field.scrollHeight) field.style.height = field.scrollHeight + "px";   // a hidden box measures 0: left to its rows
+    if (!field.scrollHeight) return;   // a hidden box measures 0: left to its rows
+    field.style.height = field.scrollHeight + "px";
+    // A scrollbar only once the words pass the tallest the box may be: never beside a box that shows them all.
+    field.style.overflowY = field.scrollHeight > field.clientHeight + 1 ? "auto" : "hidden";
   };
   var shown = function (field, text, busy) {
     if (field.tagName === "TEXTAREA") { grow(field); return; }
@@ -229,11 +232,30 @@
     var restingHint = box.getAttribute("placeholder");
     var turn = 0;
     var turning = null;
+    // An example is shown only if it fits the box on one line, measured in the box's own type (the owner, 15 Nov
+    // 2026, of one that wrapped and was cut off: "the text isn't fitting in the box"): with "Try:" before it where
+    // there is room, alone where there is not, and passed over if even that is too long for this screen.
+    var ruler = null;
+    var fits = function (words) {
+      var style = window.getComputedStyle(box);
+      ruler = ruler || document.createElement("canvas").getContext("2d");
+      ruler.font = [style.fontStyle, style.fontWeight, style.fontSize, style.fontFamily].join(" ");
+      return ruler.measureText(words).width <= box.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+    };
     var nextExample = function () {
       if (!examples.length || box.value || sheetForm.classList.contains("is-listening")
           || sheetForm.classList.contains("is-searching")) return;
-      box.setAttribute("placeholder", tryLine.replace("{example}", examples[turn % examples.length]));
-      turn += 1;
+      for (var tried = 0; tried < examples.length; tried += 1) {
+        var example = examples[turn % examples.length];
+        turn += 1;
+        var line = tryLine.replace("{example}", example);
+        if (!fits(line)) line = example;
+        if (fits(line)) {
+          box.setAttribute("placeholder", line);
+          return;
+        }
+      }
+      box.setAttribute("placeholder", restingHint);
     };
     var startExamples = function () {
       clearInterval(turning);

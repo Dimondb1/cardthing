@@ -290,9 +290,12 @@
   --ask-box-max: 8rem;              /* the Ask Rip box grows with its words to this, then scrolls */
   --ask-sheet-blur: 6px;            /* the page behind the Ask Rip popup */
   --ask-sheet-top: 0rem;            /* the header's foot, set by ask-input.js when the popup opens */
-  --ask-sheet-rip: 5.5rem;          /* Rip on the Ask Rip sheet of a phone */
-  --ask-sheet-peek: 4.75rem;        /* how far he rises over the sheet's top edge: his neck's cut sits on it */
-  --ask-bubble-top: 1.5rem;         /* his speech bubble, down from the top of his drawing: beside his mouth */
+  --ask-sheet-rip: 6rem;            /* Rip on the Ask Rip sheet of a phone */
+  --ask-sheet-peek: calc(var(--ask-sheet-rip) * 0.81);   /* how far he rises over the sheet's top edge: his neck's cut, 81% down his drawing, sits on it */
+  --ask-bubble-gap: 0.875rem;       /* his speech bubble's edge, clear of his nose: its tail fills the gap */
+  --ask-bubble-lift: 0.75rem;       /* its foot above the sheet's top edge: level with his mouth */
+  --ask-bubble-tail: 0.875rem;      /* the tail's width, from the bubble towards his mouth */
+  --ask-bubble-shadow: 0 0.25rem 0.625rem rgb(31 36 48 / 0.22);   /* one soft shadow round the bubble and its tail */
   --ask-bubble-from: 0.6;           /* how small it starts as it pops in */
   --ask-grip-width: 2.5rem;         /* the bar at the top of the sheet that says it can be swiped down */
   --ask-grip-height: 0.3125rem;

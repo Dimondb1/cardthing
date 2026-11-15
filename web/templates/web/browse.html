@@ -118,6 +118,16 @@
   {# The words searched for in place of what was typed, which found nothing (catalogue.search.corrected), and a way back to exactly what was typed. #}
   {% if said %}<p class="browse-head__fix">{% copy "browse.voice.said" said=said %}</p>{% elif asked %}<p class="browse-head__fix">{% copy "browse.rip.asked" asked=asked %}</p>{% endif %}
   {% if understood %}<p class="browse-head__fix">{{ understood|join:" " }}</p>{% endif %}
+  {% if game_choice %}
+  {# A list Rip opened without a game that holds several (views.game_choice): which game, each with how many, and All games, the list in view below. Plain links. #}
+  <nav class="game-pick" aria-labelledby="game-pick-ask">
+    <p class="game-pick__ask" id="game-pick-ask">{% copy "browse.rip.which_game" %}</p>
+    <ul class="game-pick__list">
+      <li><span class="chip" aria-current="true">{% copy "browse.rip.all_games" %}<span class="chip__count">{{ game_choice_total }}</span></span></li>
+      {% for item in game_choice %}<li><a class="chip" href="{{ item.url }}">{{ item.label }}<span class="chip__count">{{ item.count }}</span></a></li>{% endfor %}
+    </ul>
+  </nav>
+  {% endif %}
   {% if searched_for %}<p class="browse-head__fix" role="status">{% copy "browse.fix.showing" query=searched_for %} <a href="{{ exact_url }}">{% copy "browse.fix.exact" query=query %}</a></p>{% endif %}
   {% if intro %}<p class="browse-head__intro">{{ intro }}</p>{% endif %}
   {% if product_set %}<p class="browse-head__meta">{% for fact in set_facts %}{{ fact }}<span aria-hidden="true"> · </span><span class="visually-hidden">, </span>{% endfor %}<a href="{{ game.get_absolute_url }}">{% copy "browse.set.game_link" game=game.display_short %}</a></p>{% endif %}

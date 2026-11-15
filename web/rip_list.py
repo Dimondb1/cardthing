@@ -66,10 +66,11 @@ Some ask for a kind of product rather than a named one: "booster packs at a low 
 - "type": the kind of product from this list, else "": {types}
 - "game": the game's code as above, else "".
 - "set": a set's name exactly as listed below when they named one, else "".
-- "sort": "price" for cheapest or a low price, "card" for cheapest per card or best for opening, "fair" for best value or a fair price, "saving" for the biggest saving or deals, "low" for lowest in 90 days, "newest" for new or the latest, else "".
+- "sort": "price" for cheapest or a low price, "card" for cheapest per card, "fair" for best value or a fair price, "saving" for the biggest saving or deals, "low" for lowest in 90 days, "newest" for new or the latest, else "".
 - "price": the band that holds the most they want to pay: "0-10" (under £10), "10-25", "25-50", "50-100" or "100-" (£100 and up), else "".
 - "max_price": the most they want to pay in pounds when they said a figure (under £5 is 5), else 0.
 - "language": the language of the cards when they name one: "ko" for Korean, "ja" for Japanese, "zh" for Chinese, "en" when they ask for English, "other" for any other language (German, French, Thai), else "". "Cheap Korean booster boxes" is the kind "booster_box", "sort" "price" and "language" "ko": never leave a language out.
+- "rip": true when they want products to open: opening packs, ripping, cracking, "to open" or "to rip", best for ripping or opening; else false. The list then holds only products to open, the cheapest a card first unless they asked for another order ("cheapest packs to rip" keeps "sort" "price").
 - "in_stock": true, unless they ask for pre-orders or for things not in stock.
 With nothing general asked, "wanted" is false and the rest empty. A product they named goes in the products, never in "browse"; a request can have both.
 Keep every word that picks out products, such as a Pokémon or a character (pikachu, charizard, eevee, luffy): put it in a product's "search" ("Pikachu Box"), with "browse" for the order or a price limit, and never drop it for a general list. A set with a kind of product in general terms ("cheap delta booster packs") is "browse" with the set and the kind, not a named product.
@@ -91,9 +92,9 @@ BROWSE = {
                    "game": {"type": "string"}, "set": {"type": "string"},
                    "sort": {"type": "string", "enum": ["", *BROWSE_SORTS]},
                    "price": {"type": "string", "enum": ["", *BROWSE_PRICES]}, "max_price": {"type": "number"},
-                   "language": {"type": "string", "enum": ["", *BROWSE_LANGUAGES]},
+                   "language": {"type": "string", "enum": ["", *BROWSE_LANGUAGES]}, "rip": {"type": "boolean"},
                    "in_stock": {"type": "boolean"}},
-    "required": ["wanted", "type", "game", "set", "sort", "price", "max_price", "language", "in_stock"],
+    "required": ["wanted", "type", "game", "set", "sort", "price", "max_price", "language", "rip", "in_stock"],
     "additionalProperties": False,
 }
 SCHEMA = {
@@ -202,8 +203,8 @@ def kept_key(token):
 
 def read_browse(found, found_games):
     """A general request from Claude's reply, checked against the site's own filters: {"type", "game", "set" (a
-    set's slug), "set_url", "sort", "price", "language" (the filter's code), "in_stock"}, or None when nothing general
-    was asked."""
+    set's slug), "set_url", "sort", "price", "language" (the filter's code), "rip" (Best for ripping), "in_stock"}, or
+    None when nothing general was asked."""
     from catalogue.search import set_index
 
     if not isinstance(found, dict) or found.get("wanted") is not True:
@@ -215,6 +216,9 @@ def read_browse(found, found_games):
               "price": found.get("price") if found.get("price") in BROWSE_PRICES else "",
               "max_price": limit(found.get("max_price")),
               "language": found.get("language") if found.get("language") in BROWSE_LANGUAGES else "",
+              # Opening or ripping turns Best for ripping on (the owner, 15 Nov 2026: "if they say something like
+              # opening packs or ripping packs then the rip slider could get turned on").
+              "rip": found.get("rip") is True,
               "in_stock": found.get("in_stock") is not False}
     named = " ".join(str(found.get("set") or "").split()).casefold()
     if named:
@@ -222,7 +226,7 @@ def read_browse(found, found_games):
             if entry["name"].casefold() == named:
                 browse["set"], browse["set_url"], browse["set_name"] = entry["slug"], entry["url"], entry["name"]
                 break
-    if not any(browse[key] for key in ("type", "game", "set", "sort", "price", "max_price", "language")):
+    if not any(browse[key] for key in ("type", "game", "set", "sort", "price", "max_price", "language", "rip")):
         return None
     return browse
 
@@ -237,11 +241,13 @@ def limit(value):
 
 
 def filters_of(browse):
-    """A general request's order, price, language and stock as the search page takes them (sort=, price=, max=, lang=,
-    in_stock=)."""
+    """A general request's order, price, language, Best for ripping and stock as the search page takes them (sort=,
+    price=, lang=, rip=, max=, in_stock=)."""
     query = {key: browse[key] for key in ("sort", "price") if browse.get(key)}
     if browse.get("language"):
         query["lang"] = browse["language"]
+    if browse.get("rip"):
+        query["rip"] = "on"
     if browse.get("max_price"):
         query["max"] = str(browse["max_price"])
     if browse.get("in_stock"):

@@ -989,6 +989,10 @@ ENTRIES = [
     Entry("browse.rip.asked", T, "Search: what was asked of Rip", "Rip found these for ‘{asked}’.",
           "Under the heading when Rip's list builder opened the list for a general request (booster packs at a low "
           "price), so the shopper sees it is their request.", placeholders=("asked",)),
+    Entry("browse.rip.which_game", T, "Search: Rip's list across games", "Which game?",
+          "Over the game choices on a list Rip opened without a game (Korean booster boxes) that holds several."),
+    Entry("browse.rip.all_games", B, "Search: Rip's list, every game", "All games",
+          "The first game choice on a list Rip opened without a game: the list in view, every game."),
     Entry("browse.voice.said", T, "Search: what was said", "You said ‘{said}’.",
           "Under the results heading after a voice search Rip read, so the shopper sees what the phone heard.",
           placeholders=("said",)),

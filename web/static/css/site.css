@@ -2237,6 +2237,11 @@ a, button, summary, select, input, label { touch-action: manipulation; }
 .chip__count { margin-left: var(--space-1); color: var(--color-ink-subtle); font-variant-numeric: tabular-nums; }
 .chip[aria-current="page"] .chip__count { color: inherit; }
 .drops-pane__intro { margin-top: var(--space-3); font-size: var(--text-sm); color: var(--color-ink-muted); }
+/* Which game, on a list Rip opened without one (browse.html game-pick): the chips wrap, never scroll sideways. */
+.game-pick { margin-top: var(--space-3); }
+.game-pick__ask { margin: 0 0 var(--space-2); font-size: var(--text-sm); font-weight: var(--weight-strong); }
+.game-pick__list { list-style: none; display: flex; flex-wrap: wrap; gap: var(--space-2); margin: 0; padding: 0; }
+.chip[aria-current="true"] .chip__count { color: inherit; }
 .filter-panel { margin: var(--space-3) 0 var(--rhythm-control); }
 .filter-panel__toggle, .drop-all__toggle {
   display: inline-flex; align-items: center; gap: var(--space-2); min-height: var(--tap);

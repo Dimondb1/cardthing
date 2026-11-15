@@ -375,8 +375,8 @@ class VoiceSearchTests(ListCase):
 
 def general(items=(), **browse):
     """Rip's reply with a general request in it, as the schema has it."""
-    found = {"wanted": True, "type": "", "game": "", "set": "", "language": "", "sort": "", "price": "", "in_stock": True,
-             **browse}
+    found = {"wanted": True, "type": "", "game": "", "set": "", "language": "", "sort": "", "price": "", "rip": False,
+             "in_stock": True, **browse}
     return json.dumps({"items": [{"search": search, "game": game, "quantity": quantity} for search, game, quantity in items],
                        "browse": found})
 
@@ -461,6 +461,62 @@ class GeneralRequestTests(ListCase):
         # A list opened without Rip says nothing extra about its language: the filter shows it.
         page = self.client.get(reverse("web:search"), {"type": "booster_box", "lang": "ko"})
         self.assertNotContains(page, "Korean only.")
+
+    def test_a_request_with_no_game_offers_the_games_over_the_whole_list(self):
+        """The owner, 15 Nov 2026: "if I asked something quite ambiguous like Korean booster boxes could ripraptor
+        serve me a choice like pick a game, show all booster boxes"."""
+        from catalogue.testing import make_game, make_listing, make_product, make_retailer, make_set
+
+        one_piece = make_set(make_game("One Piece", "one-piece"), name="Romance Dawn", slug="romance-dawn", code="OP01")
+        make_listing(make_product(one_piece, name="Romance Dawn Booster Box", slug="romance-dawn-booster-box",
+                                  product_type="booster_box"), make_retailer("Dock Cards"), price="80.00")
+        self.box.product_type = "booster_box"
+        self.box.save()
+        self.fake.answer = general(type="booster_box")
+        location = self.build("booster boxes")["Location"]
+        page = self.client.get(location).content.decode()
+        # Both games' boxes are in the list, with the choice above it: All games, the list in view, then each game.
+        self.assertIn("Romance Dawn Booster Box", page)
+        self.assertIn("Surging Sparks Booster Box", page)
+        start = page.index('<nav class="game-pick"')
+        choice = page[start:page.index("</nav>", start)]
+        self.assertIn('<p class="game-pick__ask" id="game-pick-ask">Which game?</p>', choice)
+        self.assertIn('<span class="chip" aria-current="true">All games<span class="chip__count">2</span></span>', choice)
+        self.assertIn('href="?type=booster_box&amp;in_stock=1&amp;asked=booster+boxes&amp;game=one-piece">One Piece'
+                      '<span class="chip__count">1</span></a>', choice)
+        self.assertIn("game=pokemon", choice)
+        # A game picked: that game's boxes, still Rip's list, and no question.
+        picked = self.client.get(reverse("web:search") + "?type=booster_box&in_stock=1&asked=booster+boxes&game=one-piece")
+        self.assertContains(picked, "Romance Dawn Booster Box")
+        self.assertNotContains(picked, "Surging Sparks Booster Box")
+        self.assertContains(picked, "Rip found these for")
+        self.assertNotContains(picked, "Which game?")
+        # One game in the list, or a list Rip did not open: nothing to ask.
+        self.assertNotContains(self.client.get(reverse("web:search"), {"type": "booster_box"}), "Which game?")
+        self.fake.answer = general(type="booster_box", game="pokemon")
+        self.assertNotContains(self.client.get(self.build("pokemon booster boxes")["Location"]), "Which game?")
+
+    def test_opening_or_ripping_turns_best_for_ripping_on(self):
+        """The owner, 15 Nov 2026: "if they say something like opening packs or ripping packs then the rip slider could
+        get turned on"."""
+        self.fake.answer = general(type="booster_pack", rip=True)
+        location = self.build("booster packs for ripping")["Location"]
+        self.assertEqual(parse_qs(urlsplit(location).query), {
+            "type": ["booster_pack"], "rip": ["on"], "in_stock": ["1"], "asked": ["booster packs for ripping"]})
+        # The list opens cheapest a card first, as the switch does.
+        self.assertContains(self.client.get(location), '<option value="card" selected>')
+        # An order said as well is kept: cheapest packs to rip.
+        self.fake.answer = general(type="booster_pack", rip=True, sort="price")
+        query = parse_qs(urlsplit(self.build("cheapest packs to rip")["Location"]).query)
+        self.assertEqual((query["rip"], query["sort"]), (["on"], ["price"]))
+        # Ripping alone is a request too, and Rip was told how.
+        self.fake.answer = general(rip=True)
+        self.assertEqual(parse_qs(urlsplit(self.build("what's good for opening")["Location"]).query)["rip"], ["on"])
+        sent = self.fake.sent[-1]
+        self.assertIn('"rip": true when they want products to open: opening packs, ripping', sent["system"][0]["text"])
+        browse = sent["output_config"]["format"]["schema"]["properties"]["browse"]
+        self.assertEqual(browse["properties"]["rip"], {"type": "boolean"})
+        self.assertIn("rip", browse["required"])
 
     def test_what_rip_cannot_match_to_the_sites_filters_is_dropped(self):
         self.fake.answer = general(game="not-a-game", set="Not A Set")

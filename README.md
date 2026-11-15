@@ -6474,6 +6474,16 @@ has a `browse` part as well as the named products (`rip_list.BROWSE`):
   says "Korean only." under the heading (`browse.understood.lang`) when Rip
   opened it. A language with nothing in it says "Nothing matches these
   filters", never the whole list.
+- Opening or ripping ("packs to rip", "best for opening") turns Best for
+  ripping on (`rip=on`; the owner, 15 Nov 2026): only products to open,
+  the cheapest a card first unless another order was asked for ("cheapest
+  packs to rip" stays in price order). "Cheapest booster packs" on its own
+  opens them in price order.
+- A list Rip opened with no game that holds several ("Korean booster
+  boxes") asks "Which game?" under the heading (`views.game_choice`,
+  `browse.rip.which_game`): All games, the list in view, then each game with
+  how many it holds, the most first. A tap keeps the rest of the request;
+  the list below stays whole, so nobody waits on the question.
 - `read_browse` keeps only what matches the site's own filters, and
   `browse_url` turns it into the site's own list: a set's page when one was
   named, else the search page, with "Rip found these for ‘…’" under the

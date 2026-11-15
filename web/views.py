@@ -146,6 +146,28 @@ def language_chips(request, products, chosen):
             for code, label in LANGUAGES if code in present]
 
 
+def game_choice(request, products):
+    """[{label, count, url}] for a list Rip opened without a game when it holds more than one game, the most products
+    first: a tap narrows the list to that game, keeping the rest of the request. The owner, 15 Nov 2026: "Korean
+    booster boxes" could be any game, so "serve me a choice like pick a game, show all booster boxes". The list
+    below stays whole, so nobody waits on a question. Two queries."""
+    rows = list(Product.objects.filter(pk__in=products.values("pk")).order_by().values("game")
+                .annotate(n=Count("pk")).order_by("-n", "game"))
+    if len(rows) < 2:
+        return []
+    games = Game.objects.in_bulk([row["game"] for row in rows])
+
+    def link(slug):
+        params = request.GET.copy()
+        for gone in ("page", "pane", "tab"):
+            params.pop(gone, None)
+        params["game"] = slug
+        return "?" + params.urlencode()
+
+    return [{"label": games[row["game"]].display_short, "count": row["n"], "url": link(games[row["game"]].slug)}
+            for row in rows if row["game"] in games]
+
+
 def types_for(game, queryset):
     """The type filter's choices: this game's words, only for types the list holds."""
     present = set(queryset.order_by().values_list("product_type", flat=True).distinct())
@@ -316,6 +338,8 @@ def _browse(request, template_context, *, base_queryset, fixed_game=None, defaul
     feed_filtered = bool((template_context.get("feed") or {}).get("filtered"))
     lang_chips = language_chips(request, products, form.value("lang")) if feed_filtered else []
     products = apply_languages(products, languages)
+    from_rip = bool(template_context.get("said") or template_context.get("asked"))   # a list Rip opened
+    games_offered = game_choice(request, products) if from_rip and fixed_game is None and game is None else []
 
     tab, tab_counts, opening, asked = "", {}, "", ""
     if tabs:
@@ -400,7 +424,6 @@ def _browse(request, template_context, *, base_queryset, fixed_game=None, defaul
     quick = quick_filters(request, pool, form, game) if query and not tabs else []
     # Only the tabs with something in them, and the one in view; one list left needs no tab row.
     shown_tabs = [item for item in stock_tabs if item["count"] or item["key"] == tab]
-    from_rip = bool(template_context.get("said") or template_context.get("asked"))   # a list Rip opened
     context = {
         "alert_url": alert_url,
         "form": form,
@@ -449,6 +472,8 @@ def _browse(request, template_context, *, base_queryset, fixed_game=None, defaul
         # Best for ripping with another order chosen in the sort menu: the note under the switch says so.
         "rip_chosen_order": rip and sort != "card",
         "lang_chips": lang_chips,
+        "game_choice": games_offered,
+        "game_choice_total": sum(item["count"] for item in games_offered),
         # Named on the Filters pill of a type's list: the price band and 2+ shops, the choices its panel holds.
         "feed_chosen": [label for label in (dict(form.fields["price"].choices).get(band) if band else "",
                                             form.fields["compared"].label if form.value("compared") else "",

@@ -2972,6 +2972,13 @@ li + li > .checker__option { border-top: var(--border-width) solid var(--color-l
 .ask-sheet__view { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: var(--space-3); margin-top: var(--space-2); overflow-y: auto; overscroll-behavior: contain; }
 .ask-sheet__view[hidden] { display: none; }
 .ask-sheet__more { display: flex; flex-direction: column; gap: var(--space-3); }
+/* Rip's reply to small talk in the popup itself (ask-input.js): a quiet card over the box, eased in as feedback, and
+   today's deal steps aside while it shows so the popup still fits a phone without scrolling. */
+.ask-sheet__reply { margin: 0; padding: var(--space-3); border: var(--border-width) solid var(--color-line); border-radius: var(--radius); background: var(--color-shelf); color: var(--color-ink); font-size: var(--text-sm); line-height: var(--leading-snug); animation: ask-reply-in var(--motion-normal) var(--ease-out); }
+.ask-sheet__reply[hidden] { display: none; }
+.ask-sheet__panel.has-reply .ask-pick { display: none; }
+@keyframes ask-reply-in { from { opacity: 0; transform: translateY(var(--space-1)); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .ask-sheet__reply { animation: none; } }
 .ask-sheet__form { display: grid; gap: var(--space-2); margin: 0; }
 .ask-sheet__box { position: relative; display: flex; align-items: flex-start; gap: var(--space-2); padding: var(--space-1) var(--space-1) var(--space-1) var(--space-3); border: var(--voice-ring) solid var(--color-line-strong); border-radius: var(--radius-card); background: var(--color-paper); box-shadow: var(--shadow-search); }
 .ask-sheet__box:focus-within { border-color: var(--color-brand); }

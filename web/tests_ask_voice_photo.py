@@ -809,6 +809,56 @@ class WatchTests(ListCase):
         self.assertIn("watch_price", schema["required"])
 
 
+class PopupReplyTests(ListCase):
+    """The owner, 15 Nov 2026, from the suggestions: Rip's reply to small talk in the Ask popup itself, not a new
+    page. The popup asks as its own request (X-Rip-Sheet) and gets JSON."""
+
+    def popup(self, words, **extra):
+        return self.client.get(reverse("web:voice_search"), {"q": words, "via": "typed", **extra},
+                               HTTP_X_RIP_SHEET="1", REMOTE_ADDR="203.0.113.7")
+
+    def test_small_talk_comes_back_as_his_reply_chirp_first_and_counts(self):
+        self.fake.answer = chat("I'm having a lovely day, thanks for asking. What can I find for you?")
+        answer = self.popup("are you having a nice day rip").json()
+        self.assertEqual(answer["chat"], "Chirp. I'm having a lovely day, thanks for asking. What can I find for you?")
+        self.assertTrue(answer["go"].startswith(URL + "?made="))   # the Find page, should the script need it
+        self.assertContains(self.client.get(URL, REMOTE_ADDR="203.0.113.7"), "You can ask 4 more questions today.")
+
+    def test_anything_else_says_where_to_go(self):
+        self.fake.answer = general(type="booster_box", language="ko")
+        answer = self.popup("korean booster boxes").json()
+        self.assertEqual(answer["chat"], "")
+        self.assertIn("lang=ko", answer["go"])
+        response = self.client.get(reverse("web:voice_search"), {"q": "surging sparks booster box", "via": "box"},
+                                   HTTP_X_RIP_SHEET="1")
+        self.assertEqual(response.json(), {"go": reverse("web:search") + "?q=surging+sparks+booster+box", "chat": ""})
+        self.assertEqual(response["Cache-Control"], "no-store")
+
+    def test_the_popup_has_a_place_for_it_and_the_script_asks_in_place(self):
+        row = SiteLook.load()   # the new home page, which carries the popup
+        row.feed_home = True
+        row.save()
+        look.remember()
+        self.addCleanup(look.remember)
+        html = self.client.get(reverse("web:search")).content.decode()
+        self.assertIn('<p class="ask-sheet__reply" role="status" hidden data-ask-reply></p>', html)
+        self.assertIn("js/ask-reply.js", html)
+        # ask-reply.js asks, with the words the form sends; ask-input.js, which never sends anything itself, shows it.
+        with open(finders.find("js/ask-reply.js"), encoding="utf-8") as handle:
+            asks = handle.read()
+        self.assertIn('headers: { "X-Rip-Sheet": "1", "Accept": "application/json" }', asks)
+        self.assertIn('form.dispatchEvent(new CustomEvent("ripreply", { detail: { chat: data.chat } }))', asks)
+        self.assertIn(".catch(function () { window.location.href = address; });", asks)   # never a dead end
+        with open(finders.find("js/ask-input.js"), encoding="utf-8") as handle:
+            script = handle.read()
+        self.assertIn('new CustomEvent("ripask", { cancelable: true, detail: { query: query } })', script)
+        self.assertIn('form.addEventListener("ripdone", ready);', script)
+        self.assertIn('sheetForm.addEventListener("ripreply", function (event) {', script)
+        css = open(finders.find("css/site.css"), encoding="utf-8").read()
+        self.assertIn(".ask-sheet__panel.has-reply .ask-pick { display: none; }", css)
+        self.assertIn("@media (prefers-reduced-motion: reduce) { .ask-sheet__reply { animation: none; } }", css)
+
+
 class OwnerTests(ListCase):
     """The owner, testing, used all ten of the day's questions: "No limit when I'm logged in"."""
 

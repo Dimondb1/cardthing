@@ -6700,6 +6700,15 @@ exclamation marks) and drops any with a price, a link or an address.
   the marketing; the owner, 15 Nov 2026), and his speech bubble over the
   Ask popup says Chirp too (`askrip.sheet.hello`). A Chirp he writes
   himself is taken off, so it is said once. Both are edited in Admin.
+- In the Ask popup, with script, the reply shows in the popup itself (the
+  owner picked it on 15 Nov 2026): `ask-reply.js` sends what was typed, or
+  what the microphone heard (`ripask`), to `/search/voice/` as the popup's
+  own request (`X-Rip-Sheet`), which answers JSON: Rip's reply, Chirp
+  first, or where to go, which opens as before. `ask-input.js` shows it
+  (`ripreply`) in a quiet card over the cleared box, Rip happy and the
+  microphone ready again (`ripdone`), and today's deal steps aside so the
+  popup still fits a 360 by 640 phone. `ask-input.js` itself never sends
+  anything; anything wrong on the way opens the page as the form would.
 - It is one of the visitor's Ask Rip questions, wherever it was asked
   (`count_question` in `hear` and `make`, kept in the cookie by
   `keep_count`). The same words again are answered from the cache, free.

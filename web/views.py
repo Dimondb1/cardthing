@@ -3103,6 +3103,7 @@ def voice_search(request):
     typed = via in ("typed", "box")   # from the Ask Rip popup's box or a search bar: shown as asked, not said
     plain = {"q": said, **({"game": request.GET["game"]} if request.GET.get("game") else {})}
     plain_url = f"{reverse('web:search')}?{urlencode(plain)}"
+    made = None
     if not said:
         target = reverse("web:search")
     elif via == "box" and not rip_list.reads_as_request(said) and plain_finds(said, request.GET.get("game", "")):
@@ -3115,7 +3116,14 @@ def voice_search(request):
         target = rip_list.found_target(made, plain_url, **({"asked": said} if typed else {"said": said}))
         if made.state in RIP_HELPED:
             askrip.mark_helped(request)
-    response = HttpResponseRedirect(target)
+    if request.headers.get("X-Rip-Sheet") == "1":
+        # The Ask popup's own request (ask-input.js): Rip's reply to small talk, Chirp first, to show in the popup
+        # itself (the owner, 15 Nov 2026, from the suggestions), or else where to go.
+        chat = rip_list.kept_chat(made.token) if made is not None and made.token else ""
+        chirp = text(request, "askrip.chat.chirp") if chat else ""
+        response = JsonResponse({"go": target, "chat": f"{chirp} {chat}".strip() if chat else ""})
+    else:
+        response = HttpResponseRedirect(target)
     askrip.keep_count(request, response)   # a reply to small talk is one of their questions (rip_list.hear)
     response["Cache-Control"] = "no-store"
     response["X-Robots-Tag"] = "noindex, nofollow"

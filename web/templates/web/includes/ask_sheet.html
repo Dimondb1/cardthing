@@ -42,6 +42,8 @@ Hidden until the script opens it; without script the Ask button opens the Find p
     </div>
     {% endif %}
     <div class="ask-sheet__view" data-ask-view="all"{% if request.resolver_match.url_name == "product" and product and ask.open and ask.left and ask.suggestions %} hidden{% endif %}>
+      {# Rip's reply to small talk, shown here by ask-input.js; without script it is on the Find page. #}
+      <p class="ask-sheet__reply" role="status" hidden data-ask-reply></p>
       <form class="ask-sheet__form" action="{{ voice_url }}" method="get" role="search" data-ask-sheet-form>
         <input type="hidden" name="via" value="typed">
         <label class="visually-hidden" for="ask-sheet-q">{% copy "askrip.sheet.label" %}</label>

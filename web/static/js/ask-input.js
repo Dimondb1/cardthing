@@ -101,15 +101,18 @@
         say(line);
         tell("searching", line);
       };
-      // Coming back to the page (the back button keeps it as it was): ready again.
-      window.addEventListener("pageshow", function () {
+      // Coming back to the page (the back button keeps it as it was), or the Ask popup answering in place (ripdone):
+      // ready again.
+      var ready = function () {
         button.disabled = false;
         button.removeAttribute("aria-busy");
         if (form) form.classList.remove("is-searching");
         field.readOnly = false;
         rest();
         shown(field, "");
-      });
+      };
+      window.addEventListener("pageshow", ready);
+      if (form) form.addEventListener("ripdone", ready);
       button.hidden = false;
       button.addEventListener("click", function () {
         if (listening) { listening.stop(); return; }
@@ -171,6 +174,8 @@
             query.set("q", words);
             var game = form.querySelector("input[name=game]");
             if (game && game.value) query.set("game", game.value);
+            // The Ask popup answers in place (ripask), so Rip's reply to small talk shows there.
+            if (!form.dispatchEvent(new CustomEvent("ripask", { cancelable: true, detail: { query: query } }))) return;
             window.location.href = ai + "?" + query.toString();
           } else {
             field.readOnly = false;
@@ -402,6 +407,26 @@
       box.readOnly = false;
       send.setAttribute("aria-label", sendWords);
       send.disabled = false;
+    });
+    // Rip's reply to small talk, shown here in the popup (the owner, 15 Nov 2026, from the suggestions): ask-reply.js
+    // asks for it in place and hands it over (ripreply). The box is ready again under his words, the microphone too,
+    // and today's deal steps aside so the popup still fits a phone.
+    var reply = sheet.querySelector("[data-ask-reply]");
+    sheetForm.addEventListener("ripreply", function (event) {
+      sheetForm.classList.remove("is-searching");
+      box.readOnly = false;
+      send.setAttribute("aria-label", sendWords);
+      send.disabled = false;
+      sheetForm.dispatchEvent(new CustomEvent("ripdone"));
+      resting();
+      if (status) { status.textContent = ""; status.hidden = true; }
+      reply.textContent = event.detail.chat;
+      reply.hidden = false;
+      panel.classList.add("has-reply");
+      box.value = "";
+      box.dispatchEvent(new Event("input", { bubbles: true }));
+      mood("happy");
+      box.focus();
     });
 
     // The microphone turns the popup into its listening view: Listening, what to say, the words as they come, a big

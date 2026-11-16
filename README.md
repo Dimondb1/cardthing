@@ -6733,6 +6733,17 @@ button"). One page, linked from the Admin home:
 - People's clicks to eBay today, in 7 and 30 days (never a robot's or a
   direct hit), to an item and to eBay's search, beside every shop's, linked
   to the clicks.
+- Why it is not updating (the owner, 16 Nov 2026, with no eBay price
+  counting and all 5,000 lookups unused: "something is wrong"), whenever
+  the verdict is not Up to date (`ebay_health.reasons`): the background
+  reader stopped or never started, Pause all on, eBay paused, eBay waiting
+  after failed tries until a time with eBay's own last error, or every item
+  checked in the last day marked out of stock. Try eBay again now clears
+  eBay's wait and makes it due, as Read now does on Crawl health. With no
+  eBay price counting, the cheapest list says so rather than "eBay is not
+  the cheapest".
+- `ebay.seller_rules` falls back to the defaults if the database cannot
+  answer, so the rules can never be what stops eBay's checks.
 - Seller rules: the least positive feedback (50 to 100%) and number of
   ratings a seller needs, saved in `EbaySettings` and used for every offer
   (`ebay.seller_rules`, cached, cleared on save). The defaults are the old

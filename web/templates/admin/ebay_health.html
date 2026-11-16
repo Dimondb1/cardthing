@@ -15,6 +15,10 @@
   .eh .figures li { list-style-type: none; padding: 10px 12px; border: 1px solid var(--hairline-color); border-radius: 6px; }
   .eh .figures b { display: block; font-size: 1.5rem; font-weight: 600; }
   .eh .figures span { color: var(--body-quiet-color); }
+  .eh .reasons { margin: 0 0 8px; padding-left: 20px; }
+  .eh .reasons li { margin-bottom: 6px; }
+  .eh .reasons b { font-weight: 600; }
+  .eh form.inline { margin: 8px 0 0; }
   .eh table { width: 100%; }
   .eh td, .eh th { vertical-align: top; }
   .eh td.wrap { overflow-wrap: anywhere; }
@@ -37,6 +41,19 @@
 <div class="eh">
   <p class="verdict {{ state }}"><b>{% if state == "ok" %}Up to date{% elif state == "behind" %}Falling behind{% else %}Not updating{% endif %}</b>{{ why }}</p>
 
+  {% if state != "ok" %}
+  <section id="why">
+    <h2>Why it is not updating</h2>
+    {% if reasons %}
+    <ul class="reasons">{% for reason in reasons %}<li><b>{{ reason.line }}</b> {{ reason.detail }}</li>{% endfor %}</ul>
+    {% else %}
+    <p>The background reader is running and eBay is neither paused nor waiting after errors, yet its items are not being checked. Its log will say why: <code>journalctl -u ripraptor-worker --since today | grep -i ebay</code></p>
+    {% endif %}
+    <p class="note">Background reader: {% if facts.alive %}running, last sign of life {{ facts.worker.heartbeat_at|timesince }} ago{% elif facts.worker.heartbeat_at %}stopped, last sign of life {{ facts.worker.heartbeat_at|timesince }} ago{% else %}never started{% endif %}.{% for shop in facts.shops %} {{ shop.name }}: {% if shop.reading_paused %}paused{% elif shop.backoff_until and shop.error_streak %}waiting after errors{% else %}not waiting{% endif %}{% if shop.last_ok_at %}, last good read {{ shop.last_ok_at|timesince }} ago{% endif %}.{% endfor %} {{ facts.marked|number }} eBay items were marked out of stock in the last day.</p>
+    <form method="post" class="inline">{% csrf_token %}<input type="hidden" name="action" value="try_again"><input type="submit" value="Try eBay again now"></form>
+  </section>
+  {% endif %}
+
   <section>
     <h2>Is it updating often enough?</h2>
     <p class="note">Each eBay item in stock should be checked at least every {{ fresh.every_hours }} hours. One not checked for {{ fresh.hours }} hours stops counting and is not shown as buyable until it is checked again.</p>
@@ -46,7 +63,7 @@
       <li><b>{{ fresh.stale|number }}</b><span>past {{ fresh.hours }} hours, not shown as buyable</span></li>
       <li><b>{% if fresh.latest %}{{ fresh.latest|timesince }} ago{% else %}Never{% endif %}</b><span>latest check</span></li>
     </ul>
-    <p class="note" style="margin-top: 8px;">The daily eBay search looked at {{ searched.day|number }} products in the last day{% if searched.latest %}, the latest {{ searched.latest|timesince }} ago{% endif %}.{% if usage %} eBay said {{ usage.searches|default:"?" }} searches and {{ usage.lookups|default:"?" }} item lookups were left today{% if usage.asked %} ({{ usage.asked }}){% endif %}.{% endif %} More on <a href="{% url 'crawl' %}">Crawl health</a>.</p>
+    <p class="note" style="margin-top: 8px;">The daily eBay search looked at {{ searched.day|number }} products in the last day{% if searched.latest %}, the latest {{ searched.latest|timesince }} ago{% endif %}.{% if usage %} eBay said {% if usage.searches is not None %}{{ usage.searches|number }} searches and {% endif %}{% if usage.lookups is not None %}{{ usage.lookups|number }}{% else %}an unknown number of{% endif %} item lookups were left today{% if usage.asked %} ({{ usage.asked }}){% endif %}.{% endif %} More on <a href="{% url 'crawl' %}">Crawl health</a>.</p>
   </section>
 
   <section>
@@ -69,7 +86,8 @@
       </tbody>
     </table>
     {% if cheapest_more and not show_all %}<p style="margin-top: 8px;"><a href="?all=1#cheapest">See all {{ products.cheapest|number }}</a></p>{% elif cheapest_more %}<p class="note">And {{ cheapest_more|number }} more.</p>{% endif %}
-    {% else %}<p>eBay is not the cheapest for any product now.</p>{% endif %}
+    {% elif products.with_ebay %}<p>eBay is not the cheapest for any product now.</p>
+    {% else %}<p>No eBay price counts now, so eBay cannot be the cheapest anywhere.{% if state != "ok" %} See <a href="#why">why it is not updating</a>.{% endif %}</p>{% endif %}
   </section>
 
   <section>

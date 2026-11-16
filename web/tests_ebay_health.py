@@ -139,6 +139,89 @@ class EbayHealthTests(TestCase):
                 self.assertContains(response, "Nothing was saved.")
         self.assertFalse(EbaySettings.objects.exists())
 
+    def why(self):
+        html = self.page()
+        start = html.index('<section id="why">')
+        return html[start:html.index("</section>", start)]
+
+    def test_it_says_why_it_is_not_updating(self):
+        """The owner, 16 Nov 2026, with no eBay price counting and all 5,000 lookups unused: "something is wrong"."""
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        from catalogue.models import WorkerState
+
+        # No background reader has ever run.
+        part = self.why()
+        self.assertIn("<b>The background reader has stopped, so nothing checks eBay between the hourly reads.</b> "
+                      "It has never started. Running the update command restarts it.", part)
+        # Running, but Pause all is on.
+        state = WorkerState.objects.create(pk=1, heartbeat_at=timezone.now(), paused=True)
+        self.assertIn("<b>Pause all is on, so no shop is read and no stock is checked.</b>", self.why())
+        # Running, and eBay waiting after errors, with eBay's own words.
+        state.paused = False
+        state.save()
+        Retailer.objects.filter(pk=self.ebay.pk).update(
+            error_streak=3, backoff_until=timezone.now() + timedelta(hours=2),
+            last_error="Checking eBay listings: HTTP 403 Forbidden")
+        part = self.why()
+        self.assertIn("<b>eBay is waiting after 3 failed tries, until", part)
+        self.assertIn("eBay&#x27;s last error: Checking eBay listings: HTTP 403 Forbidden", part)
+        self.assertIn("Background reader: running", part)
+        # Paused on its own.
+        Retailer.objects.filter(pk=self.ebay.pk).update(reading_paused=True)
+        self.assertIn("<b>eBay is paused, so its items are not checked.</b>", self.why())
+
+    def test_try_ebay_again_now_clears_its_wait(self):
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        from catalogue.models import WorkerState
+
+        WorkerState.objects.create(pk=1, heartbeat_at=timezone.now())
+        Retailer.objects.filter(pk=self.ebay.pk).update(error_streak=4, backoff_until=timezone.now() + timedelta(hours=6))
+        self.assertIn('<input type="hidden" name="action" value="try_again"><input type="submit" value="Try eBay again '
+                      'now">', self.why())
+        response = self.client.post(self.url, {"action": "try_again"}, follow=True)
+        self.assertContains(response, "Trying eBay again: its items are checked within a few minutes.")
+        self.ebay.refresh_from_db()
+        self.assertEqual((self.ebay.error_streak, self.ebay.backoff_until), (0, None))
+        self.assertIsNotNone(self.ebay.next_read_at)
+        self.assertFalse(EbaySettings.objects.exists())   # the seller rules are left alone
+
+    def test_with_no_ebay_price_counting_it_never_says_ebay_is_simply_not_cheapest(self):
+        from catalogue.models import Listing, WorkerState
+
+        WorkerState.objects.create(pk=1, heartbeat_at=None)
+        Listing.objects.filter(retailer=self.ebay).update(availability=Listing.Availability.OUT_OF_STOCK)
+        html = self.page()
+        self.assertIn('No eBay price counts now, so eBay cannot be the cheapest anywhere. See <a href="#why">why it is '
+                      "not updating</a>.", html)
+        self.assertNotIn("eBay is not the cheapest for any product now.", html)
+        # Every item checked in the last day and marked out of stock is a reason of its own.
+        self.assertIn("eBay items were checked in the last day and marked out of stock, and none is in stock.", html)
+
+    def test_what_ebay_said_is_left_without_a_question_mark(self):
+        from catalogue.models import WorkerState
+
+        WorkerState.objects.create(pk=1, ebay_usage={"lookups": 5000, "searches": None,
+                                                     "asked_at": "2026-11-16T05:56:00+00:00"})
+        html = self.page()
+        self.assertIn("eBay said 5,000 item lookups were left today", html)
+        self.assertNotIn("?", html[html.index("The daily eBay search"):html.index("More on")])
+
+    def test_the_seller_rules_never_stop_the_checks(self):
+        from unittest import mock
+
+        from django.db import DatabaseError
+
+        with mock.patch.object(EbaySettings, "current", side_effect=DatabaseError("no such table")):
+            self.assertEqual(ebay.seller_rules(), (Decimal("95.0"), 50))
+            self.assertIsNotNone(ebay.item_offer(item("Surging Sparks Booster Box"), self.cheaper, Offer))
+        self.assertIsNone(cache.get(ebay.RULES_KEY))   # the defaults were kept nowhere
+
     def test_a_few_queries_and_staff_only(self):
         with CaptureQueriesContext(connection) as queries:
             self.page()

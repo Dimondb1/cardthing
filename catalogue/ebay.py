@@ -324,11 +324,19 @@ def allowances(headers, request=None):
 def seller_rules(fresh=False):
     """(least positive feedback %, least number of ratings) a seller needs for an offer to count (item_offer): the
     owner's (EbaySettings, set on the eBay health page), from the shared cache. ``fresh`` reads the row."""
+    from django.db import DatabaseError
+
     kept = None if fresh else cache.get(RULES_KEY)
     if not isinstance(kept, tuple) or len(kept) != 2:
         from .models import EbaySettings
 
-        row = EbaySettings.current()
+        try:
+            row = EbaySettings.current()
+        except DatabaseError:
+            # Never the reason eBay's checks stop: a database too busy to answer, or not yet holding the table, gives
+            # the defaults for this offer, kept nowhere, and the next one asks again.
+            logger.warning("eBay: could not read the seller rules; the defaults apply")
+            return Decimal(str(MIN_FEEDBACK)), MIN_RATINGS
         kept = (Decimal(row.min_feedback), int(row.min_ratings))
         cache.set(RULES_KEY, kept, RULES_SECONDS)
     return kept

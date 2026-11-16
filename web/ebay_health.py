@@ -25,10 +25,13 @@ from django.core.cache import cache
 from django.db.models import Count, Max, Min, Q
 from django.shortcuts import redirect, render
 from django.utils import timezone
+from django.utils.timesince import timesince
 from django.views.decorators.http import require_http_methods
 
 from catalogue import crawl, ebay
-from catalogue.models import AMAZON, EBAY, EbaySettings, Listing, OutboundClick, Product, Retailer, ebay_stale_cutoff
+from catalogue.models import (
+    AMAZON, EBAY, EbaySettings, Listing, OutboundClick, Product, Retailer, WorkerState, ebay_stale_cutoff,
+)
 from catalogue.worker import EBAY_EVERY
 from guides.access import not_for_editors
 
@@ -139,6 +142,63 @@ def below_rules(least_feedback, least_ratings):
             .filter(Q(seller_feedback__lt=least_feedback) | Q(seller_ratings__lt=least_ratings)).count())
 
 
+def reasons(fresh, now):
+    """Why eBay's prices are not being kept up to date, the most likely first (the owner, 16 Nov 2026, with no eBay
+    price counting: "something is wrong"): the background reader stopped or paused, eBay paused or waiting after
+    errors with eBay's last error, or its items checked and marked out of stock. Each is [{"line", "detail"}], with
+    the facts behind them for the page. Three queries."""
+    worker = WorkerState.current()
+    shops = list(Retailer.objects.filter(source_type=EBAY, is_active=True))
+    out = Listing.objects.live().filter(retailer__source_type=EBAY, availability=Listing.Availability.OUT_OF_STOCK)
+    marked = out.filter(last_checked__gte=now - timedelta(days=1)).count()
+    found = []
+    if not shops:
+        found.append({"line": "There is no eBay shop switched on.", "detail": "Add eBay under Shops, or switch it on."})
+    if worker is None or not worker.alive(now):
+        seen = f"Its last sign of life was {timesince(worker.heartbeat_at, now)} ago." if worker and worker.heartbeat_at \
+            else "It has never started."
+        found.append({"line": "The background reader has stopped, so nothing checks eBay between the hourly reads.",
+                      "detail": f"{seen} Running the update command restarts it."})
+    elif worker.paused:
+        found.append({"line": "Pause all is on, so no shop is read and no stock is checked.",
+                      "detail": "Tap Resume all on Crawl health."})
+    for shop in shops:
+        if shop.reading_paused:
+            found.append({"line": f"{shop.name} is paused, so its items are not checked.",
+                          "detail": "Tap Resume beside it on Crawl health."})
+        if shop.backoff_until and shop.backoff_until > now:
+            found.append({"line": f"{shop.name} is waiting after {shop.error_streak} failed tr"
+                                  f"{'y' if shop.error_streak == 1 else 'ies'}, until "
+                                  f"{timezone.localtime(shop.backoff_until):%H:%M}.",
+                          "detail": f"eBay's last error: {shop.last_error or 'not recorded'}"})
+        elif shop.error_streak and shop.last_error:
+            found.append({"line": f"{shop.name}'s last {shop.error_streak} tr{'y' if shop.error_streak == 1 else 'ies'} "
+                                  "failed.", "detail": f"eBay's last error: {shop.last_error}"})
+    if marked and fresh["total"] == 0:
+        found.append({"line": f"{marked:,} eBay item{'s were' if marked != 1 else ' was'} checked in the last day and "
+                              "marked out of stock, and none is in stock.",
+                      "detail": "eBay no longer has them, or they now fail the seller rules or the other checks."})
+    facts = {"worker": worker, "alive": worker is not None and worker.alive(now), "shops": shops, "marked": marked}
+    return found, facts
+
+
+def try_again(request):
+    """Try eBay again now, as Crawl health's Read now does for a shop: its wait after errors cleared and its next read
+    now, so the background reader checks its items within minutes."""
+    shops = Retailer.objects.filter(source_type=EBAY, is_active=True)
+    count = shops.update(next_read_at=timezone.now(), backoff_until=None, error_streak=0)
+    worker = WorkerState.current()
+    if not count:
+        messages.warning(request, "There is no eBay shop switched on.")
+    elif worker is not None and worker.alive():
+        # Not opening with "eBay": the admin's messages capitalise their first letter.
+        messages.success(request, "Trying eBay again: its items are checked within a few minutes. Come back to this "
+                                  "page in ten.")
+    else:
+        messages.warning(request, "The wait is cleared for eBay, but the background reader is not running, so its "
+                                  "items are checked at the next hourly read. The update command restarts the reader.")
+
+
 def save_rules(request):
     """Save the seller rules from the form, both or neither."""
     try:
@@ -162,11 +222,15 @@ def save_rules(request):
 @require_http_methods(["GET", "POST"])
 def ebay_health_page(request):
     if request.method == "POST":
-        save_rules(request)
+        if request.POST.get("action") == "try_again":
+            try_again(request)
+        else:
+            save_rules(request)
         return redirect("ebay_health")
     now = timezone.now()
     fresh = freshness(now)
     state, why = verdict(fresh, now)
+    found, facts = reasons(fresh, now)
     searched = Product.objects.active().aggregate(
         day=Count("pk", filter=Q(ebay_checked_at__gte=now - timedelta(days=1))), latest=Max("ebay_checked_at"))
     cheapest = cheapest_at_ebay()
@@ -177,7 +241,7 @@ def ebay_health_page(request):
     response = render(request, "admin/ebay_health.html", {
         **admin.site.each_context(request),
         "title": "eBay health",
-        "state": state, "why": why, "fresh": fresh, "searched": searched,
+        "state": state, "why": why, "fresh": fresh, "searched": searched, "reasons": found, "facts": facts,
         "usage": crawl.ebay_usage(now=now),
         "products": products_counts(cheapest),
         "cheapest": shown, "cheapest_more": max(0, len(cheapest) - len(shown)), "show_all": show_all,

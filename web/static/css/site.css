@@ -1349,9 +1349,46 @@ a, button, summary, select, input, label { touch-action: manipulation; }
 .compare-jump__arrow { display: inline-block; margin-left: var(--space-1); transition: transform var(--motion-fast) var(--ease-standard); }
 @media (hover: hover) { .compare-jump:hover .compare-jump__arrow { transform: translateY(2px); } }
 .compare-jump__note { font-size: var(--text-xs); color: var(--color-ink-muted); }
-/* Amazon under Compare prices: the same outlined button, so it reads as part of the page, not an advert. */
+/* Amazon under Compare prices, as the owner drew it (16 Nov 2026, "That button doesn't look inviting"): an ink button
+   in an orange and gold ring that turns, with a band of light sweeping across, a glow that swells and an arrow that
+   nudges. The ring is a conic gradient on a square wider than the button, turned behind an ink face and clipped to
+   the rim, so only transforms and opacity move; the glow is a shadow whose opacity swells. */
 .buybox__amazon-few { margin: 0; font-size: var(--text-sm); font-weight: var(--weight-strong); color: var(--color-ink); text-align: center; }
+.amazon-cta {
+  position: relative; isolation: isolate; display: block; border-radius: var(--radius-card);
+  color: var(--color-paper); text-decoration: none; -webkit-tap-highlight-color: transparent;
+  transition: transform var(--motion-fast) var(--ease-standard);
+}
+.amazon-cta::before { content: ""; position: absolute; inset: 0; z-index: -1; border-radius: inherit; box-shadow: var(--amazon-glow); opacity: var(--amazon-glow-low); pointer-events: none; }
+.amazon-cta:active { transform: scale(var(--amazon-press)); }
+.amazon-cta__ring { position: relative; isolation: isolate; display: block; overflow: hidden; padding: var(--amazon-ring-width); border-radius: inherit; background: var(--color-brand); }
+.amazon-cta__ring::before {
+  content: ""; position: absolute; z-index: -1; left: 50%; top: 50%; width: var(--amazon-ring-size); aspect-ratio: 1;
+  background: var(--amazon-ring); transform: translate(-50%, -50%);
+}
+.amazon-cta__ring::after {
+  content: ""; position: absolute; inset: 0; z-index: 1; pointer-events: none;
+  background: linear-gradient(105deg, transparent 36%, var(--amazon-gleam) 50%, transparent 64%); transform: translateX(-115%);
+}
+.amazon-cta__face {
+  display: flex; align-items: center; justify-content: center; gap: var(--space-3); min-height: calc(var(--amazon-height) - 2 * var(--amazon-ring-width));
+  padding: var(--space-2) var(--space-3); border-radius: calc(var(--radius-card) - var(--amazon-ring-width)); background: var(--color-ink);
+  font-size: var(--text-lg); font-weight: var(--weight-price); line-height: var(--leading-tight); text-align: center;
+}
+.amazon-cta__go { flex: none; width: var(--amazon-arrow); height: var(--amazon-arrow); }
+@media (prefers-reduced-motion: no-preference) {
+  .amazon-cta::before { animation: amazon-glow var(--amazon-beat) ease-in-out infinite; }
+  .amazon-cta__ring::before { animation: amazon-turn var(--amazon-turn) linear infinite; }
+  .amazon-cta__ring::after { animation: amazon-sweep var(--amazon-beat) var(--amazon-ease-sweep) infinite; }
+  .amazon-cta__go { animation: amazon-nudge var(--amazon-beat) ease-in-out infinite; }
+}
+@media (prefers-reduced-motion: reduce) { .amazon-cta__ring::after { display: none; } .amazon-cta { transition: none; } }
+@keyframes amazon-turn { to { transform: translate(-50%, -50%) rotate(1turn); } }
+@keyframes amazon-sweep { 0%, 52% { transform: translateX(-115%); } 84%, 100% { transform: translateX(115%); } }
+@keyframes amazon-glow { 0%, 50%, 100% { opacity: var(--amazon-glow-low); } 72% { opacity: 1; } }
+@keyframes amazon-nudge { 0%, 70%, 100% { transform: none; } 84% { transform: translate(var(--amazon-nudge), calc(-1 * var(--amazon-nudge))); } }
 .buybox__fine { margin: 0; font-size: var(--text-xs); color: var(--color-ink-muted); text-align: center; }
+.buybox__fine-line { display: block; }
 .ask__amazon { margin: var(--space-2) 0 0; font-size: var(--text-sm); }
 .ask__amazon a { color: var(--color-brand-text); font-weight: var(--weight-strong); }
 

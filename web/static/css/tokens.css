@@ -329,6 +329,24 @@
   --buy-bag-rim-svg: 3;             /* the same gap in the bag drawing's own units */
   --buy-arrow: 1.5rem;              /* the arrow at its right end */
   --compare-height: 3rem;           /* the outlined Compare prices button under it */
+  /* The Amazon button under it, drawn by the owner (16 Nov 2026): ink, with an orange and gold ring that turns, a band
+     of light that sweeps across, a glow that swells and an arrow that nudges. Its loops run longer than the motion
+     tokens and never stop, at the owner's ask; only transforms and opacity change, and reduced motion stills it all. */
+  --amazon-gold: #ffc24a;           /* the ring's highlight */
+  --amazon-ember: #b83a0a;          /* the ring's shadow */
+  --amazon-ring: conic-gradient(var(--color-brand), var(--amazon-gold) 25%, var(--color-brand-soft) 40%, var(--color-brand) 60%, var(--amazon-ember) 82%, var(--color-brand));
+  --amazon-ring-width: 3px;
+  --amazon-ring-size: 150%;         /* the turning square behind the ring, wider than the button's diagonal */
+  --amazon-height: 3.75rem;
+  --amazon-arrow: 1.375rem;
+  --amazon-gleam: rgb(255 255 255 / 0.42);
+  --amazon-glow: 0 8px 26px rgb(255 90 31 / 0.48);
+  --amazon-glow-low: 0.42;          /* the glow's opacity between swells */
+  --amazon-turn: 4s;                /* one turn of the ring */
+  --amazon-beat: 3.6s;              /* one sweep, swell and nudge */
+  --amazon-ease-sweep: cubic-bezier(0.4, 0, 0.2, 1);
+  --amazon-nudge: 4px;
+  --amazon-press: 0.975;
   --buy-bar-space: calc(var(--tap) + 2 * var(--space-2) + var(--border-width));   /* the bar at the foot of a phone's product page: its height, which the footer leaves clear */
   --pulse-gap: 3px;                 /* how far outside Buy now its arrival ring starts */
   --color-on-brand-line: rgb(255 255 255 / 0.4);   /* the divider inside the Buy now button */

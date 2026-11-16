@@ -2333,15 +2333,15 @@ ENTRIES = [
     ),
     Entry(
         "product.amazon.note", T, "Amazon note",
-        "We don't have Amazon's price for this yet. Tap to see it on Amazon.",
-        "Inside the Check the price on Amazon button in a product page's price box, under its label. Says nothing "
-        "about Amazon's stock or delivery, which we do not know.",
+        "We don't track Amazon's price for this yet. Tap to see today's price.",
+        "Under the Check the price on Amazon button in a product page's price box, above the Amazon Associate line. "
+        "Says nothing about Amazon's stock or delivery, which we do not know.",
         legal=True,
     ),
     Entry(
         "product.amazon.note_priced", T, "Amazon note, with Amazon's price",
         "Amazon's own price is in the list below.",
-        "Inside the Amazon button in a product page's price box when we hold Amazon's current price.",
+        "Under the Amazon button in a product page's price box when we hold Amazon's current price.",
     ),
     Entry(
         "product.amazon.few.one", T, "Amazon nudge, one retailer in stock",

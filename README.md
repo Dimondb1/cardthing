@@ -659,15 +659,25 @@ Amazon's current price for the product, which then sits on its own row.
 
 Since 16 Nov 2026 (a review the owner passed on: "most people will never
 scroll to it", and the owner: "Make it so that people click it easily I need
-the money") Amazon in the price box sits straight under Compare prices, a
-full-width outlined button like it, "Check the price on Amazon", with "We
-don't have Amazon's price for this yet. Tap to see it on Amazon." inside it
-and the Associate line as small print under it. Before, it was the last thing
-in the box, under Ask Rip and the guides, said "Compare on Amazon" and "Often
-in stock with Prime delivery" on every product, which we cannot back up, and
-was the site's one dark button with a rainbow ring (the owner's ask of 6 Nov
-2026, now reversed so it reads as part of the page, not an advert; the
-`--amazon-ring*` tokens are gone). Also:
+the money") Amazon in the price box sits straight under Compare prices,
+"Check the price on Amazon", with "We don't track Amazon's price for this yet.
+Tap to see today's price." and the Associate line as small print under it.
+Before, it was the last thing in the box, under Ask Rip and the guides, said
+"Compare on Amazon" and "Often in stock with Prime delivery" on every product,
+which we cannot back up.
+
+The button itself is the one the owner drew the same day ("That button doesn't
+look inviting"): `.amazon-cta`, an ink button with an orange and gold ring that
+turns every 4 seconds, a band of light that sweeps across, a glow that swells
+and an arrow that nudges, every 3.6 seconds. These loops break two design
+rules at the owner's ask (they run longer than 400ms and never stop, and the
+ring adds a gold); they keep the rest. Only transforms and opacity move: the
+ring is a conic gradient on a square wider than the button, turned behind the
+ink face and clipped to the rim, and the glow is a shadow whose opacity
+swells, so a phone does no layout or repaint work for it. Its colours, sizes
+and timings are the `--amazon-*` tokens in `tokens.css`. With reduced motion
+it stands still and the band of light is gone. The same button says "Buy on
+Amazon" when we hold Amazon's price. Also:
 
 - When only one or two retailers have it in stock, a line above it: "Only 2
   retailers have this in stock. Check Amazon too." With none in stock, Amazon

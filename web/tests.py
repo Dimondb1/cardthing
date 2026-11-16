@@ -640,18 +640,55 @@ class AmazonPlacingTests(PageTestCase):
     """The owner, 16 Nov 2026, with a review of the Amazon button ("most people will never scroll to it") and: "Make it
     so that people click it easily I need the money"."""
 
-    def test_amazon_sits_under_compare_prices_outlined_like_it_and_says_nothing_made_up(self):
+    def test_amazon_sits_under_compare_prices_and_says_nothing_made_up(self):
         with self.settings(RIPRAPTOR_AMAZON_PARTNER_TAG="ripraptor-21"):
             html = self.client.get(self.etb.get_absolute_url()).content.decode()
         box = html[html.index('class="buy-now"'):html.index("buybox__save")]
-        self.assertLess(box.index('class="compare-jump"'), box.index('class="compare-jump compare-jump--amazon"'))
-        self.assertIn('<span class="compare-jump__label">Check the price on Amazon</span>', box)
-        self.assertIn("We don&#x27;t have Amazon&#x27;s price for this yet. Tap to see it on Amazon.", box)
+        self.assertLess(box.index('class="compare-jump"'), box.index('class="amazon-cta"'))
+        self.assertIn('<span class="amazon-cta__label">Check the price on Amazon</span>', box)
+        self.assertIn('target="_blank" rel="sponsored nofollow noopener"', box[box.index('class="amazon-cta"'):])
+        self.assertIn("We don&#x27;t track Amazon&#x27;s price for this yet. Tap to see today&#x27;s price.", box)
         self.assertIn("As an Amazon Associate, RipRaptor earns from qualifying purchases.", box)
-        # Before Ask Rip and the guides, not after them; nothing it cannot back up; no advert styling.
-        self.assertLess(html.index("compare-jump--amazon"), html.index("buybox__save"))
-        for gone in ("Prime delivery", "button--amazon", "Compare on Amazon"):
+        # Under the button, not inside it, so the button says only what it does.
+        button = box[box.index('class="amazon-cta"'):box.index("</a>", box.index('class="amazon-cta"'))]
+        self.assertNotIn("track Amazon", button)
+        # Before Ask Rip and the guides, not after them; nothing it cannot back up.
+        self.assertLess(html.index("amazon-cta"), html.index("buybox__save"))
+        for gone in ("Prime delivery", "button--amazon", "Compare on Amazon", "compare-jump--amazon"):
             self.assertNotIn(gone, html)
+
+    def test_the_amazon_button_moves_as_the_owner_drew_it_with_transforms_and_opacity_only(self):
+        # The owner, 16 Nov 2026: "That button doesn't look inviting", with a drawing of an ink button in a turning
+        # orange and gold ring, a sweep of light, a swelling glow and a nudging arrow.
+        from django.contrib.staticfiles import finders
+
+        css = open(finders.find("css/site.css"), encoding="utf-8").read()
+        tokens = open(finders.find("css/tokens.css"), encoding="utf-8").read()
+        block = css[css.index(".amazon-cta {"):css.index(".buybox__fine {")]
+        self.assertNotRegex(block, r"#[0-9a-fA-F]{3,8}\b|rgb\(|\d+px")
+        for name in ("--amazon-ring:", "--amazon-turn:", "--amazon-beat:", "--amazon-glow:", "--amazon-gleam:"):
+            self.assertIn(name, tokens)
+        keyframes = re.findall(r"@keyframes (amazon-[\w-]+) \{(.*?)\}\s*$", block, re.M)
+        self.assertEqual(sorted(name for name, _ in keyframes), ["amazon-glow", "amazon-nudge", "amazon-sweep", "amazon-turn"])
+        for _, frames in keyframes:
+            for prop in re.findall(r"([a-z-]+):", frames):
+                self.assertIn(prop, ("opacity", "transform"))
+        # Only when motion is allowed; with reduced motion the button is still and the band of light is gone.
+        moving = block[block.index("@media (prefers-reduced-motion: no-preference) {"):block.index("@media (prefers-reduced-motion: reduce)")]
+        self.assertEqual(len(re.findall(r"animation: amazon-", moving)), 4)
+        self.assertEqual(len(re.findall(r"animation: amazon-", block)), 4)
+        self.assertIn("@media (prefers-reduced-motion: reduce) { .amazon-cta__ring::after { display: none; }", block)
+
+    def test_a_priced_amazon_offer_uses_the_same_button(self):
+        from catalogue.models import Retailer
+        amazon = make_retailer(name="Amazon", slug="amazon", source_type=Retailer.Source.AMAZON)
+        make_listing(self.etb, amazon, price="40.00")
+        with self.settings(RIPRAPTOR_AMAZON_PARTNER_TAG="ripraptor-21"):
+            html = self.client.get(self.etb.get_absolute_url()).content.decode()
+        box = html[html.index('class="buy-now"'):html.index("buybox__save")]
+        self.assertIn('<span class="amazon-cta__label">Buy on Amazon</span>', box)
+        self.assertIn("b=amazon_box", box[box.index('class="amazon-cta"'):])
+        self.assertIn("Amazon&#x27;s own price is in the list below.", box)
 
     def test_it_says_when_only_one_or_two_retailers_have_stock(self):
         with self.settings(RIPRAPTOR_AMAZON_PARTNER_TAG="ripraptor-21"):

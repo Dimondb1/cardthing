@@ -74,14 +74,16 @@
       </a>
     {% endif %}
     {% if cheapest and amazon_box or cheapest and amazon_offer %}
-      {# Amazon as a third place to look, under Compare prices and outlined like it (the owner, 16 Nov 2026: "Make it so that people click it easily"). #}
+      {# Amazon as a third place to look, under Compare prices, in the shimmering button the owner drew (16 Nov 2026: "That button doesn't look inviting"). #}
       {% if in_stock_count and in_stock_count <= 2 %}<p class="buybox__amazon-few">{% copy_count "product.amazon.few" in_stock_count %}</p>{% endif %}
-      <a class="compare-jump compare-jump--amazon" {% if amazon_offer %}{% go_link amazon_offer "amazon_box" product %}{% else %}href="{{ amazon_box }}" data-click="amazon" data-click-shop="Amazon" data-click-product="{{ product.name }}" data-click-game="{{ product.game.display_short }}"{% endif %} target="_blank" rel="sponsored nofollow noopener">
-        <span class="compare-jump__label">{% if amazon_offer %}{% copy "product.compare.amazon_buy" %}{% else %}{% copy "product.amazon.button" %}{% endif %}</span>
-        <span class="compare-jump__note">{% if amazon_offer %}{% copy "product.amazon.note_priced" %}{% else %}{% copy "product.amazon.note" %}{% endif %}</span>
+      <a class="amazon-cta" {% if amazon_offer %}{% go_link amazon_offer "amazon_box" product %}{% else %}href="{{ amazon_box }}" data-click="amazon" data-click-shop="Amazon" data-click-product="{{ product.name }}" data-click-game="{{ product.game.display_short }}"{% endif %} target="_blank" rel="sponsored nofollow noopener">
+        <span class="amazon-cta__ring"><span class="amazon-cta__face">
+          <span class="amazon-cta__label">{% if amazon_offer %}{% copy "product.compare.amazon_buy" %}{% else %}{% copy "product.amazon.button" %}{% endif %}</span>
+          <svg class="amazon-cta__go" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M7 17 17 7M9 7h8v8" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </span></span>
         <span class="visually-hidden"> (opens in a new tab)</span>
       </a>
-      <p class="buybox__fine">{% copy "terms.amazon" %}</p>
+      <p class="buybox__fine"><span class="buybox__fine-line">{% if amazon_offer %}{% copy "product.amazon.note_priced" %}{% else %}{% copy "product.amazon.note" %}{% endif %}</span> <span class="buybox__fine-line">{% copy "terms.amazon" %}</span></p>
     {% endif %}
     {% if cheapest %}
       {% with deal=summary.deal %}{% if deal %}<p class="buybox__deal">{% copy "product.deal.better" quantity=deal.deal_quantity price=deal.deal_price|gbp retailer=deal.retailer.name each=deal.deal_each|gbp %}</p>{% endif %}{% endwith %}

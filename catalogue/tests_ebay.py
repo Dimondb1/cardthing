@@ -272,6 +272,30 @@ class LookupTests(TestCase):
         self.assertEqual(len(bulk_calls), 3)   # the batch, then each listing on its own
         self.assertIsNotNone(etb_listing.pk)
 
+    def test_a_lookup_that_shows_no_known_listing_is_not_believed_and_they_are_searched_for(self):
+        """The owner's log, 16 Nov 2026: "refreshing 1966 known listings" and, twenty minutes and thousands of lookups
+        later, "0 known listings still live", with every one put on the ended list. The lookup was failing, not the
+        listings: the search found 262 of 262 live two minutes after."""
+        ebay.forget_live()
+        self.addCleanup(ebay.forget_live)
+        for n in range(30):
+            product = make_product(self.set, name=f"Known Box {n}", slug=f"known-{n}")
+            make_listing(product, self.retailer, price="30.00", url=f"https://www.ebay.co.uk/itm/{500 + n}?campid=1")
+        fake, bulk = FakeApi([]), []
+
+        def api(url, headers, data=None):
+            if url.startswith(ebay.ITEMS_URL):
+                bulk.append(url)
+                raise ebay.EbayError('eBay API 404: {"errors":[{"errorId":11001,"message":"The specified item Id was not found."}]}')
+            return fake(url, headers, data)
+
+        with self.assertLogs("catalogue.ebay", "WARNING") as logged:
+            ebay.ebay_offers(self.retailer, limit=60, request=api, pause=0)
+        self.assertTrue(any("which is not believed" in record.getMessage() for record in logged.records))
+        self.assertLessEqual(len(bulk), 20)          # it stops at ten said not to exist; all thirty took 59
+        self.assertEqual(ebay.ended_items(), {})     # and none is put on the ended list
+        self.assertGreaterEqual(len(fake.searches()), 30)   # every one is searched for instead
+
     def test_a_listing_the_bulk_lookup_no_longer_knows_is_searched_again_then_marked_sold_out(self):
         make_listing(self.bundle, self.retailer, price="30.00", url="https://www.ebay.co.uk/itm/9?campid=1")
         api = FakeApi([], items=[])

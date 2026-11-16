@@ -24,6 +24,7 @@ from django.contrib.admin.views.decorators import staff_member_required
 from django.core.cache import cache
 from django.db.models import Count, Max, Min, Q
 from django.shortcuts import redirect, render
+from django.urls import reverse
 from django.utils import timezone
 from django.utils.timesince import timesince
 from django.views.decorators.http import require_http_methods
@@ -291,6 +292,7 @@ def log_text(now, state, why, fresh, found, facts):
                 f"{queue.get('checks', 0)} shops to check, {queue.get('pulses', 0)} pulses, {queue.get('other', 0)} other",
                 f"  eBay running: {market.get('running') or 'no'}; eBay read: {market.get('read') or 'not due'}; "
                 f"eBay check planned: {market.get('check') or 'none'}",
+                f"  eBay item lookups: {'WAITING. ' + market['lookup_waiting'] if market.get('lookup_waiting') else 'not waiting'}",
                 f"  listings waiting after a failed try: {plan.get('checks_waiting_after_a_failed_try', 0)}",
                 "  import lock: " + (f"held by the reader since {clock_time(lock.get('held_since'), now)}"
                                      if lock.get("held_since") else "not held by the reader")
@@ -342,6 +344,10 @@ def log_text(now, state, why, fresh, found, facts):
             f"last problem {clock_time(check.get('problem_at'), now)}: {check.get('problem')}"
             if check.get("problem_at") else "last problem: none noted"]
 
+    test = ebay.last_test()
+    out += ["", f"EBAY TEST (Test eBay now, {clock_time(test.get('at'), now)})" if test else "EBAY TEST"]
+    out += list(test.get("lines") or []) or ["not run yet: tap Test eBay now on this page"]
+
     out += ["", f"EBAY SEARCHES (the last {LOG_RUNS}; the hourly reads between them leave no row)"]
     runs = list(ImportRun.objects.filter(retailer__source_type=EBAY).order_by("-started_at")[:LOG_RUNS])
     for run in runs:
@@ -364,6 +370,17 @@ def log_text(now, state, why, fresh, found, facts):
         out.append("The reader keeps this log from the first time it runs this version.")
     # A shop's last error and a search's own log come from outside: nothing secret leaves in them either.
     return worklog.scrub("\n".join(out))
+
+
+def test_ebay(request):
+    """Test eBay now: ask eBay each thing the site asks it, once, and keep its answers for the page and the log
+    (ebay.self_test). Changes no listing."""
+    try:
+        ebay.self_test()
+    except Exception as exc:  # noqa: BLE001 - whatever goes wrong is what the owner needs to read
+        messages.warning(request, f"The test stopped on an unexpected error: {type(exc).__name__}: {exc}")
+        return
+    messages.success(request, "Asked eBay. Its answers are under Test eBay now, and in the log to copy.")
 
 
 def try_again(request):
@@ -408,6 +425,9 @@ def ebay_health_page(request):
     if request.method == "POST":
         if request.POST.get("action") == "try_again":
             try_again(request)
+        elif request.POST.get("action") == "test":
+            test_ebay(request)
+            return redirect(reverse("ebay_health") + "#test")
         else:
             save_rules(request)
         return redirect("ebay_health")
@@ -427,6 +447,8 @@ def ebay_health_page(request):
         "title": "eBay health",
         "state": state, "why": why, "fresh": fresh, "searched": searched, "reasons": found, "facts": facts,
         "usage": crawl.ebay_usage(now=now),
+        "test": {"at": when(ebay.last_test().get("at")),
+                 "lines": [worklog.scrub(line) for line in ebay.last_test().get("lines") or []]},
         "log": log_text(now, {"ok": "Up to date", "behind": "Falling behind"}.get(state, "Not updating"), why, fresh,
                         found, facts),
         "products": products_counts(cheapest),

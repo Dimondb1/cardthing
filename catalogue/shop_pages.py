@@ -535,9 +535,9 @@ class Reader:
                 self.ebay_headers = ebay.headers_for(ebay.access_token(app, cert, request=request), campaign)
             self.pages_left -= 1
             self.requests += 1
-            answer = request(ebay.ITEMS_URL + "?item_ids=" + item_id, self.ebay_headers)
+            answer = request(ebay.items_address([item_id]), self.ebay_headers)
         except ebay.EbayError as exc:
-            if "11001" in str(exc) or "404" in str(exc):
+            if ebay.not_found(exc):
                 return {"status": "gone", "http": 404, "source": "ebay"}
             if "Set RIPRAPTOR_EBAY" in str(exc):
                 return {"status": "not read", "why": "eBay's keys are not set"}

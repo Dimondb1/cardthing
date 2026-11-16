@@ -4,6 +4,7 @@ a price "checked at eBay 20 hours ago": "I want users to know they are getting t
 isn't good enough. If the eBay API times out then we need another way."."""
 
 import time
+import urllib.parse
 from datetime import timedelta
 from decimal import Decimal
 
@@ -23,6 +24,12 @@ def item(number, price="85.89", postage="3.89", feedback="99.6", ratings=1200, t
         "itemWebUrl": f"https://www.ebay.co.uk/itm/{number}", "seller": {"feedbackPercentage": feedback, "feedbackScore": ratings},
         "shippingOptions": [{"shippingCost": {"value": postage}}], "image": {},
     }
+
+
+def believed():
+    """The lookup has shown an item and priced one in this process, as after any check that worked."""
+    ebay.lookup_showed()
+    ebay.lookup_read()
 
 
 class FakeEbay:
@@ -45,7 +52,13 @@ class FakeEbay:
             ]}]}
         if self.fail is not None:
             raise ebay.EbayError(self.fail)
-        asked = url.split("item_ids=", 1)[1].split(",")
+        if "item_ids=" not in url:
+            # One listing on its own: eBay's getItem, the id in the address.
+            item_id = urllib.parse.unquote(url[len(ebay.ITEMS_URL):])
+            if item_id not in self.items:
+                raise ebay.EbayError("eBay API 404: {\"errors\":[{\"errorId\":11001,\"message\":\"The item does not exist\"}]}")
+            return self.items[item_id]
+        asked = [urllib.parse.unquote(item_id) for item_id in url.split("item_ids=", 1)[1].split(",")]
         if any(item_id not in self.items for item_id in asked):
             raise ebay.EbayError("eBay API 404: {\"errors\":[{\"errorId\":11001,\"message\":\"The item does not exist\"}]}")
         return {"items": [self.items[item_id] for item_id in asked]}
@@ -60,6 +73,7 @@ class CheckTests(WorkerTestCase):
         super().setUp()
         ebay.forget_live()
         self.addCleanup(ebay.forget_live)
+        believed()   # the lookup has shown and priced an item before, so it is believed about one it does not
         self.ebay = self.shop("eBay", source_type=Retailer.Source.EBAY, source_url="https://www.ebay.co.uk/")
         self.box = self.product("surging-box", views=3)
         Product.objects.filter(pk=self.box.pk).update(name="Surging Sparks Booster Box")
@@ -79,7 +93,7 @@ class CheckTests(WorkerTestCase):
         api = FakeEbay([item(123, price="79.99", postage="2.99")])
         found = self.check(api)
         self.assertEqual(found, {self.row.pk: (Decimal("79.99"), Listing.Availability.IN_STOCK, Decimal("2.99"))})
-        self.assertEqual(api.lookups(), [ebay.ITEMS_URL + "?item_ids=v1|123|0"])
+        self.assertEqual(api.lookups(), ["https://api.ebay.com/buy/browse/v1/item/?item_ids=v1%7C123%7C0"])
         # The token and the allowance are kept: a second check asks for neither again.
         self.check(api)
         self.assertEqual(sum(1 for url in api.calls if url == ebay.TOKEN_URL), 1)
@@ -90,12 +104,14 @@ class CheckTests(WorkerTestCase):
         self.assertEqual(self.check(gone), {self.row.pk: (Decimal("82.00"), Listing.Availability.OUT_OF_STOCK, Decimal("3.89"))})
         self.assertIn("v1|123|0", ebay.ended_items())
         ebay.forget_live()
+        believed()
         poor = FakeEbay([item(123, feedback="90.0")])
         self.assertEqual(self.check(poor)[self.row.pk][1], Listing.Availability.OUT_OF_STOCK)
         junk = FakeEbay([item(123, title="Surging Sparks Booster Box x 3 Multibuy")])
         self.assertEqual(self.check(junk)[self.row.pk][1], Listing.Availability.OUT_OF_STOCK)
         # One ended listing in a batch of two: eBay refuses the batch, so each half is asked for.
         ebay.forget_live()
+        believed()
         other = self.other_listing()
         api = FakeEbay([item(456, price="51.00", postage="0.00", title="Other Box")])
         found = self.check(api, self.row, other)
@@ -118,6 +134,128 @@ class CheckTests(WorkerTestCase):
         # Nor is it planned: the reader leaves it to the daily run, which searches for a new listing.
         reader = self.make_worker(ebay_request=api)
         self.assertEqual(reader.plan(self.clock()), [])
+
+    def test_the_lookup_is_asked_at_ebays_own_address_with_the_ids_encoded(self):
+        """Until 16 Nov 2026 it asked /item/get_items, an address eBay does not have. eBay said "not found" of every
+        lookup, which was read as every listing having ended (the owner's log: "refreshing 1966 known listings", "0
+        known listings still live", then 262 of 262 found live by the search two minutes later)."""
+        self.assertEqual(ebay.items_address(["v1|123|0", "v1|456|0"]),
+                         "https://api.ebay.com/buy/browse/v1/item/?item_ids=v1%7C123%7C0,v1%7C456%7C0")
+        self.assertNotIn("get_items", ebay.ITEMS_URL)
+
+    def many_listings(self, count=12):
+        rows = []
+        for n in range(count):
+            product = self.product(f"many-{n}", views=3)
+            Product.objects.filter(pk=product.pk).update(name=f"Many Box {n}")
+            rows.append(self.listing(product, self.ebay, 120, price="50.00", url=f"https://www.ebay.co.uk/itm/{2000 + n}"))
+        return rows
+
+    def test_a_lookup_that_shows_no_item_is_not_believed_and_marks_nothing(self):
+        """A lookup that is failing says "not found" of every item. Believed, it marked every live eBay listing out
+        of stock between the daily runs and put each on the ended list, never to be asked about again."""
+        ebay.forget_live()   # a reader just started: the lookup has shown nothing yet
+        rows = self.many_listings(12)
+        api = FakeEbay([])
+        with self.assertRaises(ebay.LookupUnusable) as raised:
+            self.check(api, *rows)
+        self.assertIn("said none of the 10 items asked about exists. That is not believed", str(raised.exception))
+        self.assertIn("eBay's words: eBay API 404", str(raised.exception))
+        self.assertEqual(ebay.ended_items(), {})
+        self.assertLess(len(api.lookups()), 25)   # it stops finding out after ten, where it once spent hundreds
+        # The reader: nothing marked, the problem noted with eBay's words, eBay not backed off, no check planned
+        # while the lookups wait, and none made.
+        ebay.forget_live()
+        api = FakeEbay([])
+        reader = self.make_worker(ebay_request=api)
+        [task] = reader.plan(self.clock())
+        now = self.clock()
+        reader.run_job(worker.Job(task, now, now + worker.PROBE_DEADLINE))
+        for row in rows:
+            row.refresh_from_db()
+            self.assertEqual((row.availability, row.last_checked), (Listing.Availability.IN_STOCK, now - timedelta(minutes=120)))
+        self.assertIn("That is not believed, so nothing was marked out of stock", ebay.last_check()["problem"])
+        self.ebay.refresh_from_db()
+        self.assertIsNone(self.ebay.backoff_until)
+        asked = len(api.lookups())
+        self.clock.advance(minutes=5)
+        reader.probe_failed.clear()
+        self.assertEqual(reader.plan(self.clock()), [])
+        with self.assertRaises(ebay.LookupUnusable):
+            self.check(api, *rows)
+        self.assertEqual(len(api.lookups()), asked)
+        # Once it shows an item it is believed again: the one missing from its answer has ended.
+        ebay.forget_live()
+        live = FakeEbay([item(2000 + n, title=f"Many Box {n}") for n in range(12) if n != 3])
+        found = self.check(live, *rows)
+        self.assertEqual(found[rows[3].pk][1], Listing.Availability.OUT_OF_STOCK)
+        self.assertEqual(sum(1 for _p, stock, _d in found.values() if stock == Listing.Availability.IN_STOCK), 11)
+        self.assertEqual(set(ebay.ended_items()), {"v1|2003|0"})
+
+    def test_items_the_lookup_shows_but_that_cannot_be_priced_are_not_marked_out_of_stock(self):
+        """eBay's documents say the bulk lookup returns fewer details than the search. If none of what it sends reads
+        as an offer (here, no postage), that hides nothing: the listings wait and the page says what eBay sent."""
+        ebay.forget_live()
+        rows = self.many_listings(12)
+        bare = []
+        for n in range(12):
+            row = item(2000 + n, title=f"Many Box {n}")
+            del row["shippingOptions"]
+            bare.append(row)
+        with self.assertRaises(ebay.LookupUnusable) as raised:
+            self.check(FakeEbay(bare), *rows)
+        self.assertIn("eBay showed 12 items and none could be read as an offer", str(raised.exception))
+        self.assertIn("eBay sent: image, itemId, itemWebUrl, price, seller, title", str(raised.exception))
+        # One that reads as an offer, and the lookup is believed about the rest.
+        ebay.forget_live()
+        mixed = bare[:11] + [item(2011, title="Many Box 11", price="49.00", postage="1.00")]
+        found = self.check(FakeEbay(mixed), *rows)
+        self.assertEqual(found[rows[11].pk], (Decimal("49.00"), Listing.Availability.IN_STOCK, Decimal("1.00")))
+        self.assertEqual(sum(1 for _p, stock, _d in found.values() if stock == Listing.Availability.OUT_OF_STOCK), 11)
+
+    def test_a_lookup_ebay_will_not_serve_marks_nothing_and_does_not_back_ebay_off(self):
+        """eBay's documents call the lookup a limited release for chosen partners: refused (403), or asked at an
+        address eBay does not have (a 404 that names no item), it is not a listing that ended."""
+        for words in ('eBay API 403: {"errors":[{"errorId":1100,"message":"Access denied","longMessage":"Insufficient '
+                      'permissions to fulfill the request."}]}', "eBay API 404: Not Found"):
+            ebay.forget_live()
+            believed()
+            api = FakeEbay([item(123)], fail=words)
+            reader = self.make_worker(ebay_request=api)
+            [task] = reader.plan(self.clock())
+            now = self.clock()
+            reader.run_job(worker.Job(task, now, now + worker.PROBE_DEADLINE))
+            self.row.refresh_from_db()
+            self.assertEqual(self.row.availability, Listing.Availability.IN_STOCK)
+            self.assertEqual(ebay.ended_items(), {})
+            problem = ebay.last_check()["problem"]
+            self.assertIn("eBay will not serve its item lookup to this application, so nothing was checked.", problem)
+            self.assertIn(words[:40], problem)
+            self.ebay.refresh_from_db()
+            self.assertIsNone(self.ebay.backoff_until)
+            reader.probe_failed.clear()
+            self.assertEqual(reader.plan(self.clock()), [])   # the lookups wait an hour
+            self.assertEqual(len(api.lookups()), 1)
+
+    def test_test_ebay_now_says_how_each_thing_went_in_ebays_own_words(self):
+        api = FakeEbay([item(123, price="79.99", postage="2.99")])
+        lines = ebay.self_test(request=api)
+        self.assertEqual(lines[:3], ["Keys: all three are set.", "Token: eBay issued one, so it accepts the keys.",
+                                     "Allowances: 4,000 searches and 5,000 item lookups left today, reset not said."])
+        self.assertEqual(lines[3], "Item lookup, 1 listing at once (what the checks use): eBay showed 1 of 1.")
+        self.assertTrue(lines[4].startswith("  The first reads as £79.99 with £2.99 postage. eBay sent: "))
+        self.assertTrue(lines[5].startswith("Item lookup, one listing on its own: eBay showed it"))
+        self.assertEqual(ebay.last_test()["lines"], lines)
+        self.row.refresh_from_db()
+        self.assertEqual(self.row.price, Decimal("82.00"))   # a test changes no listing
+        # Refused: eBay's own words, for both ways of asking.
+        refused = FakeEbay([item(123)], fail='eBay API 403: {"errors":[{"errorId":1100,"message":"Access denied"}]}')
+        lines = ebay.self_test(request=refused)
+        self.assertEqual(lines[3], 'Item lookup, 1 listing at once (what the checks use): REFUSED. eBay\'s words: eBay '
+                                   'API 403: {"errors":[{"errorId":1100,"message":"Access denied"}]}')
+        self.assertTrue(lines[4].startswith("Item lookup, one listing on its own: REFUSED. eBay's words: eBay API 403"))
+        with override_settings(RIPRAPTOR_EBAY_APP_ID=""):
+            self.assertEqual(ebay.self_test(request=api)[0][:14], "Keys: NOT SET.")
 
     def test_an_ended_item_the_daily_search_found_in_stock_again_is_checked_again(self):
         """In stock and on the ended list, it was never checked between daily searches, so its price stopped counting

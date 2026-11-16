@@ -538,6 +538,7 @@ class Worker:
                 "read": "" if ebay_read is None else ("due, with room to start" if ebay_read in chosen
                                                       else "due, no reading slot free"),
                 "check": f"{len(ebay_check.listings)} items ({ebay_check.tier})" if ebay_check else "",
+                "lookup_waiting": ebay.lookup_paused(),
             },
             "checks_waiting_after_a_failed_try": waiting,
             "lock": {
@@ -602,6 +603,8 @@ class Worker:
                          "availability")
         )
         ended = ebay.ended_items()
+        # While eBay's item lookup is waiting (refused, or not believed: ebay.LookupUnusable), none of its is planned.
+        lookup_paused = bool(ebay.lookup_paused())
         hot, warm, cold = [], [], []
         for row in rows:
             # An eBay listing is checked through eBay's item lookup, which needs the item's id from its address, and
@@ -609,7 +612,7 @@ class Worker:
             # (ebay.check_listings asks about those again).
             if row[3] == Retailer.Source.EBAY:
                 item_id = ebay.item_id_of(row[6])
-                if not item_id or (item_id in ended and row[7] not in Listing.BUYABLE):
+                if lookup_paused or not item_id or (item_id in ended and row[7] not in Listing.BUYABLE):
                     continue
             points = scores.get(row[1], 0)
             if points >= heat.HOT:
@@ -903,7 +906,9 @@ class Worker:
                 wanted, request=self.ebay_request, pause=self.page_pause, sleep=self.sleep,
                 stop=lambda: self.clock() - job.started >= PROBE_BUDGET,
             )
-        except ebay.AllowanceUsed as exc:
+        except (ebay.AllowanceUsed, ebay.LookupUnusable) as exc:
+            # The day's lookups used, or a lookup eBay will not serve or that is not believed: the listings wait,
+            # nothing is marked, and eBay is not backed off, so its daily search is not delayed.
             logger.warning("eBay: %s", exc)
             ebay.note_check(problem=str(exc))
             with self.lock:

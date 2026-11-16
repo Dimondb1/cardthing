@@ -94,7 +94,8 @@ class WorkerLogTests(WorkerTestCase):
         reader = self.make_worker(executor=executor)
         reader.queue = reader.plan(self.clock())
         plan = worklog.last_plan()
-        self.assertEqual(plan["ebay"], {"running": "", "read": "due, with room to start", "check": "1 items (hot)"})
+        self.assertEqual(plan["ebay"], {"running": "", "read": "due, with room to start", "check": "1 items (hot)",
+                                        "lookup_waiting": ""})
         self.assertEqual(plan["queue"], {"reads": 1, "reads_with_room": 1, "checks": 2, "pulses": 0, "other": 0})
         self.assertEqual((plan["running"], plan["lock"]["held_since"], plan["lock"]["refused"]), ([], "", ""))
         # The read under way: the next plan says eBay is running and the reader holds the lock.

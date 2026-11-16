@@ -38,7 +38,12 @@ logger = logging.getLogger(__name__)
 
 TOKEN_URL = "https://api.ebay.com/identity/v1/oauth2/token"
 SEARCH_URL = "https://api.ebay.com/buy/browse/v1/item_summary/search"
-ITEMS_URL = "https://api.ebay.com/buy/browse/v1/item/get_items"
+# eBay's bulk item lookup (getItems): GET /item/ with the ids in item_ids (items_address). Until 16 Nov 2026 this
+# was /item/get_items, an address eBay does not have: eBay answered every lookup "not found", which was read as
+# every listing having ended, so each daily run searched for every product again (using up the day's searches) and
+# the checks between runs marked live listings out of stock. The owner's log, 16 Nov 2026: "refreshing 1966 known
+# listings", "0 known listings still live", then 262 of 262 found live by the search two minutes later.
+ITEMS_URL = "https://api.ebay.com/buy/browse/v1/item/"
 LIMITS_URL = "https://api.ebay.com/developer/analytics/v1_beta/rate_limit/?api_context=buy&api_name=Browse"
 ITEM_ID = re.compile(r"/itm/(\d+)")
 BULK = 20          # item ids per bulk lookup
@@ -80,7 +85,23 @@ ALLOWANCE_ASK_SPEND = 100
 # eBay's counter again and go on only if it says there is room. The owner, 6 Nov 2026, with eBay "backing off" on
 # Crawl health after one: "That's the eBay failure".
 BULK_PAUSE = 10 * 60
-_live = {"token": "", "token_until": 0.0, "bulk_left": None, "bulk_asked": None, "bulk_spent": 0}
+_live = {"token": "", "token_until": 0.0, "bulk_left": None, "bulk_asked": None, "bulk_spent": 0,
+         "trust": False, "gone_run": 0, "said": "", "unusable_until": None, "unusable_why": "",
+         "read": False, "unread_run": 0, "fields": ""}
+
+# Whether the item lookup is believed when it says an item does not exist. It is once it has shown an item in this
+# process, and no longer after DOUBT_AFTER items in a row said not to exist with none shown between them: twenty
+# listings do not all end in the same half hour, but a lookup that is failing says so of every one. Unbelieved, a
+# "not found" marks nothing out of stock and puts nothing on the ended list; the lookups then wait DOUBT_PAUSE, or
+# REFUSED_PAUSE when eBay will not serve the lookup at all, and the eBay health page shows eBay's own words.
+#
+# The same goes for an item the lookup shows that cannot be read as an offer (no price in pounds, no UK postage, a
+# seller below the rules): believed once the lookup has given an item that did read as one in this process, and no
+# longer after DOUBT_AFTER in a row that did not. eBay's documents say the bulk lookup returns fewer details than
+# the search; if those are too few to price an item, that must hide nothing.
+DOUBT_AFTER = 10
+DOUBT_PAUSE = 30 * 60
+REFUSED_PAUSE = 60 * 60
 
 
 # Items eBay says have ended: never looked up again, since an ended item never comes back (a relisting has a new
@@ -143,6 +164,102 @@ def last_check():
     return dict(found) if isinstance(found, dict) else {}
 
 
+# What the owner's Test eBay now button last found (self_test), for the eBay health page and its Log to copy.
+TEST_KEY = "ebay:last-test"
+TEST_ITEMS = 5
+
+
+def last_test():
+    """{"at": ISO time, "lines": [...]} from the last self_test, or {}."""
+    found = cache.get(TEST_KEY)
+    return dict(found) if isinstance(found, dict) else {}
+
+
+def self_test(request=None):
+    """Ask eBay each thing the site asks it, once, and say in plain words how each went, with eBay's own words when
+    it refuses: a token, the day's allowances, the item lookup for a few listings at once (what the checks and the
+    daily refresh use) and for one listing on its own. The owner, 16 Nov 2026: "Instead of guessing and hoping why
+    aren't you producing an output log". Spends two item lookups and no search, and changes no listing. Returns the
+    lines, kept for the eBay health page (last_test)."""
+    from .importers import Offer
+
+    def ask(url, headers, data=None):
+        if request is not None:
+            return request(url, headers, data)
+        return http(url, headers, data=data, retries=0)   # one try: the page is waiting
+
+    def left(count):
+        return "an unknown number of" if count is None else f"{count:,}"
+
+    lines = []
+
+    def finish():
+        try:
+            cache.set(TEST_KEY, {"at": timezone.now().isoformat(), "lines": lines}, None)
+        except Exception:  # noqa: BLE001 - the lines are still returned
+            logger.warning("eBay: could not keep the test's answers")
+        return lines
+
+    try:
+        app, cert, campaign = credentials()
+    except EbayError as exc:
+        lines.append(f"Keys: NOT SET. {exc}")
+        return finish()
+    lines.append("Keys: all three are set.")
+    try:
+        token = access_token(app, cert, request=ask)
+    except EbayError as exc:
+        lines.append(f"Token: REFUSED. eBay's words: {exc}")
+        return finish()
+    lines.append("Token: eBay issued one, so it accepts the keys.")
+    headers = headers_for(token, campaign)
+    try:
+        searches, lookups, reset = allowances(headers, request=ask)
+        lines.append(f"Allowances: {left(searches)} searches and {left(lookups)} item lookups left today, reset "
+                     f"{reset or 'not said'}.")
+    except EbayError as exc:
+        lines.append(f"Allowances: eBay did not say. Its words: {exc}")
+    sample = {}
+    for listing in (Listing.objects.filter(retailer__source_type="ebay", is_active=True,
+                                           availability__in=Listing.BUYABLE)
+                    .select_related("product").order_by("-last_checked")[:40]):
+        item_id = item_id_of(listing.url)
+        if item_id and item_id not in sample:
+            sample[item_id] = listing
+        if len(sample) >= TEST_ITEMS:
+            break
+    if not sample:
+        lines.append("Item lookup: not tried. There is no eBay listing in stock to ask about.")
+        return finish()
+    ids = list(sample)
+    together = f"Item lookup, {len(ids)} listing{'s' if len(ids) != 1 else ''} at once (what the checks use)"
+    try:
+        answer = ask(items_address(ids), headers)
+    except EbayError as exc:
+        lines.append(f"{together}: REFUSED. eBay's words: {exc}")
+    else:
+        items = {item.get("itemId"): item for item in answer.get("items") or [] if isinstance(item, dict)}
+        shown = [item_id for item_id in ids if item_id in items]
+        lines.append(f"{together}: eBay showed {len(shown)} of {len(ids)}.")
+        if shown:
+            offer = item_offer(items[shown[0]], sample[shown[0]].product, Offer)
+            lines.append("  The first reads as " + (
+                f"£{offer.price} with £{offer.delivery} postage" if offer is not None
+                else "no offer: no price in pounds, no UK postage, or a seller below the rules")
+                + f". eBay sent: {', '.join(sorted(items[shown[0]]))[:300]}.")
+        else:
+            lines.append(f"  eBay's answer held none of them. Its warnings: {str(answer.get('warnings') or 'none')[:300]}")
+    try:
+        item = ask(ITEMS_URL + urllib.parse.quote(ids[0], safe=""), headers)
+    except EbayError as exc:
+        lines.append(f"Item lookup, one listing on its own: REFUSED. eBay's words: {exc}")
+    else:
+        price = item.get("price") or {}
+        lines.append(f"Item lookup, one listing on its own: eBay showed it, {str(item.get('title') or 'no title')[:80]}, "
+                     f"{price.get('value', 'no price')} {price.get('currency', '')}".rstrip() + ".")
+    return finish()
+
+
 def halves(batch):
     """A batch eBay refused because one of its items has ended, as two halves to ask about instead: about ten
     lookups find the ended one in twenty, where asking for each alone took twenty-one."""
@@ -151,10 +268,76 @@ def halves(batch):
 
 
 def forget_live():
-    """Drop the kept token, allowance and ended items (tests, and a run that got a new keyset)."""
-    _live.update(token="", token_until=0.0, bulk_left=None, bulk_asked=None)
+    """Drop the kept token, allowance, trust and ended items (tests, and a run that got a new keyset)."""
+    _live.update(token="", token_until=0.0, bulk_left=None, bulk_asked=None, trust=False, gone_run=0, said="",
+                 unusable_until=None, unusable_why="", read=False, unread_run=0, fields="")
     cache.delete(ENDED_KEY)
     cache.delete(CHECK_KEY)
+    cache.delete(TEST_KEY)
+
+
+def items_address(item_ids):
+    """The bulk lookup's address for these items, each id URL-encoded as eBay asks (v1|123|0 has bars in it)."""
+    return ITEMS_URL + "?item_ids=" + ",".join(urllib.parse.quote(item_id, safe="") for item_id in item_ids)
+
+
+def not_found(error):
+    """Whether eBay's error says an item asked about does not exist (its error 11001)."""
+    return "11001" in str(error)
+
+
+def refused(error):
+    """Whether eBay's error says the lookup itself will not be served: not allowed for this application (403), no
+    such address (a 404 that names no item) or a request it cannot read (400). Never a missing item."""
+    text = str(error)
+    return not not_found(text) and any(f"eBay API {status}" in text for status in (400, 403, 404))
+
+
+def lookup_showed():
+    """The lookup returned an item: it works, and is believed when it says another does not exist."""
+    _live.update(trust=True, gone_run=0)
+
+
+def lookup_missed(count=1, said=""):
+    """The lookup said ``count`` more items do not exist, in eBay's words ``said``."""
+    _live["gone_run"] += count
+    if said:
+        _live["said"] = str(said)[:300]
+    if _live["gone_run"] >= DOUBT_AFTER:
+        _live["trust"] = False
+
+
+def lookup_trusted():
+    return bool(_live["trust"])
+
+
+def lookup_read():
+    """An item the lookup gave read as an offer: one that does not is believed to be no offer."""
+    _live.update(read=True, unread_run=0)
+
+
+def lookup_unread(item):
+    """An item the lookup gave did not read as an offer; what eBay sent of it is kept for the page."""
+    _live["unread_run"] += 1
+    _live["fields"] = ", ".join(sorted(str(key) for key in item))[:300]
+    if _live["unread_run"] >= DOUBT_AFTER:
+        _live["read"] = False
+
+
+def lookup_reads():
+    return bool(_live["read"])
+
+
+def lookup_paused(clock=None):
+    """Why the item lookups are waiting, or "" when they are not (after LookupUnusable)."""
+    until = _live["unusable_until"]
+    return _live["unusable_why"] if until is not None and (clock or time.monotonic)() < until else ""
+
+
+def lookup_unusable(clock, seconds, why):
+    """Make the lookups wait ``seconds`` and return the error to raise."""
+    _live.update(unusable_until=(clock or time.monotonic)() + seconds, unusable_why=why[:500])
+    return LookupUnusable(why[:500])
 
 
 class EbayError(Exception):
@@ -194,6 +377,11 @@ def http(url, headers, data=None, retries=3, wait=5):
 
 class AllowanceUsed(EbayError):
     """eBay's bulk lookup allowance for today is down to what the daily run keeps back."""
+
+
+class LookupUnusable(EbayError):
+    """eBay's item lookup cannot be used for now: eBay will not serve it to this application, or it says no item
+    asked about exists, which is not believed. Nothing was marked out of stock; the listings wait."""
 
 
 def token_for(request=None, clock=None):
@@ -238,8 +426,14 @@ def check_listings(listings, request=None, clock=None, pause=None, sleep=None, s
     no UK postage, too cheap for the product, junk), is out of stock at its last price, and the daily run
     searches for it again. A listing not reached (``stop`` said so, or the allowance ran down to BULK_KEEP_BACK)
     is left out, so its check time stays and it is asked about later. Raises AllowanceUsed when the day's
-    allowance is already down to what the daily run keeps, and EbayError when eBay could not be asked."""
+    allowance is already down to what the daily run keeps, LookupUnusable when eBay will not serve the lookup or
+    says that nothing asked about exists (not believed, so nothing is marked: see DOUBT_AFTER), and EbayError when
+    eBay could not be asked."""
     from .importers import Offer
+
+    paused = lookup_paused(clock)
+    if paused:
+        raise LookupUnusable(paused)
 
     request = request or http
     clock = clock or time.monotonic
@@ -275,23 +469,27 @@ def check_listings(listings, request=None, clock=None, pause=None, sleep=None, s
     batches = [ids[start:start + BULK] for start in range(0, len(ids), BULK)]
     done = 0
     shown = set()   # items eBay answered about: none of them has ended
+    missing = []    # items eBay said do not exist: believed only if the lookup is trusted when the check ends
+    unread = []     # listings whose item eBay showed but that read as no offer: believed only if one has read
     while done < len(batches):
         if stop is not None and stop():
             break
         if _live["bulk_left"] is not None and _live["bulk_left"] <= BULK_KEEP_BACK:
             break
+        if not lookup_trusted() and len(missing) >= DOUBT_AFTER:
+            break   # none shown and this many said not to exist: no more lookups are spent finding out
         batch = batches[done]
         try:
-            answer = request(ITEMS_URL + "?item_ids=" + ",".join(batch), headers)
+            answer = request(items_address(batch), headers)
         except EbayError as exc:
             spend_bulk()
-            if "11001" in str(exc) or "404" in str(exc):
-                # eBay refuses the whole batch when one listing has ended: ask for each half.
+            if not_found(exc):
+                # eBay may refuse a whole batch when one listing has ended: ask for each half.
                 if len(batch) > 1:
                     batches[done:done + 1] = halves(batch)
                 else:
-                    gone(batch[0])
-                    note_ended(batch)
+                    missing.append(batch[0])
+                    lookup_missed(said=exc)
                     done += 1
                 continue
             if "429" in str(exc):
@@ -300,6 +498,9 @@ def check_listings(listings, request=None, clock=None, pause=None, sleep=None, s
                 logger.warning("eBay: the item lookup was refused (%s); the checks wait %d minutes", exc, BULK_PAUSE // 60)
                 bulk_refused(clock)
                 break
+            if refused(exc):
+                raise lookup_unusable(clock, REFUSED_PAUSE, "eBay will not serve its item lookup to this application, "
+                                      f"so nothing was checked. eBay's words: {exc}") from exc
             raise
         spend_bulk()
         done += 1
@@ -310,16 +511,40 @@ def check_listings(listings, request=None, clock=None, pause=None, sleep=None, s
                 found.add(item_id)
                 product = listing.product
                 offer = item_offer(item, product, Offer)
+                if offer is None:
+                    unread.append(listing.pk)
+                    lookup_unread(item)
+                else:
+                    lookup_read()
                 if (offer is None or junk(product, offer.title)
                         or (product.pk in shops and offer.price + offer.delivery < shops[product.pk] * PRICE_FLOOR)):
                     results[listing.pk] = (listing.price, Listing.Availability.OUT_OF_STOCK, listing.delivery_cost)
                 else:
                     results[listing.pk] = (offer.price, Listing.Availability.IN_STOCK, offer.delivery)
-        for item_id in batch:
-            if item_id not in found:
-                gone(item_id)
+        absent = [item_id for item_id in batch if item_id not in found]
+        if absent:
+            missing.extend(absent)
+            lookup_missed(len(absent), said="eBay answered without them")
+        if found:
+            lookup_showed()   # an answer that shows some items is believed about the ones it leaves out
         shown |= found
         sleep(pause)
+    if missing and not lookup_trusted():
+        if not shown:
+            raise lookup_unusable(clock, DOUBT_PAUSE, f"eBay's item lookup said none of the {len(missing)} items asked "
+                                  "about exists. That is not believed, so nothing was marked out of stock. eBay's "
+                                  f"words: {_live['said'] or 'none given'}")
+        missing = []   # some shown, then many in a row not: those wait and are asked about again
+    if unread and not lookup_reads():
+        for pk in unread:
+            results.pop(pk, None)   # not judged: they wait and are asked about again
+        if not any(stock == Listing.Availability.IN_STOCK for _price, stock, _postage in results.values()):
+            raise lookup_unusable(clock, DOUBT_PAUSE, f"eBay showed {len(unread)} items and none could be read as an "
+                                  "offer (a price in pounds, UK postage, a seller the rules allow). That is not "
+                                  f"believed, so nothing was marked out of stock. eBay sent: {_live['fields'] or 'nothing'}")
+    for item_id in missing:
+        gone(item_id)
+    note_ended(missing)
     forget_ended(shown & set(ended))
     return results
 
@@ -507,17 +732,25 @@ def fill_titles(request=None, pause=None):
     while batches:
         batch = batches.pop(0)
         try:
-            answer = request(ITEMS_URL + "?item_ids=" + ",".join(batch), headers)
+            answer = request(items_address(batch), headers)
             spend_bulk()
         except EbayError as exc:
-            if ("11001" in str(exc) or "404" in str(exc)) and len(batch) > 1:
-                batches[:0] = halves(batch)   # one ended listing refuses the batch
+            if not_found(exc) and len(batch) > 1:
+                batches[:0] = halves(batch)   # one ended listing may refuse the batch
                 continue
-            if "11001" in str(exc) or "404" in str(exc):
-                note_ended(batch)
+            if not_found(exc):
+                lookup_missed(said=exc)
+                if lookup_trusted():
+                    note_ended(batch)
+                elif _live["gone_run"] >= DOUBT_AFTER:
+                    logger.warning("eBay: title lookup stopped: the item lookup shows no item, which is not believed. "
+                                   "eBay's words: %s", exc)
+                    break
                 continue   # ended: the next eBay run searches for it again
             logger.warning("eBay: title lookup stopped: %s", exc)
             break
+        if answer.get("items"):
+            lookup_showed()
         for item in answer.get("items", []) or []:
             title = (item.get("title") or "")[:300]
             if title and item.get("itemId") in untitled:
@@ -819,23 +1052,34 @@ def iter_ebay_offers(retailer, limit=None, request=None, pause=None, run=None, c
                 logger.warning("eBay: %d minutes used, stopping the refresh and keeping what was found", RUN_SECONDS // 60)
                 break
             try:
-                answer = request(ITEMS_URL + "?item_ids=" + ",".join(batch), headers)
+                answer = request(items_address(batch), headers)
             except EbayError as exc:
                 spend_bulk()
                 if bulk_left is not None:
                     bulk_left -= 1
-                if "11001" in str(exc) or "404" in str(exc):
-                    # eBay refuses the whole batch when one listing has ended. Ask for each half, so one ended
+                if not_found(exc):
+                    # eBay may refuse the whole batch when one listing has ended. Ask for each half, so one ended
                     # listing does not stop the rest being refreshed.
                     if len(batch) > 1:
                         batches[done:done + 1] = halves(batch)
-                    else:
-                        gone.append(by_item[batch[0]])
+                        continue
+                    gone.append(by_item[batch[0]])
+                    done += 1
+                    lookup_missed(said=exc)
+                    if lookup_trusted():
                         note_ended(batch)
-                        done += 1
-                    continue
-                if "429" in str(exc):
+                        continue
+                    if _live["gone_run"] < DOUBT_AFTER:
+                        continue
+                    # None shown and this many said not to exist: the lookup is failing, not the listings. The
+                    # rest are searched for, with the minutes and lookups this would have spent.
+                    logger.warning("eBay: the item lookup shows none of the known listings, which is not believed; "
+                                   "they are searched for instead. eBay's words: %s", exc)
+                elif "429" in str(exc):
                     logger.warning("eBay: bulk allowance used up, %s", exc)
+                elif refused(exc):
+                    logger.warning("eBay: its item lookup will not be served to this application; the known listings "
+                                   "are searched for instead. eBay's words: %s", exc)
                 else:
                     logger.warning("eBay: bulk lookup failed, keeping what was found: %s", exc)
                 break
@@ -843,6 +1087,16 @@ def iter_ebay_offers(retailer, limit=None, request=None, pause=None, run=None, c
             spend_bulk()
             if bulk_left is not None:
                 bulk_left -= 1
+            returned = {item.get("itemId") for item in answer.get("items", []) or []} & set(batch)
+            if len(returned) < len(batch):
+                lookup_missed(len(batch) - len(returned), said="eBay answered without them")
+            if returned:
+                lookup_showed()
+            elif not lookup_trusted() and _live["gone_run"] >= DOUBT_AFTER:
+                gone.extend(by_item[item_id] for item_id in batch)
+                logger.warning("eBay: the item lookup shows none of the known listings, which is not believed; they "
+                               "are searched for instead")
+                break
             found = set()
             for item in answer.get("items", []) or []:
                 product = by_item.get(item.get("itemId"))
@@ -855,6 +1109,12 @@ def iter_ebay_offers(retailer, limit=None, request=None, pause=None, run=None, c
                     offers.append(out_of_stock(product))
                     yield offers[-1]
                     continue
+                if offer is None:
+                    lookup_unread(item)
+                    if not lookup_reads():
+                        continue   # not judged on what the lookup sent: left unfound, so it is searched for instead
+                else:
+                    lookup_read()
                 found.add(item["itemId"])
                 offers.append(offer if offer is not None else out_of_stock(product))
                 yield offers[-1]

@@ -6781,8 +6781,43 @@ button"). One page, linked from the Admin home:
 - A lock file that cannot be opened no longer stops every job being started:
   reads wait, checks go on, and the log says why (`ImportLock.acquire`).
 
-**Why eBay stopped updating, 16 Nov 2026.** Two faults stopped eBay's item
-checks with no error anywhere:
+**eBay's item lookup was asked at the wrong address, 22 Oct to 16 Nov 2026.**
+The owner's Log to copy showed it: "refreshing 1966 known listings", then "0
+known listings still live", and two minutes later the search found 262 of 262
+products live, with all 5,000 of the day's lookups unused. The bulk lookup
+(`ebay.ITEMS_URL`) asked `/item/get_items`, which eBay does not have; its
+address is `/item/` with the ids, URL-encoded, in `item_ids`
+(`ebay.items_address`). eBay answered "not found" every time, and the code
+read that as "this listing has ended". So each daily run searched for every
+product again and ran the day's searches out, the checks between runs marked
+live listings out of stock, and from 15 Nov every listing was on the ended
+list and nothing was checked. What changed:
+
+- The address is eBay's own.
+- A "not found" is believed only from a lookup that has shown an item in this
+  process and has not said `DOUBT_AFTER` (10) items in a row do not exist.
+  Unbelieved, nothing is marked out of stock or put on the ended list, the
+  lookups wait 30 minutes and the page shows eBay's own words
+  (`ebay.LookupUnusable`). The daily refresh stops at ten the same way and
+  searches instead, where it spent twenty minutes and thousands of lookups.
+- The same for an item the lookup shows that cannot be read as an offer (no
+  price in pounds, no UK postage, a seller below the rules): believed only
+  once the lookup has given an item that did read as one. eBay's documents
+  say the bulk lookup returns fewer details than the search; if those are too
+  few to price an item, nothing is marked out of stock, the daily refresh
+  searches instead, and the page lists what eBay sent.
+- A lookup eBay will not serve (403, a 404 that names no item, 400) is never
+  an ended listing either: the lookups wait an hour and eBay is not backed
+  off, so its daily search is not delayed. eBay's documents call this lookup
+  a limited release for chosen partners, so this can happen at the right
+  address too.
+- **Test eBay now** on eBay health (`ebay.self_test`) asks eBay for a token,
+  its allowances, the lookup for up to five listings at once and for one on
+  its own, and shows eBay's answer to each, on the page and in the log to
+  copy. It spends two lookups, no search, and changes no listing.
+
+**Why eBay stopped updating, 16 Nov 2026.** Two more faults stopped eBay's
+item checks with no error anywhere:
 
 - A shop due a read is not probed, since its read sees every listing. eBay
   is due its read every hour (the daily search, handed back the rest of the

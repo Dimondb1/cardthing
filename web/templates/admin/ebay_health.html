@@ -16,10 +16,10 @@
   .eh .figures b { display: block; font-size: 1.5rem; font-weight: 600; }
   .eh .figures span { color: var(--body-quiet-color); }
   .eh .reasons { margin: 0 0 8px; padding-left: 20px; }
-  .eh .reasons li { margin-bottom: 6px; }
+  .eh .reasons li { margin-bottom: 6px; overflow-wrap: anywhere; }
   .eh .reasons b { font-weight: 600; }
   .eh .facts { margin: 0 0 8px; padding-left: 20px; }
-  .eh .facts li { margin-bottom: 2px; }
+  .eh .facts li { margin-bottom: 2px; overflow-wrap: anywhere; }
   .eh form.inline { margin: 8px 0 0; }
   .eh table { width: 100%; }
   .eh td, .eh th { vertical-align: top; }
@@ -44,6 +44,16 @@
 <div class="eh">
   <p class="verdict {{ state }}"><b>{% if state == "ok" %}Up to date{% elif state == "behind" %}Falling behind{% else %}Not updating{% endif %}</b>{{ why }}</p>
   <p class="note"><a href="#log">Log to copy</a>: everything about eBay's updating as text, at the bottom of this page.</p>
+
+  <section id="test">
+    <h2>Test eBay now</h2>
+    <p class="note">Asks eBay for a token, its allowances and two item lookups, and shows eBay's own answer to each. It uses two of the day's item lookups, no search, and changes no listing.</p>
+    <form method="post" class="inline">{% csrf_token %}<input type="hidden" name="action" value="test"><input type="submit" value="Test eBay now"></form>
+    {% if test.lines %}
+    <p class="note" style="margin-top: 8px;">Asked {{ test.at|timesince }} ago:</p>
+    <ul class="reasons">{% for line in test.lines %}<li>{{ line }}</li>{% endfor %}</ul>
+    {% endif %}
+  </section>
 
   {% if state != "ok" %}
   <section id="why">

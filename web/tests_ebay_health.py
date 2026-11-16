@@ -240,6 +240,7 @@ class EbayHealthTests(TestCase):
         self.assertIn("BACKGROUND READER\nnever started\nlast plan: none noted", text)
         self.assertIn("EBAY ALLOWANCES (what eBay last said)\neBay has not been asked yet", text)
         self.assertIn("LAST ITEM CHECK\nnone noted yet\nlast problem: none noted", text)
+        self.assertIn("EBAY TEST\nnot run yet: tap Test eBay now on this page", text)
         self.assertIn("none on record", text)
         self.assertIn("The reader keeps this log from the first time it runs this version.", text)
         self.assertIn('<p class="note"><a href="#log">Log to copy</a>', page)
@@ -263,7 +264,8 @@ class EbayHealthTests(TestCase):
             "at": (now - timedelta(seconds=40)).isoformat(), "threads": 3,
             "running": [{"label": "Read Harbour Games", "minutes": 12}],
             "queue": {"reads": 4, "reads_with_room": 1, "checks": 5, "pulses": 1, "other": 0},
-            "ebay": {"running": "", "read": "due, with room to start", "check": "3 items (hot)"},
+            "ebay": {"running": "", "read": "due, with room to start", "check": "3 items (hot)",
+                     "lookup_waiting": "eBay will not serve its item lookup"},
             "checks_waiting_after_a_failed_try": 2,
             "lock": {"held_since": "", "refused": "another command holds it",
                      "refused_since": (now - timedelta(minutes=50)).isoformat()},
@@ -284,8 +286,9 @@ class EbayHealthTests(TestCase):
         self.assertIn("jobs done since it started: 321, last job: Check 20 at eBay", text)
         self.assertIn("(0 min ago), 3 threads\n  running then: Read Harbour Games (12 min)\n  due: 4 reads (1 with room "
                       "to start), 5 shops to check, 1 pulses, 0 other\n  eBay running: no; eBay read: due, with room to "
-                      "start; eBay check planned: 3 items (hot)\n  listings waiting after a failed try: 2\n  import "
-                      "lock: not held by the reader; refused since ", text)
+                      "start; eBay check planned: 3 items (hot)\n  eBay item lookups: WAITING. eBay will not serve its "
+                      "item lookup\n  listings waiting after a failed try: 2\n  import lock: not held by the reader; "
+                      "refused since ", text)
         self.assertIn("(50 min ago): another command holds it", text)
         self.assertIn(f"EBAY SHOP ROW\neBay (id {self.ebay.pk}): paused no, reads every 60 min", text)
         self.assertIn("(2 h ago), last good read: ", text)
@@ -304,6 +307,35 @@ class EbayHealthTests(TestCase):
         self.assertNotIn("INFO eBay: checked", problems)
         self.assertIn("INFO eBay: checked 20 items: 18 in stock, 2 gone, 0 not reached",
                       text[text.index("READER LOG: EBAY AND THE IMPORT LOCK"):])
+
+    @override_settings(RIPRAPTOR_EBAY_APP_ID="app", RIPRAPTOR_EBAY_CERT_ID="cert", RIPRAPTOR_EBAY_CAMPAIGN_ID="camp")
+    def test_test_ebay_now_asks_ebay_and_shows_its_answers(self):
+        """The owner, 16 Nov 2026: "Instead of guessing and hoping". One tap asks eBay each thing the site asks it and
+        shows what it said, on the page and in the log to copy."""
+        from unittest import mock
+
+        from catalogue.models import Listing
+        from catalogue.tests_ebay_checks import FakeEbay
+
+        Listing.objects.filter(pk=self.cheaper_item.pk).update(url="https://www.ebay.co.uk/itm/111")
+        html = self.page()
+        self.assertIn('<input type="hidden" name="action" value="test"><input type="submit" value="Test eBay now">', html)
+        self.assertNotIn("Asked ", html[html.index('<section id="test">'):html.index('<section id="why">')])
+        refused = FakeEbay([], fail='eBay API 403: {"errors":[{"errorId":1100,"message":"Access denied"}]}')
+        with mock.patch.object(ebay, "http", lambda url, headers, data=None, retries=3, wait=5: refused(url, headers, data)):
+            response = self.client.post(self.url, {"action": "test"})
+            self.assertEqual(response["Location"], self.url + "#test")
+        html = self.page()
+        self.assertIn("Asked eBay. Its answers are under Test eBay now, and in the log to copy.", html)
+        part = html[html.index('<section id="test">'):html.index('<section id="why">')]
+        self.assertIn("<li>Token: eBay issued one, so it accepts the keys.</li>", part)
+        self.assertIn("<li>Item lookup, 1 listing at once (what the checks use): REFUSED. eBay&#x27;s words: eBay API "
+                      "403:", part)
+        text, _page = self.log_box()
+        self.assertIn("EBAY TEST (Test eBay now, ", text)
+        self.assertIn("Item lookup, 1 listing at once (what the checks use): REFUSED. eBay's words: eBay API 403:", text)
+        self.assertFalse(EbaySettings.objects.exists())   # the seller rules are left alone
+        self.assertEqual(Listing.objects.get(pk=self.cheaper_item.pk).availability, Listing.Availability.IN_STOCK)
 
     def test_try_ebay_again_now_clears_its_wait(self):
         from datetime import timedelta

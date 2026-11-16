@@ -191,12 +191,6 @@ a, button, summary, select, input, label { touch-action: manipulation; }
    anything bought at Amazon stands apart from Buy now and the quiet buttons. The owner, 6 Nov 2026: "an outline of a
    rectangle inside the button, like a rainbow... make it so people click that button". The ring is a gradient under a
    mask that keeps only its rim; it brightens on hover, and the button lifts as every button does. */
-.button--amazon { position: relative; isolation: isolate; background: var(--color-ink); border-color: var(--color-ink); color: var(--color-paper); }
-.button--amazon::after { content: ""; position: absolute; inset: var(--amazon-ring-inset); border-radius: calc(var(--radius) - var(--amazon-ring-inset)); padding: var(--amazon-ring-width); background: var(--amazon-ring); -webkit-mask: linear-gradient(var(--color-ink) 0 0) content-box, linear-gradient(var(--color-ink) 0 0); mask: linear-gradient(var(--color-ink) 0 0) content-box, linear-gradient(var(--color-ink) 0 0); -webkit-mask-composite: xor; mask-composite: exclude; opacity: 0.85; pointer-events: none; transition: opacity var(--motion-fast) var(--ease-standard); }
-@media (hover: hover) {
-  .button--amazon:hover { background: var(--color-ink); border-color: var(--color-ink); }
-  .button--amazon:hover::after { opacity: 1; }
-}
 
 /* Price */
 .price {
@@ -1355,6 +1349,11 @@ a, button, summary, select, input, label { touch-action: manipulation; }
 .compare-jump__arrow { display: inline-block; margin-left: var(--space-1); transition: transform var(--motion-fast) var(--ease-standard); }
 @media (hover: hover) { .compare-jump:hover .compare-jump__arrow { transform: translateY(2px); } }
 .compare-jump__note { font-size: var(--text-xs); color: var(--color-ink-muted); }
+/* Amazon under Compare prices: the same outlined button, so it reads as part of the page, not an advert. */
+.buybox__amazon-few { margin: 0; font-size: var(--text-sm); font-weight: var(--weight-strong); color: var(--color-ink); text-align: center; }
+.buybox__fine { margin: 0; font-size: var(--text-xs); color: var(--color-ink-muted); text-align: center; }
+.ask__amazon { margin: var(--space-2) 0 0; font-size: var(--text-sm); }
+.ask__amazon a { color: var(--color-brand-text); font-weight: var(--weight-strong); }
 
 /* The buy bar: on a phone, the cheapest price, Buy now and Compare prices at the foot of the screen while the price
    box is off it (product.js shows and hides it; without script it is always there), so Compare prices is never below

@@ -9,6 +9,7 @@
       {% if ask.shown.verdict %}<p class="ask__verdict ask__verdict--{{ ask.shown.tone|default:'usual' }}"><span class="visually-hidden">{% copy "product.ask.verdict_label" %} </span>{{ ask.shown.verdict }}</p>{% endif %}
       <p><span class="visually-hidden">{% copy "product.ask.rip" %} </span>{{ ask.shown.answer }}</p>
       {% if ask.shown.checked %}<p class="ask__small">{% copy "product.ask.basis" clock=ask.shown.checked|stamp %}</p>{% endif %}
+      {% if amazon_rip and ask.about_price %}<p class="ask__amazon"><a href="{{ amazon_rip }}" data-click="amazon" data-click-shop="Amazon" data-click-product="{{ product.name }}" target="_blank" rel="sponsored nofollow noopener">{% copy "product.ask.amazon" %}<span class="visually-hidden"> (opens in a new tab)</span></a></p>{% endif %}
       {% elif ask.state == "limit" %}<p role="status">{% copy "product.ask.limit" count=ask.per_person hours=ask.hours %}</p>
       {% elif ask.state_key %}<p role="status">{% copy ask.state_key %}</p>
       {% else %}<p>{% copy "product.ask.intro" %}</p>{% endif %}

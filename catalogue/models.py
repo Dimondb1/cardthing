@@ -1284,6 +1284,9 @@ class OutboundClick(models.Model):
         SHOPPING_LIST = "list", "Buy on the shopping list"
         SWIPE = "swipe", "Buy on the swipe page"
         AMAZON = "amazon", "Amazon search button"
+        AMAZON_BOX = "amazon_box", "Check the price on Amazon, in a product's price box"
+        AMAZON_LIST = "amazon_list", "Amazon's row in a product's price list"
+        AMAZON_RIP = "amazon_rip", "Amazon link under Rip's answer"
         EBAY = "ebay", "eBay search button"
 
     listing = models.ForeignKey(Listing, on_delete=models.SET_NULL, null=True, blank=True)

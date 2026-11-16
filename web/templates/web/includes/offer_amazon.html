@@ -1,4 +1,4 @@
-{% load sitecopy ripraptor %}{# The last row of the price list. With an Amazon price (views.amazon_offer): Amazon's price on its own row, never part of the comparison, with when it was checked and Amazon's disclaimer beside it, as Amazon's rules ask. Without one: a tagged Amazon search. Takes amazon_offer or amazon_search. #}
+{% load sitecopy ripraptor %}{# The last row of the price list. With an Amazon price (views.amazon_offer): Amazon's price on its own row, never part of the comparison, with when it was checked and Amazon's disclaimer beside it, as Amazon's rules ask. Without one: "Price not tracked" and a tagged link to Amazon, its product page when we know it. Takes amazon_offer or amazon_search. #}
 {% if amazon_offer %}
 <li class="offer offer--amazon offer--amazon-priced" data-listing="{{ amazon_offer.pk }}">
   <div class="offer__retailer"><span class="offer__name">Amazon</span></div>
@@ -10,7 +10,7 @@
   <p class="offer__meta">{% copy "product.compare.checked_ago" time=amazon_offer.last_checked|ago %}</p>
   <p class="offer__disclaimer">{% copy "product.amazon.price_at" when=amazon_offer.last_checked|stamp %} {% copy "product.amazon.disclaimer" %} {% copy "terms.amazon" %}</p>
   <div class="offer__action">
-    <a class="button button--small button--amazon" {% go_link amazon_offer "price_list" product %} target="_blank" rel="sponsored nofollow noopener">{% if amazon_offer.availability == "preorder" %}{% copy "product.compare.amazon_preorder" %}{% else %}{% copy "product.compare.amazon_buy" %}{% endif %}<span class="visually-hidden"> (opens in a new tab)</span></a>
+    <a class="button button--small" {% go_link amazon_offer "amazon_list" product %} target="_blank" rel="sponsored nofollow noopener">{% if amazon_offer.availability == "preorder" %}{% copy "product.compare.amazon_preorder" %}{% else %}{% copy "product.compare.amazon_buy" %}{% endif %}<span class="visually-hidden"> (opens in a new tab)</span></a>
   </div>
 </li>
 {% else %}
@@ -22,7 +22,7 @@
   <div class="offer__total num"></div>
   <div class="offer__checked"></div>
   <div class="offer__action">
-    <a class="button button--small button--amazon" href="{{ amazon_search }}" data-click="amazon" data-click-shop="Amazon" data-click-product="{{ product.name }}" data-click-game="{{ product.game.display_short }}" target="_blank" rel="sponsored nofollow noopener">{% copy "product.compare.amazon_button" %}<span class="visually-hidden"> (opens in a new tab)</span></a>
+    <a class="button button--small" href="{{ amazon_search }}" data-click="amazon" data-click-shop="Amazon" data-click-product="{{ product.name }}" data-click-game="{{ product.game.display_short }}" target="_blank" rel="sponsored nofollow noopener">{% copy "product.compare.amazon_button" %}<span class="visually-hidden"> (opens in a new tab)</span></a>
   </div>
 </li>
 {% endif %}

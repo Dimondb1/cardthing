@@ -653,17 +653,37 @@ against; until 13 Nov 2026 there was none and only Analytics counted them
 dashboard"). Working keys saved on the Amazon page switch it on.
 
 Without a credential, set just the tag: every product page's price list then ends with
-an Amazon row, "Check price and stock on Amazon", whose button opens a tagged
-Amazon search, and the price box keeps its "Compare on Amazon" button. A
-product with no prices at all still gets the list with that one row. Both go
-once we have an Amazon price for the product, which then sits in the list
-like any other shop. The Amazon buttons are the site's one dark button
-(`.button--amazon`): ink, with a thin rainbow ring set just inside the edge
-(`--amazon-ring*` in tokens.css, a gradient under a mask that keeps its
-rim), so the button that pays on anything bought at Amazon stands apart from
-Buy now and the quiet buttons. The owner asked for it on 6 Nov 2026 ("an
-outline of a rectangle inside the button, like a rainbow"), an exception
-to the rule that nothing but prices and the brand is coloured. The hourly import reads Amazon every 6 hours: every product already
+an Amazon row, "Amazon · Price not tracked · Check price". A product with no
+prices at all still gets the list with that one row. It goes once we have
+Amazon's current price for the product, which then sits on its own row.
+
+Since 16 Nov 2026 (a review the owner passed on: "most people will never
+scroll to it", and the owner: "Make it so that people click it easily I need
+the money") Amazon in the price box sits straight under Compare prices, a
+full-width outlined button like it, "Check the price on Amazon", with "We
+don't have Amazon's price for this yet. Tap to see it on Amazon." inside it
+and the Associate line as small print under it. Before, it was the last thing
+in the box, under Ask Rip and the guides, said "Compare on Amazon" and "Often
+in stock with Prime delivery" on every product, which we cannot back up, and
+was the site's one dark button with a rainbow ring (the owner's ask of 6 Nov
+2026, now reversed so it reads as part of the page, not an advert; the
+`--amazon-ring*` tokens are gone). Also:
+
+- When only one or two retailers have it in stock, a line above it: "Only 2
+  retailers have this in stock. Check Amazon too." With none in stock, Amazon
+  is the main button, as before, now in the site's own orange.
+- Every Amazon link opens the product's own Amazon page when we know its
+  Amazon product id (`Product.amazon_asin`, which the Amazon reader finds and
+  the owner can type on a product in Admin; anything not ten letters and
+  digits is ignored), and an Amazon search otherwise (`views.amazon_search_url`).
+- Under Rip's answer to a question about price, stock or delivery
+  (`askrip.PRICE_TALK`: "Is it good value?", "Buy now or wait?", and typed
+  questions with those words), a link: "Amazon isn't in our list for this
+  yet. Check the price on Amazon."
+- Each place records itself on the click (`OutboundClick.Button`:
+  `amazon_box`, `amazon_list`, `amazon_rip`; `amazon` for links from older
+  pages), so the clicks show which spot people use. We do not record how far
+  people scroll. The hourly import reads Amazon every 6 hours: every product already
 found there is refreshed ten at a time, then up to a quarter of
 `RIPRAPTOR_AMAZON_DAILY_LIMIT` products are looked up, by barcode where we
 have one and otherwise by name. The products visitors want most go first

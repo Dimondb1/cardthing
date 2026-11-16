@@ -332,7 +332,8 @@ class MarketplaceSearchTests(ClickTestCase):
                     self.assertNotIn("ripraptor-21", body)
             body = self.client.get(sold_out.get_absolute_url()).content.decode()
         self.assertIn(f'href="/go/search/{sold_out.slug}/ebay/?b=ebay"', body)
-        self.assertIn(f'href="/go/search/{sold_out.slug}/amazon/?b=amazon"', body)
+        self.assertIn(f'href="/go/search/{sold_out.slug}/amazon/?b=amazon_box"', body)
+        self.assertIn(f'href="/go/search/{sold_out.slug}/amazon/?b=amazon_list"', body)
 
 
 class SuspectsLeftOutTests(ClickTestCase):

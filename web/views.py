@@ -1731,11 +1731,21 @@ def search_words(product):
     return product.name if not first or first in product.name.lower() else f"{game} {product.name}"
 
 
+# An Amazon product id (ASIN): ten capital letters and digits.
+ASIN = re.compile(r"^[A-Z0-9]{10}$")
+
+
 def amazon_search_url(product, listings):
-    """A tagged Amazon search for the product, or None when we have no tag or a real Amazon price."""
+    """A tagged Amazon link for the product, or None when we have no tag: its own page on Amazon when we know its
+    Amazon product id (Product.amazon_asin, which the Amazon reader finds and the owner can type in Admin), else a
+    search, which loses people (the owner, 16 Nov 2026). The page shows Amazon's own price instead when we hold a
+    current one (amazon_offer)."""
     tag = settings.RIPRAPTOR_AMAZON_PARTNER_TAG
-    if not tag or any(row.retailer.source_type == Retailer.Source.AMAZON for row in listings):
+    if not tag:
         return None
+    asin = (product.amazon_asin or "").strip().upper()
+    if ASIN.match(asin):
+        return f"https://www.amazon.co.uk/dp/{asin}?{urlencode({'tag': tag})}"
     query = urlencode({"k": search_words(product), "tag": tag})
     return f"https://www.amazon.co.uk/s?{query}"
 
@@ -1774,9 +1784,10 @@ def amazon_offer(rows):
     return min(shown, key=lambda row: row.delivered_price, default=None)
 
 
-def search_link(product, market, tracked):
-    """Our address for a marketplace search button, or None when the button is not shown."""
-    return f'{reverse("web:go_search", args=[product.slug, market])}?b={market}' if tracked else None
+def search_link(product, market, tracked, button=None):
+    """Our address for a marketplace search button, or None when the button is not shown. ``button`` names where the
+    link is (OutboundClick.Button), so the clicks say which place works; the market's own name otherwise."""
+    return f'{reverse("web:go_search", args=[product.slug, market])}?b={button or market}' if tracked else None
 
 
 def product_gone(request, gone):
@@ -1855,6 +1866,8 @@ def product_detail(request, slug):
     )
     # Amazon's price never counts (models.fresh): it has its own row, with Amazon's disclaimer (amazon_offer).
     amazon_listing = amazon_offer([row for row in listings if row.retailer.source_type == Retailer.Source.AMAZON])
+    # Without Amazon's own current price: a link to Amazon (its product page when we know it), from three places.
+    amazon_link = None if amazon_listing else amazon_search_url(product, listings)
     listings = [row for row in listings if row.retailer.source_type != Retailer.Source.AMAZON]
     current = buy_order(listings)
     unavailable = [listing for listing in listings if not listing.is_buyable]
@@ -2083,8 +2096,10 @@ def product_detail(request, slug):
             "share": share_links(request, product, page_url, cheapest),
             # Through /go/search/ so only a person's click carries our tag or campaign (go_search).
             "amazon_offer": amazon_listing,
-            "amazon_search": None if amazon_listing else search_link(product, "amazon",
-                                                                     amazon_search_url(product, listings)),
+            # Each place records itself (OutboundClick.Button), so the dashboard shows which one people tap.
+            "amazon_search": search_link(product, "amazon", amazon_link, "amazon_list"),
+            "amazon_box": search_link(product, "amazon", amazon_link, "amazon_box"),
+            "amazon_rip": search_link(product, "amazon", amazon_link, "amazon_rip"),
             "ebay_search": search_link(product, "ebay", ebay_search_url(product, listings)),
             "related": related,
             "instead": instead,
@@ -3421,8 +3436,13 @@ def ask_rip(request, slug):
         askrip.mark_helped(request)
     if request.headers.get("X-Ask-Rip") == "1":
         box = askrip.box(request, product, asked.state, asked.token)
-        html = render_to_string("web/includes/ask_rip.html", {"ask": box, "product": product, "track_on": True},
-                                request=request) if box else ""
+        # The Amazon link under an answer about price or stock, as the product page gives it.
+        amazon_rows = list(Listing.objects.filter(product=product, is_active=True,
+                                                  retailer__source_type=Retailer.Source.AMAZON).select_related("retailer"))
+        amazon_rip = None if amazon_offer(amazon_rows) else search_link(
+            product, "amazon", amazon_search_url(product, amazon_rows), "amazon_rip")
+        html = render_to_string("web/includes/ask_rip.html", {"ask": box, "product": product, "track_on": True,
+                                                              "amazon_rip": amazon_rip}, request=request) if box else ""
         response = JsonResponse({"state": asked.state, "html": html})
     else:
         query = urlencode({"ask": asked.token} if asked.token else {"ask_state": asked.state})

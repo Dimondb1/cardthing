@@ -44,7 +44,8 @@ DEFAULT_DAYS = 30
 MOST_PRODUCT_ROWS = 20000
 BUY = {OutboundClick.Button.BUY_NOW, OutboundClick.Button.BUY_BAR}
 PRICE_LIST = {OutboundClick.Button.PRICE_LIST, OutboundClick.Button.LOTTERY}
-SEARCH = {OutboundClick.Button.AMAZON, OutboundClick.Button.EBAY}
+SEARCH = {OutboundClick.Button.AMAZON, OutboundClick.Button.AMAZON_BOX, OutboundClick.Button.AMAZON_LIST,
+          OutboundClick.Button.AMAZON_RIP, OutboundClick.Button.EBAY}
 NETWORKS = {dashboard.EBAY: "eBay Partner Network", dashboard.AMAZON: "Amazon Associates", dashboard.AWIN: "Awin",
             dashboard.CJ: "CJ", dashboard.RAKUTEN: "Rakuten", dashboard.OTHER: "Other network"}
 

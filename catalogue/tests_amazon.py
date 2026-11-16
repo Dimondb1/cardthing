@@ -412,7 +412,7 @@ class NeverComparedTests(TestCase):
         page = self.client.get(self.box.get_absolute_url())
         self.assertIsNone(page.context["amazon_offer"])
         self.assertNotContains(page, "offer--amazon-priced")
-        self.assertContains(page, "Check price and stock on Amazon")
+        self.assertContains(page, "Price not tracked")
 
     def test_rip_is_never_told_it(self):
         from web import askrip

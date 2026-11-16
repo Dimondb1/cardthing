@@ -1095,11 +1095,20 @@ def box(request, product, state="", token=""):
         state = "limit"   # back later the same day: Rip says why the box is gone
     return {
         "open": is_open, "state": state, "state_key": f"product.ask.{state}" if state else "", "shown": shown,
+        # A question about price, stock or delivery: Amazon's link goes under its answer when we have no Amazon price.
+        "about_price": bool(shown and PRICE_TALK.search(shown.get("question", ""))),
         "left": left, "mood": MOODS.get(state, "idle"),
         "per_person": chosen().per_person, "hours": hours_left(request) if left == 0 else 0,
         "max_length": QUESTION_MAX, "suggestions": suggestions(product, shown), "token": token if shown else "",
         "share_url": share.rip_url(product) if shown else "",
     }
+
+
+# A question about price, stock or delivery (the owner, 16 Nov 2026: Rip should point people to Amazon when it is
+# not in our list): "Is it good value?", "Buy now or wait?", and typed questions with these words.
+PRICE_TALK = re.compile(
+    r"£|\b(?:prices?|priced|costs?|cheap\w*|dear\w*|expensive|value|deals?|worth|afford\w*|buy\w*|stock\w*|"
+    r"available|availability|sold out|deliver\w*|postage|shipping|wait)\b", re.I)
 
 
 # The questions offered as one tap, in the order shown: what the product is and holds, whether it is good value, whether

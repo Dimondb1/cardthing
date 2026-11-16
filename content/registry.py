@@ -2333,9 +2333,32 @@ ENTRIES = [
     ),
     Entry(
         "product.amazon.note", T, "Amazon note",
-        "Often in stock with Prime delivery. We do not have Amazon's price yet, so the link opens an Amazon search for it.",
-        "Product page, under the Check price on Amazon button in the price box.",
+        "We don't have Amazon's price for this yet. Tap to see it on Amazon.",
+        "Inside the Check the price on Amazon button in a product page's price box, under its label. Says nothing "
+        "about Amazon's stock or delivery, which we do not know.",
         legal=True,
+    ),
+    Entry(
+        "product.amazon.note_priced", T, "Amazon note, with Amazon's price",
+        "Amazon's own price is in the list below.",
+        "Inside the Amazon button in a product page's price box when we hold Amazon's current price.",
+    ),
+    Entry(
+        "product.amazon.few.one", T, "Amazon nudge, one retailer in stock",
+        "Only 1 retailer has this in stock. Check Amazon too.",
+        "Above the Amazon button in a product page's price box when only one retailer has it in stock.",
+    ),
+    Entry(
+        "product.amazon.few.other", T, "Amazon nudge, two retailers in stock",
+        "Only {count} retailers have this in stock. Check Amazon too.",
+        "Above the Amazon button in a product page's price box when only two retailers have it in stock.",
+        placeholders=("count",),
+    ),
+    Entry(
+        "product.ask.amazon", T, "Ask Rip: Amazon link under an answer",
+        "Amazon isn't in our list for this yet. Check the price on Amazon.",
+        "A link under Rip's answer to a question about price, stock or delivery, when we have no Amazon price for "
+        "the product. Opens Amazon in a new tab.",
     ),
     Entry(
         "product.amazon.note_sold_out", T, "Amazon note when sold out",
@@ -2360,15 +2383,17 @@ ENTRIES = [
     Entry("product.ebay.button", B, "eBay button", "Search eBay", "Product page price box when no shop has stock. Opens an eBay UK search for new, buy it now listings."),
     Entry(
         "product.amazon.button", B, "Amazon button",
-        "Compare on Amazon",
-        "Product page price box, under the cheapest price. Shown only when an Amazon tracking "
-        "tag is set and we have no Amazon price for the product. Opens Amazon in a new tab.",
+        "Check the price on Amazon",
+        "Product page price box, under Compare prices, and the main button when no shop has it in stock. Shown only "
+        "when an Amazon tracking tag is set. Opens Amazon in a new tab: the product's own page when we know it, else "
+        "an Amazon search.",
     ),
     Entry(
         "product.compare.amazon", T, "Amazon row in the price list",
-        "Check price and stock on Amazon",
+        "Price not tracked",
         "The last row of the price list on every product page while an Amazon tracking tag is set and we "
-        "have no Amazon price for the product. The row opens a tagged Amazon search in a new tab.",
+        "have no Amazon price for the product, where a shop's row gives its stock. Its button opens Amazon in a new "
+        "tab: the product's own page when we know it, else a tagged Amazon search.",
     ),
     Entry(
         "product.compare.amazon_buy", B, "Amazon priced row button", "Buy on Amazon",
@@ -2392,7 +2417,7 @@ ENTRIES = [
     ),
     Entry(
         "product.compare.amazon_button", B, "Amazon row button",
-        "Check on Amazon",
+        "Check price",
         "Button on the Amazon row at the foot of the price list.",
     ),
     # Report a problem with a listing (web/views.py report_listing, includes/report_form.html).

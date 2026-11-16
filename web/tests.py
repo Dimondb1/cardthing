@@ -576,11 +576,11 @@ class AwinTagTests(PageTestCase):
 
 
 class AmazonLinkTests(PageTestCase):
-    ROW = "Check price and stock on Amazon"
+    ROW = "Price not tracked"
 
     def test_no_link_without_a_tracking_tag(self):
         response = self.client.get(self.etb.get_absolute_url())
-        self.assertNotContains(response, "Compare on Amazon")
+        self.assertNotContains(response, "Check the price on Amazon")
         self.assertNotContains(response, self.ROW)
 
     def test_tagged_search_link_when_we_have_no_amazon_price(self):
@@ -588,8 +588,8 @@ class AmazonLinkTests(PageTestCase):
 
         with override_settings(RIPRAPTOR_AMAZON_PARTNER_TAG="ripraptor-21"):
             response = self.client.get(self.etb.get_absolute_url())
-        self.assertContains(response, "Compare on Amazon")
-        self.assertContains(response, f'href="/go/search/{self.etb.slug}/amazon/?b=amazon"')
+        self.assertContains(response, "Check the price on Amazon")
+        self.assertContains(response, f'href="/go/search/{self.etb.slug}/amazon/?b=amazon_box"')
         self.assertNotContains(response, "tag=ripraptor-21")
         self.assertContains(response, 'rel="sponsored nofollow noopener"')
 
@@ -605,9 +605,9 @@ class AmazonLinkTests(PageTestCase):
             self.assertLess(rows.index("Northgate Cards"), rows.index(self.ROW))
             self.assertIn('<li class="offer offer--amazon">', rows)
             self.assertIn(self.ROW, rows)
-            self.assertIn('Check on Amazon<span class="visually-hidden"> (opens in a new tab)</span></a>', rows)
-            self.assertIn(f'href="/go/search/{self.etb.slug}/amazon/?b=amazon" data-click="amazon"', rows)
-            self.assertIn('target="_blank" rel="sponsored nofollow noopener">Check on Amazon', rows)
+            self.assertIn('Check price<span class="visually-hidden"> (opens in a new tab)</span></a>', rows)
+            self.assertIn(f'href="/go/search/{self.etb.slug}/amazon/?b=amazon_list" data-click="amazon"', rows)
+            self.assertIn('target="_blank" rel="sponsored nofollow noopener">Check price', rows)
             self.assertEqual(html.count(self.ROW), 1)
             # Sold out everywhere: the row follows the out-of-stock shop.
             sold = self.client.get(self.sold_out.get_absolute_url()).content.decode()
@@ -633,7 +633,75 @@ class AmazonLinkTests(PageTestCase):
         self.assertNotContains(response, self.ROW)   # Amazon's real price is in the list instead, on its own row
         self.assertContains(response, '<li class="offer offer--amazon offer--amazon-priced"')
         # The price box's Amazon button opens the item itself.
-        self.assertContains(response, f'href="/go/{listing.pk}/?b=amazon" data-click="amazon"')
+        self.assertContains(response, f'href="/go/{listing.pk}/?b=amazon_box" data-click="amazon_box"')
+
+
+class AmazonPlacingTests(PageTestCase):
+    """The owner, 16 Nov 2026, with a review of the Amazon button ("most people will never scroll to it") and: "Make it
+    so that people click it easily I need the money"."""
+
+    def test_amazon_sits_under_compare_prices_outlined_like_it_and_says_nothing_made_up(self):
+        with self.settings(RIPRAPTOR_AMAZON_PARTNER_TAG="ripraptor-21"):
+            html = self.client.get(self.etb.get_absolute_url()).content.decode()
+        box = html[html.index('class="buy-now"'):html.index("buybox__save")]
+        self.assertLess(box.index('class="compare-jump"'), box.index('class="compare-jump compare-jump--amazon"'))
+        self.assertIn('<span class="compare-jump__label">Check the price on Amazon</span>', box)
+        self.assertIn("We don&#x27;t have Amazon&#x27;s price for this yet. Tap to see it on Amazon.", box)
+        self.assertIn("As an Amazon Associate, RipRaptor earns from qualifying purchases.", box)
+        # Before Ask Rip and the guides, not after them; nothing it cannot back up; no advert styling.
+        self.assertLess(html.index("compare-jump--amazon"), html.index("buybox__save"))
+        for gone in ("Prime delivery", "button--amazon", "Compare on Amazon"):
+            self.assertNotIn(gone, html)
+
+    def test_it_says_when_only_one_or_two_retailers_have_stock(self):
+        with self.settings(RIPRAPTOR_AMAZON_PARTNER_TAG="ripraptor-21"):
+            html = self.client.get(self.etb.get_absolute_url()).content.decode()
+            self.assertIn('<p class="buybox__amazon-few">Only 2 retailers have this in stock. Check Amazon too.</p>', html)
+            from catalogue.models import Listing
+
+            Listing.objects.filter(product=self.etb, retailer__name="Northgate Cards").update(
+                availability=Listing.Availability.OUT_OF_STOCK)
+            from django.core.cache import cache
+
+            cache.clear()
+            html = self.client.get(self.etb.get_absolute_url()).content.decode()
+            self.assertIn("Only 1 retailer has this in stock. Check Amazon too.", html)
+
+    def test_it_opens_the_product_on_amazon_when_we_know_its_amazon_id(self):
+        from catalogue.models import Product
+
+        from .views import amazon_search_url
+
+        with self.settings(RIPRAPTOR_AMAZON_PARTNER_TAG="ripraptor-21"):
+            self.assertTrue(amazon_search_url(self.etb, ()).startswith("https://www.amazon.co.uk/s?k="))
+            Product.objects.filter(pk=self.etb.pk).update(amazon_asin=" b0d1234xyz ")
+            self.etb.refresh_from_db()
+            self.assertEqual(amazon_search_url(self.etb, ()), "https://www.amazon.co.uk/dp/B0D1234XYZ?tag=ripraptor-21")
+            response = self.client.get(f"/go/search/{self.etb.slug}/amazon/?b=amazon_box",
+                                       HTTP_REFERER="http://testserver" + self.etb.get_absolute_url(),
+                                       HTTP_USER_AGENT="Mozilla/5.0 (Linux; Android 14) Chrome/130.0 Mobile")
+            self.assertEqual(response.status_code, 302)
+            self.assertTrue(response["Location"].startswith("https://www.amazon.co.uk/dp/B0D1234XYZ"))
+            Product.objects.filter(pk=self.etb.pk).update(amazon_asin="not an id")
+            self.etb.refresh_from_db()
+            self.assertTrue(amazon_search_url(self.etb, ()).startswith("https://www.amazon.co.uk/s?k="))
+
+    def test_rip_points_to_amazon_under_an_answer_about_price_or_stock(self):
+        from web import askrip
+
+        for question, about in (("Is it good value?", True), ("Buy now or wait?", True), ("Is it in stock anywhere", True),
+                                ("How much is delivery?", True), ("What's inside?", False), ("Is it right for me?", False)):
+            with self.subTest(question=question):
+                self.assertEqual(bool(askrip.PRICE_TALK.search(question)), about)
+        from django.template.loader import render_to_string
+
+        ask = {"shown": {"question": "Is it good value?", "answer": "Yes."}, "about_price": True, "open": False}
+        html = render_to_string("web/includes/ask_rip.html", {"ask": ask, "product": self.etb, "amazon_rip": "/go/x?b=amazon_rip"})
+        self.assertIn('<p class="ask__amazon"><a href="/go/x?b=amazon_rip"', html)
+        self.assertIn("Amazon isn&#x27;t in our list for this yet. Check the price on Amazon.", html)
+        ask["about_price"] = False
+        self.assertNotIn("ask__amazon", render_to_string("web/includes/ask_rip.html",
+                                                         {"ask": ask, "product": self.etb, "amazon_rip": "/go/x"}))
 
 
 class LanguageAndSortTests(PageTestCase):
@@ -910,7 +978,7 @@ class AmazonLeadTests(PageTestCase):
         self.assertIn("Sold out at the shops we check. Amazon and eBay sellers often still have it", sold)
         self.assertLess(sold.index("buybox__amazon--lead"), sold.index("buybox__save"))
         self.assertNotIn("buybox__amazon--lead", priced)
-        self.assertEqual(priced.count("Compare on Amazon"), 1)
+        self.assertEqual(priced.count("Check the price on Amazon"), 1)
 
 
 class NetworkVerificationTests(PageTestCase):
@@ -978,7 +1046,8 @@ class FeaturedAndMarketplaceTests(TestCase):
         self.assertNotIn("campid=", body)
         self.assertNotIn("tag=ripraptor-21", body)
         self.assertIn("Amazon and eBay sellers often still have it", body)
-        found = re.findall(r'<a[^>]+href="/go/search/30th-bundle/(?:ebay|amazon)/\?b=(?:ebay|amazon)"[^>]+>', body)
+        found = re.findall(r'<a[^>]+href="/go/search/30th-bundle/(?:ebay|amazon)/\?b=(?:ebay|amazon_box|amazon_list)"[^>]+>',
+                           body)
         self.assertEqual(len(found), 3)   # Amazon and eBay in the price box, Amazon again as the last price row
         for tag in found:
             self.assertIn('rel="sponsored nofollow noopener"', tag)

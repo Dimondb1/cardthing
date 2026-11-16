@@ -58,12 +58,12 @@
     {% else %}
       <p class="buybox__none">{% copy "product.no_listings" %}</p>
     {% endif %}
-    {% if not cheapest and amazon_search or not cheapest and ebay_search or not cheapest and amazon_offer %}
+    {% if not cheapest and amazon_box or not cheapest and ebay_search or not cheapest and amazon_offer %}
       {# Sold out everywhere we check: Amazon and eBay are the obvious next step, so they lead. #}
       <div class="buybox__amazon buybox__amazon--lead">
-        {% if amazon_offer %}<a class="button button--big button--amazon buybox__amazon-button" {% go_link amazon_offer "amazon" product %} target="_blank" rel="sponsored nofollow noopener">{% copy "product.amazon.button" %}<span class="visually-hidden"> (opens in a new tab)</span></a>{% elif amazon_search %}<a class="button button--big button--amazon buybox__amazon-button" href="{{ amazon_search }}" data-click="amazon" data-click-shop="Amazon" data-click-product="{{ product.name }}" data-click-game="{{ product.game.display_short }}" target="_blank" rel="sponsored nofollow noopener">{% copy "product.amazon.button" %}<span class="visually-hidden"> (opens in a new tab)</span></a>{% endif %}
-        {% if ebay_search %}<a class="button {% if amazon_search or amazon_offer %}button--quiet{% else %}button--big{% endif %} buybox__amazon-button" href="{{ ebay_search }}" data-click="ebay" data-click-shop="eBay" data-click-product="{{ product.name }}" data-click-game="{{ product.game.display_short }}" target="_blank" rel="sponsored nofollow noopener">{% copy "product.ebay.button" %}<span class="visually-hidden"> (opens in a new tab)</span></a>{% endif %}
-        <p class="buybox__summary">{% copy "product.marketplaces.note_sold_out" %}{% if amazon_search or amazon_offer %} {% copy "terms.amazon" %}{% endif %}</p>
+        {% if amazon_offer %}<a class="button button--big buybox__amazon-button" {% go_link amazon_offer "amazon_box" product %} target="_blank" rel="sponsored nofollow noopener">{% copy "product.compare.amazon_buy" %}<span class="visually-hidden"> (opens in a new tab)</span></a>{% elif amazon_box %}<a class="button button--big buybox__amazon-button" href="{{ amazon_box }}" data-click="amazon" data-click-shop="Amazon" data-click-product="{{ product.name }}" data-click-game="{{ product.game.display_short }}" target="_blank" rel="sponsored nofollow noopener">{% copy "product.amazon.button" %}<span class="visually-hidden"> (opens in a new tab)</span></a>{% endif %}
+        {% if ebay_search %}<a class="button {% if amazon_box or amazon_offer %}button--quiet{% else %}button--big{% endif %} buybox__amazon-button" href="{{ ebay_search }}" data-click="ebay" data-click-shop="eBay" data-click-product="{{ product.name }}" data-click-game="{{ product.game.display_short }}" target="_blank" rel="sponsored nofollow noopener">{% copy "product.ebay.button" %}<span class="visually-hidden"> (opens in a new tab)</span></a>{% endif %}
+        <p class="buybox__summary">{% copy "product.marketplaces.note_sold_out" %}{% if amazon_box or amazon_offer %} {% copy "terms.amazon" %}{% endif %}</p>
       </div>
     {% endif %}
     {% if has_listings %}
@@ -72,6 +72,16 @@
         <span class="compare-jump__label">{% copy "product.compare.jump" %}<span class="compare-jump__arrow" aria-hidden="true">↓</span></span>
         {% if shop_count > 1 %}<span class="compare-jump__note">{% if cheaper_preorder %}{% copy "product.compare.jump_note_mixed" count=shop_count %}{% else %}{% copy "product.compare.jump_note" count=shop_count %}{% endif %}</span>{% elif shop_count %}<span class="compare-jump__note">{% copy "product.compare.one_shop" %}</span>{% endif %}
       </a>
+    {% endif %}
+    {% if cheapest and amazon_box or cheapest and amazon_offer %}
+      {# Amazon as a third place to look, under Compare prices and outlined like it (the owner, 16 Nov 2026: "Make it so that people click it easily"). #}
+      {% if in_stock_count and in_stock_count <= 2 %}<p class="buybox__amazon-few">{% copy_count "product.amazon.few" in_stock_count %}</p>{% endif %}
+      <a class="compare-jump compare-jump--amazon" {% if amazon_offer %}{% go_link amazon_offer "amazon_box" product %}{% else %}href="{{ amazon_box }}" data-click="amazon" data-click-shop="Amazon" data-click-product="{{ product.name }}" data-click-game="{{ product.game.display_short }}"{% endif %} target="_blank" rel="sponsored nofollow noopener">
+        <span class="compare-jump__label">{% if amazon_offer %}{% copy "product.compare.amazon_buy" %}{% else %}{% copy "product.amazon.button" %}{% endif %}</span>
+        <span class="compare-jump__note">{% if amazon_offer %}{% copy "product.amazon.note_priced" %}{% else %}{% copy "product.amazon.note" %}{% endif %}</span>
+        <span class="visually-hidden"> (opens in a new tab)</span>
+      </a>
+      <p class="buybox__fine">{% copy "terms.amazon" %}</p>
     {% endif %}
     {% if cheapest %}
       {% with deal=summary.deal %}{% if deal %}<p class="buybox__deal">{% copy "product.deal.better" quantity=deal.deal_quantity price=deal.deal_price|gbp retailer=deal.retailer.name each=deal.deal_each|gbp %}</p>{% endif %}{% endwith %}
@@ -92,12 +102,6 @@
     {% include "web/includes/share_box.html" %}
     {% if ask %}{% include "web/includes/ask_rip.html" %}{% endif %}
     {% if guide_door %}<p class="buybox__guide"><a href="{{ guide_door.url }}">{{ guide_door.line }}</a></p>{% endif %}
-    {% if amazon_search and cheapest or amazon_offer and cheapest %}
-      <div class="buybox__amazon">
-        {% if amazon_offer %}<a class="button button--small button--amazon buybox__amazon-button" {% go_link amazon_offer "amazon" product %} target="_blank" rel="sponsored nofollow noopener">{% copy "product.amazon.button" %}<span class="visually-hidden"> (opens in a new tab)</span></a>{% else %}<a class="button button--small button--amazon buybox__amazon-button" href="{{ amazon_search }}" data-click="amazon" data-click-shop="Amazon" data-click-product="{{ product.name }}" data-click-game="{{ product.game.display_short }}" target="_blank" rel="sponsored nofollow noopener">{% copy "product.amazon.button" %}<span class="visually-hidden"> (opens in a new tab)</span></a>{% endif %}
-        <p class="buybox__summary">{% copy "product.amazon.note" %} {% copy "terms.amazon" %}</p>
-      </div>
-    {% endif %}
   </section>
 </div>
 {% if fair %}{% include "web/includes/fair_sheet.html" %}{% endif %}

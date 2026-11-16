@@ -1,7 +1,7 @@
 {% extends "admin/base_site.html" %}
-{% load ripraptor dashboard %}
+{% load ripraptor dashboard static %}
 {% block title %}eBay health | {{ site_title }}{% endblock %}
-{% block extrahead %}{{ block.super }}<meta name="robots" content="noindex, nofollow">{% endblock %}
+{% block extrahead %}{{ block.super }}<meta name="robots" content="noindex, nofollow"><script nonce="{{ csp_nonce }}" src="{% static 'js/copy-log.js' %}" defer></script>{% endblock %}
 {% block extrastyle %}{{ block.super }}<style>
   .eh { display: grid; gap: 24px; max-width: 72rem; }
   .eh h2 { margin: 0 0 4px; }
@@ -25,6 +25,7 @@
   .eh td, .eh th { vertical-align: top; }
   .eh td.wrap { overflow-wrap: anywhere; }
   .eh .muted { color: var(--body-quiet-color); font-size: 0.85em; display: block; }
+  .eh textarea.log { display: block; width: 100%; height: 22rem; max-height: none; box-sizing: border-box; margin: 0; padding: 8px; font: 12px/1.45 ui-monospace, Menlo, Consolas, monospace; white-space: pre; overflow: auto; }
   .eh form.rules { display: grid; gap: 12px; max-width: 32rem; }
   .eh form.rules label { display: block; font-weight: 600; margin-bottom: 4px; }
   .eh form.rules input[type=number] { width: 9rem; min-height: 40px; box-sizing: border-box; }
@@ -42,6 +43,7 @@
 {% block content %}
 <div class="eh">
   <p class="verdict {{ state }}"><b>{% if state == "ok" %}Up to date{% elif state == "behind" %}Falling behind{% else %}Not updating{% endif %}</b>{{ why }}</p>
+  <p class="note"><a href="#log">Log to copy</a>: everything about eBay's updating as text, at the bottom of this page.</p>
 
   {% if state != "ok" %}
   <section id="why">
@@ -122,6 +124,13 @@
       <p>{% if rules.below %}{{ rules.below|number }} eBay price{{ rules.below|pluralize }} showing now {{ rules.below|pluralize:"is,are" }} from sellers below these and drop{{ rules.below|pluralize:"s," }} at {{ rules.below|pluralize:"its,their" }} next check.{% else %}Every eBay price showing now meets these.{% endif %}</p>
       <p><input type="submit" value="Save seller rules"></p>
     </form>
+  </section>
+
+  <section id="log">
+    <h2>Log to copy</h2>
+    <p class="note">Everything about eBay's updating as plain text, with the background reader's own log. It holds no key or password. Copy it and paste it into a message when something looks wrong.</p>
+    <p><button type="button" class="button" data-copy-from="ebay-log" data-label="Copy the log" data-done="Copied" data-failed="Selected: now copy it" hidden>Copy the log</button></p>
+    <textarea id="ebay-log" class="log" rows="14" readonly spellcheck="false" aria-label="Log to copy">{{ log }}</textarea>
   </section>
 </div>
 {% endblock %}

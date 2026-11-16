@@ -28,9 +28,9 @@ from django.utils import timezone
 from django.utils.timesince import timesince
 from django.views.decorators.http import require_http_methods
 
-from catalogue import crawl, ebay
+from catalogue import crawl, ebay, worklog
 from catalogue.models import (
-    AMAZON, EBAY, EbaySettings, Listing, OutboundClick, Product, Retailer, WorkerState, ebay_stale_cutoff,
+    AMAZON, EBAY, EbaySettings, ImportRun, Listing, OutboundClick, Product, Retailer, WorkerState, ebay_stale_cutoff,
 )
 from catalogue.worker import EBAY_EVERY
 from guides.access import not_for_editors
@@ -229,8 +229,141 @@ def reasons(fresh, now):
                               "marked out of stock, and none is in stock.",
                       "detail": "eBay no longer has them, or they now fail the seller rules or the other checks."})
     facts = {"worker": worker, "alive": alive, "shops": shops, "marked": marked, "check": check,
-             "ended": len(ended), "ended_days": ebay.ENDED_DAYS, "on_list": on_list}
+             "ended": len(ended), "ended_days": ebay.ENDED_DAYS, "on_list": on_list, "no_number": no_number}
     return found, facts
+
+
+# The Log to copy box: the newest warnings and errors and the newest lines about eBay from the reader's log, eBay's
+# last few searches, and how long ago its items in stock were last checked.
+LOG_PROBLEMS, LOG_LINES, LOG_RUNS, LOG_RUN_LINES = 40, 80, 6, 6
+AGES = (("under 1 h", 1), ("1 to 2 h", 2), ("2 to 4 h", 4), ("4 to 8 h", 8), ("8 to 24 h", 24))
+
+
+def clock_time(moment, now):
+    """A time for the log: "16 Nov 14:32 (5 min ago)", or "none"."""
+    if isinstance(moment, str):
+        moment = when(moment)
+    if moment is None:
+        return "none"
+    minutes = int((now - moment).total_seconds() // 60)
+    ago = f"{minutes} min ago" if 0 <= minutes < 120 else f"{minutes // 60} h ago" if minutes >= 0 else \
+        f"in {-minutes} min" if minutes > -120 else f"in {-minutes // 60} h"
+    return f"{timezone.localtime(moment):%d %b %H:%M} ({ago})"
+
+
+def said_left(said, name):
+    return "not said" if said.get(name) is None else said[name]
+
+
+def log_text(now, state, why, fresh, found, facts):
+    """Everything about eBay's updating in one piece of plain text, for the owner to copy and paste (the owner, 16 Nov
+    2026: "why aren't you producing an output log I could screenshot to you or a log that would show in the admin
+    area that I could copy and paste to you"): the verdict and reasons, the background reader and what it last
+    planned, eBay's own row, its allowances, its items by how long ago they were checked, the last check, its last
+    searches and the reader's own log (catalogue/worklog.py). No key, token or address of a person is in it.
+    Three queries."""
+    out = [f"RipRaptor eBay log, {timezone.localtime(now):%a %d %b %Y %H:%M} UK time",
+           f"Verdict: {state}. {why}"]
+    out += [f"Reason: {reason['line']} {reason['detail']}" for reason in found] or ["Reason: none found"]
+
+    worker, plan = facts["worker"], worklog.last_plan()
+    out += ["", "BACKGROUND READER"]
+    if worker is None:
+        out.append("never started")
+    else:
+        out += [f"running: {'yes' if facts['alive'] else 'NO'}, last sign of life {clock_time(worker.heartbeat_at, now)}, "
+                f"started {clock_time(worker.started_at, now)}",
+                f"pause all: {'ON' if worker.paused else 'off'}",
+                f"jobs done since it started: {worker.jobs_done}, last job: {worker.last_job or 'none'}",
+                f"requests in the last hour: {worker.requests_last_hour}, errors: {worker.errors_last_hour}"]
+        if worker.note:
+            out.append(f"note: {worker.note}")
+    if not plan:
+        out.append("last plan: none noted (the reader notes one a minute once it runs this version)")
+    elif plan.get("paused"):
+        out.append(f"last plan {clock_time(plan.get('at'), now)}: nothing planned, Pause all is on")
+    else:
+        queue, market, lock = plan.get("queue", {}), plan.get("ebay", {}), plan.get("lock", {})
+        jobs = ", ".join(f"{job['label']} ({job['minutes']} min)" for job in plan.get("running", [])) or "nothing"
+        out += [f"last plan {clock_time(plan.get('at'), now)}, {plan.get('threads')} threads",
+                f"  running then: {jobs}",
+                f"  due: {queue.get('reads', 0)} reads ({queue.get('reads_with_room', 0)} with room to start), "
+                f"{queue.get('checks', 0)} shops to check, {queue.get('pulses', 0)} pulses, {queue.get('other', 0)} other",
+                f"  eBay running: {market.get('running') or 'no'}; eBay read: {market.get('read') or 'not due'}; "
+                f"eBay check planned: {market.get('check') or 'none'}",
+                f"  listings waiting after a failed try: {plan.get('checks_waiting_after_a_failed_try', 0)}",
+                "  import lock: " + (f"held by the reader since {clock_time(lock.get('held_since'), now)}"
+                                     if lock.get("held_since") else "not held by the reader")
+                + (f"; refused since {clock_time(lock.get('refused_since'), now)}: {lock.get('refused')}"
+                   if lock.get("refused_since") else "")]
+
+    out += ["", "EBAY SHOP ROW"]
+    for shop in facts["shops"]:
+        out += [f"{shop.name} (id {shop.pk}): paused {'YES' if shop.reading_paused else 'no'}, reads every "
+                f"{shop.read_every_minutes} min, last read took {shop.last_read_seconds or 0} s",
+                f"next read: {clock_time(shop.next_read_at, now)}, last good read: {clock_time(shop.last_ok_at, now)}",
+                f"failed tries in a row: {shop.error_streak}, waiting until: {clock_time(shop.backoff_until, now)}",
+                f"last error: {shop.last_error or 'none'}"]
+    if not facts["shops"]:
+        out.append("no eBay shop is switched on")
+
+    out += ["", "EBAY ALLOWANCES (what eBay last said)"]
+    said = (worker.ebay_usage if worker else None) or {}
+    out.append(f"asked {clock_time(said.get('asked_at'), now)}: searches left {said_left(said, 'searches')}, item "
+               f"lookups left {said_left(said, 'lookups')}, resets {said.get('reset') or 'not said'}"
+               if said else "eBay has not been asked yet")
+
+    items = Listing.objects.live().filter(retailer__source_type=EBAY)
+    ages = {f"within_{hours}": Count("pk", filter=Q(availability__in=Listing.BUYABLE,
+                                                     last_checked__gte=now - timedelta(hours=hours)))
+            for _label, hours in AGES}
+    counts = items.aggregate(
+        live=Count("pk"), buyable=Count("pk", filter=Q(availability__in=Listing.BUYABLE)),
+        out=Count("pk", filter=Q(availability=Listing.Availability.OUT_OF_STOCK)),
+        out_latest=Max("last_checked", filter=Q(availability=Listing.Availability.OUT_OF_STOCK)), **ages)
+    spans, under = [], 0
+    for label, hours in AGES:
+        spans.append(f"{label}: {counts[f'within_{hours}'] - under}")
+        under = counts[f"within_{hours}"]
+    spans.append(f"over 24 h: {counts['buyable'] - under}")
+    check = facts["check"]
+    out += ["", "EBAY ITEMS",
+            f"live: {counts['live']}, in stock or pre-order: {counts['buyable']}, out of stock: {counts['out']}",
+            "in stock, last checked " + ", ".join(spans),
+            f"latest check of one in stock: {clock_time(fresh['latest'], now)}, oldest: {clock_time(fresh['oldest'], now)}",
+            f"latest check of one out of stock: {clock_time(counts['out_latest'], now)}, marked out of stock in the "
+            f"last day: {facts['marked']}",
+            f"in stock with no item number: {facts['no_number']}, in stock on the ended list: {facts['on_list']}, ended "
+            f"list: {facts['ended']} items",
+            f"a price counts for {fresh['hours']} h, each item is due a check every {fresh['every_hours']} h",
+            "", "LAST ITEM CHECK",
+            f"{clock_time(check.get('at'), now)}: {check.get('asked', 0)} asked about, {check.get('in_stock', 0)} in stock, "
+            f"{check.get('gone', 0)} gone, {check.get('left', 0)} not reached" if check.get("at") else "none noted yet",
+            f"last problem {clock_time(check.get('problem_at'), now)}: {check.get('problem')}"
+            if check.get("problem_at") else "last problem: none noted"]
+
+    out += ["", f"EBAY SEARCHES (the last {LOG_RUNS}; the hourly reads between them leave no row)"]
+    runs = list(ImportRun.objects.filter(retailer__source_type=EBAY).order_by("-started_at")[:LOG_RUNS])
+    for run in runs:
+        ended = f"{timezone.localtime(run.finished_at):%H:%M}" if run.finished_at else "STILL RUNNING"
+        out.append(f"{timezone.localtime(run.started_at):%d %b %H:%M} to {ended}: {run.offers_found} offers found, "
+                   f"{run.listings_updated} listings updated{', ' + run.note if run.note else ''}"
+                   f"{', ERROR: ' + run.error[:300] if run.error else ''}")
+        out += ["    " + line[:300] for line in (run.log or "").splitlines()[-LOG_RUN_LINES:]]
+    if not runs:
+        out.append("none on record")
+
+    kept = worklog.entries()
+    problems = [lines for bad, lines in kept if bad][-LOG_PROBLEMS:]
+    others = [lines for bad, lines in kept if not bad][-LOG_LINES:]
+    out += ["", f"READER LOG: WARNINGS AND ERRORS (the newest {LOG_PROBLEMS}, oldest first)"]
+    out += [line for lines in problems for line in lines] or ["none kept"]
+    out += ["", f"READER LOG: EBAY AND THE IMPORT LOCK (the newest {LOG_LINES}, oldest first)"]
+    out += [line for lines in others for line in lines] or ["none kept"]
+    if not kept:
+        out.append("The reader keeps this log from the first time it runs this version.")
+    # A shop's last error and a search's own log come from outside: nothing secret leaves in them either.
+    return worklog.scrub("\n".join(out))
 
 
 def try_again(request):
@@ -294,6 +427,8 @@ def ebay_health_page(request):
         "title": "eBay health",
         "state": state, "why": why, "fresh": fresh, "searched": searched, "reasons": found, "facts": facts,
         "usage": crawl.ebay_usage(now=now),
+        "log": log_text(now, {"ok": "Up to date", "behind": "Falling behind"}.get(state, "Not updating"), why, fresh,
+                        found, facts),
         "products": products_counts(cheapest),
         "cheapest": shown, "cheapest_more": max(0, len(cheapest) - len(shown)), "show_all": show_all,
         "clicks": clicks(now), "ebay_shop": ebay_shop,

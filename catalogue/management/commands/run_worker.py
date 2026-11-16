@@ -13,7 +13,7 @@ import os
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
-from catalogue import worker
+from catalogue import worker, worklog
 
 
 class Command(BaseCommand):
@@ -32,6 +32,9 @@ class Command(BaseCommand):
         held = worker.hold_worker_lock()
         if held is None:
             raise CommandError("Another background reader is running.")
+        # The lines worth reading are kept for the eBay health page's Log to copy (catalogue/worklog.py), from the
+        # first to the last: the keeper comes off again when the reader stops.
+        keeper = worklog.install()
         try:
             reader = worker.Worker(threads=max_threads, warm=True)
             closed = reader.begin()
@@ -42,6 +45,8 @@ class Command(BaseCommand):
                 self.stdout.write(f"{reader.jobs_done} jobs done.")
                 return
             self.stdout.write(f"Background reader started with {reader.threads} threads.")
+            worker.logger.info("Background reader started with %d threads", reader.threads)
             reader.run_forever()
         finally:
+            worklog.remove(keeper)
             os.close(held)

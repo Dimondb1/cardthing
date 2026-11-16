@@ -6754,6 +6754,33 @@ button"). One page, linked from the Admin home:
   day's lookups used, or an error nobody foresaw), items in stock with no
   item number in their link, and items in stock on the ended list.
 
+- **Log to copy** (the owner, 16 Nov 2026, asked to run a command on the
+  server and paste what it printed: "why aren't you producing an output log
+  I could screenshot to you or a log that would show in the admin area that
+  I could copy and paste to you"). The last section of the page is one box of
+  plain text with a Copy the log button (`web/static/js/copy-log.js`; without
+  JavaScript the box is selected by hand). It holds, from
+  `ebay_health.log_text`: the verdict and reasons; the background reader's
+  heartbeat, jobs and what it last planned (the jobs running, the queue, what
+  eBay is due, and whether the import lock is free or refused and why); eBay's
+  own row; what eBay last said of its allowances; eBay's items by how long ago
+  they were checked; the last item check and problem; the last 6 searches with
+  their errors; and the reader's own log. No key or token is in it: the
+  value of any setting that reads as a secret and every email address are
+  taken out of each kept line and of the finished text (`worklog.scrub`).
+- The reader's own log is `catalogue/worklog.py`: `run_worker` installs a
+  handler that keeps every warning and error (with the end of its traceback)
+  and every line about eBay, the import lock or the reader starting, in
+  `reader.log` in `RIPRAPTOR_CACHE_DIR`. A file, not the cache, because the
+  update command clears the cache and the lines from before an update are the
+  ones wanted. It is trimmed to 600 lines when it reaches 1,200. The reader
+  now logs each eBay check, each eBay read (the search, or the day's search
+  handed back), and reads kept waiting over 5 minutes for the import lock,
+  with why, every 10 minutes until the lock is free. What it last planned is
+  a snapshot in the cache (`worklog.note_plan`), written every minute.
+- A lock file that cannot be opened no longer stops every job being started:
+  reads wait, checks go on, and the log says why (`ImportLock.acquire`).
+
 **Why eBay stopped updating, 16 Nov 2026.** Two faults stopped eBay's item
 checks with no error anywhere:
 

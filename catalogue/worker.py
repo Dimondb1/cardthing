@@ -61,7 +61,7 @@ from django.db import connections
 from django.db.models import Q
 from django.utils import timezone
 
-from . import checks, crawl, ebay, finder, heat, importers, notify, probe, releases
+from . import checks, crawl, ebay, finder, heat, importers, notify, probe, releases, worklog
 from .models import ImportRun, Listing, Retailer, WorkerState
 
 logger = logging.getLogger(__name__)
@@ -151,6 +151,10 @@ VISITS_EVERY = timedelta(minutes=1)
 # How often shops pasted on the Add shops page are looked for (catalogue/shop_adding.py).
 SHOPS_EVERY = timedelta(seconds=30)
 IMPORT_LOCK_HOLD_LIMIT = timedelta(minutes=20)
+# Reads kept waiting for the import lock this long are said in the log (worklog, the eBay health page's Log to copy),
+# then again this often. A shorter wait is the lock's ordinary turn-taking and is not worth a line.
+LOCK_WAIT_SAID_AFTER = timedelta(minutes=5)
+LOCK_WAIT_SAID_EVERY = timedelta(minutes=10)
 
 MARKETPLACES = (Retailer.Source.EBAY, Retailer.Source.AMAZON)
 # (requests a second, burst) per shop, by how the shop is read. Marketplaces have their own allowance code.
@@ -293,23 +297,35 @@ class ImportLock:
         self.count = 0
         self.fd = None
         self.held_since = None
+        self.refused = ""   # why the last acquire was refused, in words for the log; empty once one works
         self.lock = threading.Lock()
 
     def acquire(self, now):
-        """Take the lock (or another hold on it). False when someone else has it, or when it has been held
-        so long without a break that a waiting command should go first."""
+        """Take the lock (or another hold on it). False when someone else has it, when it has been held
+        so long without a break that a waiting command should go first, or when its file cannot be opened
+        (``refused`` says which)."""
         with self.lock:
             if self.count == 0:
-                fd = os.open(self.path, os.O_RDONLY | os.O_CREAT, 0o644)
+                try:
+                    fd = os.open(self.path, os.O_RDONLY | os.O_CREAT, 0o644)
+                except OSError as exc:
+                    # Raised from here, this stopped every job being started, checks too, with only a traceback in
+                    # the server's log to say so. Reads wait; the reader's log says why.
+                    self.refused = f"its file cannot be opened: {exc}"
+                    return False
                 try:
                     fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
                 except OSError:
                     os.close(fd)
+                    self.refused = "another command holds it"
                     return False
                 self.fd, self.held_since = fd, now
             elif now - self.held_since >= IMPORT_LOCK_HOLD_LIMIT:
+                self.refused = (f"this reader has held it since {timezone.localtime(self.held_since):%H:%M} and lets a "
+                                "waiting command go first")
                 return False
             self.count += 1
+            self.refused = ""
             return True
 
     def release(self):
@@ -430,6 +446,9 @@ class Worker:
         self.last_finder = None  # when the last finder batch began
         self.last_plan = None
         self.last_beat = None
+        self.lock_refused_since = None   # when reads began waiting for the import lock, when one was last refused,
+        self.lock_refused_last = None    # and when the log last said so
+        self.lock_refused_said = None
         # Whether this reader keeps the cached page lists built (run_worker turns it on), and when it last
         # built them all.
         self.warm = warm
@@ -449,9 +468,11 @@ class Worker:
         """Every job due now: the due reads, then the rest highest priority first. A shop whose read has room
         to start is neither probed nor pulsed, except eBay, whose checks go on. Reads nothing from any shop."""
         if crawl.all_paused():
+            worklog.note_plan({"at": now.isoformat(), "paused": True})
             return []
         with self.lock:
             busy = {pk: job.task for pk, job in self.running.items()}
+            running = [(job.task, job.started) for job in self.running.values()]
         reads_free = self.max_reads() - sum(1 for t in busy.values() if t.kind == SHOP_READ)
         website_free = MAX_WEBSITE_READS - sum(
             1 for t in busy.values() if t.kind == SHOP_READ and t.source_type == Retailer.Source.WEBSITE
@@ -493,7 +514,38 @@ class Worker:
         # sees one a request, and probes of listings an hour or more old outweigh any read by priority, so
         # reads queued among them waited for hours. The reads with no room yet are queued too: dispatch keeps
         # to the read limits and fills a slot at the next turn after a read ends, not at the next plan.
+        self.note_plan(now, running, reads, chosen, probes, pulses, extra)
         return reads + sorted(probes + pulses + extra, key=lambda t: -t.priority)
+
+    def note_plan(self, now, running, reads, chosen, probes, pulses, extra):
+        """What was planned just now, for the eBay health page's Log to copy (worklog.note_plan): the jobs running,
+        the queue, what eBay is due and whether the import lock is free. The reader's own view, which no page can
+        work out from the database."""
+        market = Retailer.Source.EBAY
+        ebay_running = next((task for task, _started in running if task.source_type == market), None)
+        ebay_read = next((task for task in reads if task.source_type == market), None)
+        ebay_check = next((task for task in probes if task.source_type == market), None)
+        with self.lock:
+            waiting = len(self.probe_failed)
+        worklog.note_plan({
+            "at": now.isoformat(),
+            "threads": self.threads,
+            "running": [{"label": task.label, "minutes": int(minutes(now - started))} for task, started in running],
+            "queue": {"reads": len(reads), "reads_with_room": len(chosen), "checks": len(probes), "pulses": len(pulses),
+                      "other": len(extra)},
+            "ebay": {
+                "running": ebay_running.label if ebay_running else "",
+                "read": "" if ebay_read is None else ("due, with room to start" if ebay_read in chosen
+                                                      else "due, no reading slot free"),
+                "check": f"{len(ebay_check.listings)} items ({ebay_check.tier})" if ebay_check else "",
+            },
+            "checks_waiting_after_a_failed_try": waiting,
+            "lock": {
+                "held_since": self.import_lock.held_since.isoformat() if self.import_lock.held_since else "",
+                "refused": self.import_lock.refused,
+                "refused_since": self.lock_refused_since.isoformat() if self.lock_refused_since else "",
+            },
+        })
 
     def plan_releases(self, now, busy):
         """The most overdue release source, one at a time (releases.due_sources, one query)."""
@@ -638,7 +690,9 @@ class Worker:
                 ) >= MAX_WEBSITE_READS:
                     continue
                 if not self.import_lock.acquire(now):
+                    self.lock_refused(now, task)
                     continue
+                self.lock_taken(now)
                 try:
                     due = self.stamp_read(task, now)
                 except Exception:
@@ -652,6 +706,27 @@ class Worker:
             self.start(task, now)
             started += 1
         return started
+
+    def lock_refused(self, now, task):
+        """A read could not start for want of the import lock. Said in the log once the wait is past the lock's
+        ordinary turn-taking, then every LOCK_WAIT_SAID_EVERY, with why and which read is next in line."""
+        # A wait is one run of refusals: a refusal long after the last one starts a new wait.
+        if self.lock_refused_since is None or now - self.lock_refused_last > LOCK_WAIT_SAID_AFTER:
+            self.lock_refused_since, self.lock_refused_said = now, None
+        self.lock_refused_last = now
+        waited = now - self.lock_refused_since
+        if waited < LOCK_WAIT_SAID_AFTER:
+            return
+        if self.lock_refused_said is None or now - self.lock_refused_said >= LOCK_WAIT_SAID_EVERY:
+            self.lock_refused_said = now
+            logger.warning("Reads have waited %d minutes for the import lock: %s. Next in line: %s",
+                           int(minutes(waited)), self.import_lock.refused, task.label)
+
+    def lock_taken(self, now):
+        if self.lock_refused_said is not None:
+            logger.info("The import lock is free again after %d minutes: reads go on",
+                        int(minutes(now - self.lock_refused_since)))
+        self.lock_refused_since = self.lock_refused_said = None
 
     def stamp_read(self, task, now):
         """Move the shop's next read on before the fetch, so a read that crashes or hangs is not retried in a
@@ -744,6 +819,13 @@ class Worker:
         ok = crawl.finish_read(shop, run, began, seconds, since=job.started, now=now)
         if not ok:
             logger.error("%s: %s", shop, run.error)
+        elif shop.source_type == Retailer.Source.EBAY:
+            if run.started_at < began:
+                logger.info("eBay: read handed back the search that finished at %s (one search a day)",
+                            f"{timezone.localtime(run.finished_at):%d %b %H:%M}" if run.finished_at else "an unknown time")
+            else:
+                logger.info("eBay: search finished in %d minutes: %d offers found, %d listings updated",
+                            int(seconds // 60), run.offers_found, run.listings_updated)
         return ok
 
     def probe_shop(self, job):
@@ -833,8 +915,10 @@ class Worker:
             self.back_off(retailer_id, self.clock(), crawl.http_status(str(exc)), f"Checking eBay listings: {exc}")
             return False
         stock = [availability for _price, availability, *_postage in found.values()]
-        ebay.note_check(asked=len(wanted), in_stock=sum(1 for a in stock if a in Listing.BUYABLE),
-                        gone=sum(1 for a in stock if a not in Listing.BUYABLE), left=len(wanted) - len(found))
+        in_stock = sum(1 for a in stock if a in Listing.BUYABLE)
+        ebay.note_check(asked=len(wanted), in_stock=in_stock, gone=len(stock) - in_stock, left=len(wanted) - len(found))
+        logger.info("eBay: checked %d items: %d in stock, %d gone, %d not reached", len(wanted), in_stock,
+                    len(stock) - in_stock, len(wanted) - len(found))
         with self.lock:
             for listing in wanted:
                 if listing.pk not in found:

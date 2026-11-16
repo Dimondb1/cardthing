@@ -213,6 +213,98 @@ class EbayHealthTests(TestCase):
         self.assertIn("Last item check: 0\xa0minutes ago, 1 asked about: 1 in stock, 0 gone.", part)
         self.assertIn(", next read at ", part)
 
+    def log_box(self):
+        import html
+
+        page = self.page()
+        start = page.index('<textarea id="ebay-log"')
+        return html.unescape(page[page.index(">", start) + 1:page.index("</textarea>", start)]), page
+
+    def test_the_log_to_copy_holds_everything_about_ebay_as_text(self):
+        """The owner, 16 Nov 2026, asked to run a command on the server and paste what it printed: "Instead of guessing
+        and hoping why aren't you producing an output log I could screenshot to you or a log that would show in the
+        admin area that I could copy and paste to you"."""
+        import logging
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        from catalogue import worklog
+        from catalogue.models import ImportRun, WorkerState
+
+        self.addCleanup(lambda: worklog.path().unlink(missing_ok=True))
+        # Nothing has run yet: the box says so in each part rather than leaving it out.
+        text, page = self.log_box()
+        self.assertTrue(text.startswith("RipRaptor eBay log, "))
+        self.assertIn("Verdict: Falling behind. Too many eBay items in stock are past", text)
+        self.assertIn("BACKGROUND READER\nnever started\nlast plan: none noted", text)
+        self.assertIn("EBAY ALLOWANCES (what eBay last said)\neBay has not been asked yet", text)
+        self.assertIn("LAST ITEM CHECK\nnone noted yet\nlast problem: none noted", text)
+        self.assertIn("none on record", text)
+        self.assertIn("The reader keeps this log from the first time it runs this version.", text)
+        self.assertIn('<p class="note"><a href="#log">Log to copy</a>', page)
+        self.assertIn('<button type="button" class="button" data-copy-from="ebay-log" data-label="Copy the log" '
+                      'data-done="Copied" data-failed="Selected: now copy it" hidden>Copy the log</button>', page)
+        self.assertRegex(page, r'<script nonce="[^"]+" src="[^"]*js/copy-log[^"]*\.js" defer></script>')
+
+        now = timezone.now()
+        WorkerState.objects.create(
+            pk=1, heartbeat_at=now, started_at=now - timedelta(hours=5), jobs_done=321, last_job="Check 20 at eBay",
+            ebay_usage={"lookups": 5000, "searches": None, "asked_at": (now - timedelta(hours=1)).isoformat()})
+        Retailer.objects.filter(pk=self.ebay.pk).update(next_read_at=now - timedelta(hours=2),
+                                                        last_ok_at=now - timedelta(hours=20))
+        ImportRun.objects.create(retailer=self.ebay, started_at=now - timedelta(hours=21),
+                                 finished_at=now - timedelta(hours=20), offers_found=412, listings_updated=380)
+        ImportRun.objects.create(retailer=self.ebay, started_at=now - timedelta(hours=45),
+                                 finished_at=now - timedelta(hours=44), error="eBay API 500: Internal error",
+                                 log="12:00:01 ERROR Import for eBay failed: eBay API 500: Internal error")
+        ebay.note_check(asked=20, in_stock=18, gone=2, now=now - timedelta(minutes=30))
+        worklog.note_plan({
+            "at": (now - timedelta(seconds=40)).isoformat(), "threads": 3,
+            "running": [{"label": "Read Harbour Games", "minutes": 12}],
+            "queue": {"reads": 4, "reads_with_room": 1, "checks": 5, "pulses": 1, "other": 0},
+            "ebay": {"running": "", "read": "due, with room to start", "check": "3 items (hot)"},
+            "checks_waiting_after_a_failed_try": 2,
+            "lock": {"held_since": "", "refused": "another command holds it",
+                     "refused_since": (now - timedelta(minutes=50)).isoformat()},
+        })
+        keeper = worklog.Keeper()   # as the background reader keeps its lines
+        for level, line in ((logging.INFO, "eBay: checked 20 items: 18 in stock, 2 gone, 0 not reached"),
+                            (logging.WARNING, "Reads have waited 50 minutes for the import lock: another command holds "
+                                              "it. Next in line: Read eBay")):
+            keeper.emit(logging.makeLogRecord({"name": "catalogue.worker", "levelno": level,
+                                               "levelname": logging.getLevelName(level), "msg": line}))
+        with override_settings(RIPRAPTOR_EBAY_APP_ID="app-secret-1", RIPRAPTOR_EBAY_CERT_ID="cert-secret-2",
+                               RIPRAPTOR_EBAY_CAMPAIGN_ID="5339000001"):
+            text, page = self.log_box()
+        for secret in ("app-secret-1", "cert-secret-2", "5339000001"):
+            self.assertNotIn(secret, page)
+        self.assertIn("Reason: eBay's read has been due for 2\xa0hours without starting.", text)
+        self.assertIn("BACKGROUND READER\nrunning: yes, last sign of life ", text)
+        self.assertIn("jobs done since it started: 321, last job: Check 20 at eBay", text)
+        self.assertIn("(0 min ago), 3 threads\n  running then: Read Harbour Games (12 min)\n  due: 4 reads (1 with room "
+                      "to start), 5 shops to check, 1 pulses, 0 other\n  eBay running: no; eBay read: due, with room to "
+                      "start; eBay check planned: 3 items (hot)\n  listings waiting after a failed try: 2\n  import "
+                      "lock: not held by the reader; refused since ", text)
+        self.assertIn("(50 min ago): another command holds it", text)
+        self.assertIn(f"EBAY SHOP ROW\neBay (id {self.ebay.pk}): paused no, reads every 60 min", text)
+        self.assertIn("(2 h ago), last good read: ", text)
+        self.assertIn("failed tries in a row: 0, waiting until: none\nlast error: none", text)
+        self.assertIn("(60 min ago): searches left not said, item lookups left 5000, resets not said", text)
+        self.assertIn("EBAY ITEMS\nlive: 4, in stock or pre-order: 4, out of stock: 0\nin stock, last checked under 1 h: 0, "
+                      "1 to 2 h: 2, 2 to 4 h: 1, 4 to 8 h: 1, 8 to 24 h: 0, over 24 h: 0", text)
+        self.assertIn("in stock with no item number: 4, in stock on the ended list: 0, ended list: 0 items", text)
+        self.assertIn("a price counts for 4 h, each item is due a check every 2 h", text)
+        self.assertIn("(30 min ago): 20 asked about, 18 in stock, 2 gone, 0 not reached", text)
+        self.assertIn(": 412 offers found, 380 listings updated\n", text)
+        self.assertIn(": 0 offers found, 0 listings updated, ERROR: eBay API 500: Internal error\n    12:00:01 ERROR "
+                      "Import for eBay failed", text)
+        problems = text[text.index("READER LOG: WARNINGS AND ERRORS"):text.index("READER LOG: EBAY AND THE IMPORT LOCK")]
+        self.assertIn("WARNING Reads have waited 50 minutes for the import lock", problems)
+        self.assertNotIn("INFO eBay: checked", problems)
+        self.assertIn("INFO eBay: checked 20 items: 18 in stock, 2 gone, 0 not reached",
+                      text[text.index("READER LOG: EBAY AND THE IMPORT LOCK"):])
+
     def test_try_ebay_again_now_clears_its_wait(self):
         from datetime import timedelta
 

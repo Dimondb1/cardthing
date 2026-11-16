@@ -11,7 +11,7 @@ from unittest import mock
 from django.test import override_settings
 
 from . import ebay, worker, worklog
-from .models import ImportRun, Listing, Retailer
+from .models import Retailer
 from .tests_ebay_checks import KEYS, FakeEbay, item
 from .tests_worker import HeldExecutor, WorkerTestCase
 
@@ -170,17 +170,15 @@ class WorkerLogTests(WorkerTestCase):
         with self.assertLogs("catalogue.worker", "INFO") as logged:
             reader.run_job(worker.Job(task, now, now + worker.PROBE_DEADLINE))
         self.assertEqual(logged.records[0].getMessage(), "eBay: checked 1 items: 1 in stock, 0 gone, 0 not reached")
-        # Its hourly read, the day's search already done: handed back, and said so.
-        from django.utils import timezone
+        # Its hourly read: this hour's share of the day's searches, and said so.
+        from .tests_ebay import FakeApi
 
-        ImportRun.objects.create(retailer=self.ebay, started_at=timezone.now() - timedelta(hours=3),
-                                 finished_at=timezone.now() - timedelta(hours=2), offers_found=40, listings_updated=38)
         read = worker.Task(worker.SHOP_READ, self.ebay.pk, Retailer.Source.EBAY, 1.0, "Read eBay")
-        with self.assertLogs("catalogue.worker", "INFO") as logged:
+        with mock.patch.object(ebay, "http", FakeApi([])), mock.patch.object(ebay, "PAUSE", 0), \
+                self.assertLogs("catalogue.worker", "INFO") as logged:
             reader.run_job(worker.Job(read, now, now + worker.MARKETPLACE_READ_DEADLINE))
-        self.assertRegex(logged.records[0].getMessage(),
-                         r"^eBay: read handed back the search that finished at \d\d \w{3} \d\d:\d\d \(one search a day\)$")
-        self.assertEqual(Listing.objects.get(pk=self.row.pk).availability, Listing.Availability.IN_STOCK)
+        self.assertRegex(logged.records[-1].getMessage(),
+                         r"^eBay: this hour's search finished in 0 minutes: \d+ products searched, \d+ listings updated$")
 
 
 class InstallTests(WorkerTestCase):

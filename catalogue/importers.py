@@ -136,9 +136,8 @@ def unmatched_text(lines):
     return "\n".join(lines)
 
 
-# Marketplaces allow a limited number of calls a day, so they are read this often, not hourly.
-DAILY_EVERY_HOURS = 20
-# Amazon is read every this many hours, so its prices, shown for RIPRAPTOR_AMAZON_SHOW_HOURS, are always within it.
+# Amazon allows a limited number of calls a day, so it is read every this many hours, not hourly. eBay is read every
+# hour, each read a share of the day's searches (ebay.hourly_searches). Amazon is read every this many hours, so its prices, shown for RIPRAPTOR_AMAZON_SHOW_HOURS, are always within it.
 AMAZON_EVERY_HOURS = 6
 # A run still open after this long was cut short (a deploy, a timeout, a crash): the longest real
 # read, Amazon at 2000 calls 1.1 s apart, takes about 37 minutes.
@@ -2435,8 +2434,8 @@ def _run_import(run, retailer, feed_path, fetch, page_pause):
                 .order_by("-finished_at")
                 .first()
             )
-            every = AMAZON_EVERY_HOURS if retailer.source_type == Retailer.Source.AMAZON else DAILY_EVERY_HOURS
-            if last and last.finished_at > timezone.now() - timedelta(hours=every):
+            if (retailer.source_type == Retailer.Source.AMAZON and last
+                    and last.finished_at > timezone.now() - timedelta(hours=AMAZON_EVERY_HOURS)):
                 # Already fetched today. Leave no trace of this skip: an empty, error-free
                 # run here would itself count as "fetched today" next hour, and the
                 # retailer would never be read again.

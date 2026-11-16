@@ -53,9 +53,10 @@ class EbayHealthTests(TestCase):
 
     def test_whether_it_is_updating_often_enough(self):
         html = self.page()
-        # Four eBay items in stock: two checked inside two hours, one inside four, one past it.
+        # Four eBay items in stock, all checked inside the twenty hours after which a product is searched again: two
+        # inside two hours, one inside four, one past the four a price counts for here.
         self.assertIn("<b>4</b><span>eBay items in stock</span>", html)
-        self.assertIn("<b>2</b><span>checked in the last 2 hours</span>", html)
+        self.assertIn("<b>4</b><span>checked in the last 20 hours</span>", html)
         self.assertIn("<b>1</b><span>past 4 hours, not shown as buyable</span>", html)
         # One in four past it is far more than the share allowed.
         self.assertIn('<p class="verdict behind"><b>Falling behind</b>Too many eBay items in stock are past', html)
@@ -197,8 +198,8 @@ class EbayHealthTests(TestCase):
         self.assertIn("<b>The last eBay item check did not get through, 4\xa0hours ago.</b> eBay did not answer: eBay "
                       "API 503: Service Unavailable", part)
         self.assertIn("<b>3 eBay items in stock have no item number in the link, so they cannot be checked.</b>", part)
-        self.assertIn("<b>1 eBay item in stock is on the ended list.</b> eBay once said it had ended, yet the daily search "
-                      "found it again.", part)
+        self.assertIn("<b>1 eBay item in stock is on the ended list.</b> eBay once said it had ended, yet a search found "
+                      "it again.", part)
         self.assertIn("eBay: not waiting, next read due for 2\xa0hours", part)
         self.assertIn("Last item check: 5\xa0hours ago, 20 asked about: 18 in stock, 2 gone.", part)
         self.assertIn("Last problem, 4\xa0hours ago: eBay did not answer", part)
@@ -297,7 +298,8 @@ class EbayHealthTests(TestCase):
         self.assertIn("EBAY ITEMS\nlive: 4, in stock or pre-order: 4, out of stock: 0\nin stock, last checked under 1 h: 0, "
                       "1 to 2 h: 2, 2 to 4 h: 1, 4 to 8 h: 1, 8 to 24 h: 0, over 24 h: 0", text)
         self.assertIn("in stock with no item number: 4, in stock on the ended list: 0, ended list: 0 items", text)
-        self.assertIn("a price counts for 4 h, each item is due a check every 2 h", text)
+        self.assertIn("a price counts for 4 h; a product on eBay is searched again after 20 h, one visitors look at after "
+                      "4 h", text)
         self.assertIn("(30 min ago): 20 asked about, 18 in stock, 2 gone, 0 not reached", text)
         self.assertIn(": 412 offers found, 380 listings updated\n", text)
         self.assertIn(": 0 offers found, 0 listings updated, ERROR: eBay API 500: Internal error\n    12:00:01 ERROR "
@@ -374,7 +376,7 @@ class EbayHealthTests(TestCase):
                                                      "asked_at": "2026-11-16T05:56:00+00:00"})
         html = self.page()
         self.assertIn("eBay said 5,000 item lookups were left today", html)
-        self.assertNotIn("?", html[html.index("The daily eBay search"):html.index("More on")])
+        self.assertNotIn("?", html[html.index("eBay's hourly searches"):html.index("More on")])
 
     def test_the_seller_rules_never_stop_the_checks(self):
         from unittest import mock

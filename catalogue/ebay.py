@@ -22,6 +22,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from datetime import datetime, timedelta, timezone as dt_timezone
 from decimal import Decimal, InvalidOperation
 
 from django.conf import settings
@@ -101,7 +102,18 @@ _live = {"token": "", "token_until": 0.0, "bulk_left": None, "bulk_asked": None,
 # the search; if those are too few to price an item, that must hide nothing.
 DOUBT_AFTER = 10
 DOUBT_PAUSE = 30 * 60
-REFUSED_PAUSE = 60 * 60
+REFUSED_PAUSE = 6 * 60 * 60
+
+# eBay's own item lookups are refused to this application (eBay API 403, 16 Nov 2026: getItems is a limited release
+# for chosen partners), so a price is only kept up to date by searching for its product again, from the same daily
+# allowance as every other search (about 5,000). Every hourly read searches a slice: what is left above KEEP_BACK
+# shared evenly over the hours to eBay's reset, and never more than RIPRAPTOR_EBAY_DAILY_LIMIT spread over the day.
+# A product already on eBay is due again after KNOWN_EVERY, or POPULAR_EVERY when visitors look at it; the most
+# looked at go first, then the longest since searched. Products not on eBay get NEW_SHARE of each slice. The owner,
+# 16 Nov 2026, chose this over one search run a morning: "Spread out, show 24h".
+KNOWN_EVERY = timedelta(hours=20)
+POPULAR_EVERY = timedelta(hours=4)
+NEW_SHARE = Decimal("0.2")
 
 
 # Items eBay says have ended: never looked up again, since an ended item never comes back (a relisting has a new
@@ -654,7 +666,12 @@ NOT_THE_THING = re.compile(
     r"\bcodes?\b|\bcode cards?\b|\bp?tcgo\b|\btcg ?live\b|\bonline\b|\bdigital\b|\bfun ?packs?\b|"
     r"\bsampl(?:e|ing)\b|\bsample packs?\b|\bpromo ?packs?\b|\bmini ?packs?\b|\b3[ -]?cards?\b|\bthree[ -]?cards?\b|"
     r"\bsleeves?\b|\bsingles\b|\bsingle cards?\b|\bpromo\b|\bplay ?mats?\b|\bbinder\b|\bdeck ?box\b|\bempty\b|\bproxy\b|\bdamaged\b|"
-    r"\bstickers?\b|\bonly\b|\btokens?\b|\bbasic lands?\b|\bfrom\b|\bcontents\b|\bopened\b|\bcustom\b|\breplica\b|\bart cards?\b|\bdice\b",
+    r"\bstickers?\b|\bonly\b|\btokens?\b|\bbasic lands?\b|\bfrom\b|\bcontents\b|\bopened\b|\bcustom\b|\breplica\b|\bart cards?\b|\bdice\b|"
+    # Toys with a card game's name: figure advent calendars and figure sets from toy makers. "Pokémon 2024 Holiday
+    # Advent Calendar Jazwares 24 Gifts 58 Pieces" was the Holiday Calendar 2024 card box at £31.90 (the owner,
+    # 16 Nov 2026: "These aren't the same thing").
+    r"\bjazwares\b|\bwicked cool toys\b|\bfunko\b|\blego\b|\bmega (?:construx|bloks)\b|\bnanoblock\b|\bplush\b|"
+    r"\bfigures?\b(?! box)|\b\d+\s*pieces\b",
     re.I,
 )
 # Nothing genuine sells for under this share of the cheapest shop's price: below it the listing is
@@ -954,6 +971,48 @@ def verdict(product, item, Offer, catalogue, specifics, shops):
     return offer, "a different product, a part or a multi-buy"
 
 
+def hourly_searches(searches_left, reset, now=None):
+    """Searches one hourly read may spend: what is left above KEEP_BACK shared evenly over the hours to eBay's reset
+    (each hour's read gets its share, the last one before the reset what remains), at most RIPRAPTOR_EBAY_DAILY_LIMIT
+    over the day. Unknown, it assumes a whole day is left."""
+    now = now or timezone.now()
+    hours = 24
+    try:
+        at = datetime.fromisoformat(str(reset).replace("Z", "+00:00")) if reset else None
+    except ValueError:
+        at = None
+    if at is not None and at.tzinfo is not None and at > now:
+        hours = max(1, min(24, -(-int((at - now).total_seconds()) // 3600)))
+    daily = getattr(settings, "RIPRAPTOR_EBAY_DAILY_LIMIT", 4800)
+    cap = -(-daily // 24)
+    if searches_left is None:
+        return cap
+    return max(0, min(cap, (searches_left - KEEP_BACK) // hours))
+
+
+def due_known(products, scores, now):
+    """The products already on eBay that are due another search, in the order to search them: those visitors look
+    at (``scores``) after POPULAR_EVERY, most looked at first, then the rest after KNOWN_EVERY, longest since first."""
+    epoch = datetime(2000, 1, 1, tzinfo=dt_timezone.utc)
+    due = []
+    for product in products:
+        score = scores.get(product.pk, 0)
+        at = product.ebay_checked_at
+        if at is None or now - at >= (POPULAR_EVERY if score > 0 else KNOWN_EVERY):
+            due.append((-score, at or epoch, product.pk, product))
+    due.sort(key=lambda row: row[:3])
+    return [row[3] for row in due]
+
+
+def search_order(product):
+    """[(tag, address)] of the searches for a product in the order to try them: the one that found it last time
+    (Product.ebay_query) first, then the barcode, then the words."""
+    tried = ([("gtin", search_url(product))] if product.ean else []) + [(q, search_url(product, q))
+                                                                        for q in search_queries(product)]
+    last = getattr(product, "ebay_query", "")
+    return sorted(tried, key=lambda row: row[0] != last) if last else tried
+
+
 def ebay_offers(retailer, limit=None, request=None, pause=None, run=None, clock=None):
     """All the offers of one run, as a list. See iter_ebay_offers."""
     return list(iter_ebay_offers(retailer, limit=limit, request=request, pause=pause, run=run, clock=clock))
@@ -971,7 +1030,7 @@ def iter_ebay_offers(retailer, limit=None, request=None, pause=None, run=None, c
     When an allowance runs out, or RUN_SECONDS have passed, the run stops and keeps what it found.
     ``run`` is the ImportRun to keep posted so admin shows progress. ``clock`` gives seconds (for tests).
     """
-    from .finder import interest_first
+    from .finder import interest_first, interest_scores
     from .importers import Catalogue, Offer
 
     request = request or http
@@ -979,23 +1038,32 @@ def iter_ebay_offers(retailer, limit=None, request=None, pause=None, run=None, c
     clock = clock or time.monotonic
     began = clock()
     app, cert, campaign = credentials()
-    limit = limit if limit is not None else getattr(settings, "RIPRAPTOR_EBAY_DAILY_LIMIT", 4000)
     token = access_token(app, cert, request=request)
     headers = headers_for(token, campaign)
     searches_left, bulk_left, reset = allowances(headers, request=request)
-    if searches_left is not None and searches_left <= KEEP_BACK:
-        raise EbayError(f"eBay's search allowance for today is used up. It resets at {reset or 'midnight Pacific time'}.")
-    if searches_left is not None:
-        limit = min(limit, searches_left - KEEP_BACK)
+    hourly = limit is None
+    if hourly:
+        # An hourly read: its share of what is left today. None left is not a failure: the next hour tries again.
+        limit = hourly_searches(searches_left, reset)
+        logger.info("eBay: %d searches for this hour, %s left today", limit,
+                    "an unknown number" if searches_left is None else f"{searches_left:,}")
+    else:
+        if searches_left is not None and searches_left <= KEEP_BACK:
+            raise EbayError(f"eBay's search allowance for today is used up. It resets at {reset or 'midnight Pacific time'}.")
+        if searches_left is not None:
+            limit = min(limit, searches_left - KEEP_BACK)
 
     def offers_as_found():
         nonlocal bulk_left
+        now = timezone.now()
+        scores = interest_scores(now, visitors_only=True)
         catalogue = Catalogue(Product.objects.filter(is_active=True).values_list("pk", "name", "game__slug"))
         existing = {row.product_id: row for row in Listing.objects.filter(retailer=retailer, is_active=True)}
         products = Product.objects.filter(is_active=True).select_related("game")
         offers = []
         checked = []
         gone = []
+        found_by = {}   # product id -> the search that found it, when not the one tried first last time
 
         marked = set()
 
@@ -1004,6 +1072,8 @@ def iter_ebay_offers(retailer, limit=None, request=None, pause=None, run=None, c
             if new:
                 Product.objects.filter(pk__in=new).update(ebay_checked_at=timezone.now())
                 marked.update(new)
+            for pk in [pk for pk in found_by if pk in marked]:
+                Product.objects.filter(pk=pk).update(ebay_query=found_by.pop(pk))
 
         def post():
             if run is not None:
@@ -1022,18 +1092,23 @@ def iter_ebay_offers(retailer, limit=None, request=None, pause=None, run=None, c
         def too_cheap(product, offer):
             return product.pk in shops and offer.price + offer.delivery < shops[product.pk] * PRICE_FLOOR
 
-        # Known listings, twenty at a time through the bulk lookup.
-        known = list(products.filter(pk__in=existing).order_by("ebay_checked_at"))
+        # Known listings due again (due_known), twenty at a time through the bulk lookup while eBay serves it, else
+        # searched for.
+        known = due_known(products.filter(pk__in=existing), scores, now)
         by_item = {}
         # One eBay listing is one product: an item already another product's is never taken for a second
         # (one Future Flash SV4M box was on both our Scarlet ex SV1S and Violet ex SV1V boxes).
-        taken = {}
         ended = ended_items()
+        taken = {}
+        for pk, row in existing.items():
+            item_id = item_id_of(row.url)
+            if item_id and item_id not in ended:
+                taken.setdefault(item_id, pk)
+        refused_now = lookup_paused(clock)
         for product in known:
             item_id = item_id_of(existing[product.pk].url)
-            if item_id and item_id not in by_item and item_id not in ended:
+            if not refused_now and item_id and item_id not in by_item and item_id not in ended:
                 by_item[item_id] = product
-                taken[item_id] = product.pk
             else:
                 gone.append(product)   # searched again below, with no lookup spent on an item known to have ended
         ids = list(by_item)
@@ -1078,6 +1153,8 @@ def iter_ebay_offers(retailer, limit=None, request=None, pause=None, run=None, c
                 elif "429" in str(exc):
                     logger.warning("eBay: bulk allowance used up, %s", exc)
                 elif refused(exc):
+                    lookup_unusable(clock, REFUSED_PAUSE, "eBay will not serve its item lookup to this application, "
+                                    f"so nothing was checked. eBay's words: {exc}")
                     logger.warning("eBay: its item lookup will not be served to this application; the known listings "
                                    "are searched for instead. eBay's words: %s", exc)
                 else:
@@ -1132,14 +1209,17 @@ def iter_ebay_offers(retailer, limit=None, request=None, pause=None, run=None, c
             logger.info("eBay: %d known listings still live, %d ended or not reached, now searching", len(checked), len(gone))
 
         # New lookups: the products visitors want most first (unless searched in the last three days),
-        # then never tried or tried longest ago, then the products most shops stock.
+        # then never tried or tried longest ago, then the products most shops stock. An hourly read keeps NEW_SHARE of
+        # its searches for them, about three a product, so the products already on eBay never take every search.
+        new_searches = int(limit * NEW_SHARE) if hourly else 0
         fresh = interest_first(
             products.exclude(pk__in=existing)
             .annotate(shops=Count("listings"))
             .order_by(F("ebay_checked_at").asc(nulls_first=True), "-shops", "-ean", "-pk"),
-            limit - len(gone),
+            max(limit - len(gone), new_searches // 3),
             "ebay_checked_at",
         )
+        known_searches = limit - new_searches if fresh else limit
         failures = 0
         specifics = {}
 
@@ -1151,20 +1231,25 @@ def iter_ebay_offers(retailer, limit=None, request=None, pause=None, run=None, c
             return specifics[game_slug]
 
         searches = 0
-        for product in (gone + fresh)[:limit]:
+        for product in gone + fresh:
             if searches >= limit:
                 break
+            if product.pk in existing and searches >= known_searches:
+                continue   # the rest of this hour's searches are kept for products not yet on eBay
             if out_of_time():
                 logger.warning("eBay: %d minutes used after %d products, stopping and keeping what was found; "
-                               "the rest go first tomorrow", RUN_SECONDS // 60, len(checked))
+                               "the rest go first next time", RUN_SECONDS // 60, len(checked))
                 break
             try:
-                urls = ([search_url(product)] if product.ean else []) + [search_url(product, q) for q in search_queries(product)]
                 answer = {}
-                for url in urls:
+                for tag, url in search_order(product):
                     answer = request(url, headers)
                     searches += 1
-                    if answer.get("itemSummaries") or searches >= limit:
+                    if answer.get("itemSummaries"):
+                        if tag != product.ebay_query:
+                            found_by[product.pk] = tag[:120]
+                        break
+                    if searches >= limit:
                         break
             except EbayError as exc:
                 if "429" in str(exc):

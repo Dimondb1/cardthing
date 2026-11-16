@@ -713,9 +713,16 @@ RIPRAPTOR_EBAY_CAMPAIGN_ID=...
 ```
 
 then run `setup_shops`, which adds eBay as a shop only when the keys are
-set. The hourly import reads eBay once a day, up to
-`RIPRAPTOR_EBAY_DAILY_LIMIT` products a run: those already listed first,
-then the rest, by barcode where we have one and otherwise by name. A run stops
+set. eBay is read every hour (since 16 Nov 2026; once a day before), each
+read searching its share of the day's allowance (`ebay.hourly_searches`:
+what is left above `KEEP_BACK` shared over the hours to eBay's reset, at
+most `RIPRAPTOR_EBAY_DAILY_LIMIT` spread over the day): first the products
+already on eBay that are due (`ebay.due_known`: after 4 hours for one
+visitors look at, the most looked at first, otherwise after 20), then the
+rest with a fifth of the hour's searches, by barcode where we have one and
+otherwise by name. The search that found a product last time is tried first
+(`Product.ebay_query`), so searching it again costs one search, not two or
+three. A run stops
 starting lookups after 45 minutes (`RUN_SECONDS` in `catalogue/ebay.py`) and
 finishes as a good read with what it found, inside the background reader's
 60 minute limit for a marketplace and the hourly import's 55; the products
@@ -2686,9 +2693,13 @@ that keeps prices fresh all day:
   off like a failed read. An ended listing, or one whose
   seller or postage no longer passes, is out of stock at its last price
   until the daily run searches again.
-- **An eBay price counts for four hours** (`RIPRAPTOR_EBAY_STALE_AFTER_HOURS`),
-  not the 72 a shop's does: an eBay item sells out in hours, and eBay's
-  allowance can hold the checks back. Unconfirmed for longer, it is not
+- **An eBay price counts for 24 hours** (`RIPRAPTOR_EBAY_STALE_AFTER_HOURS`),
+  not the 72 a shop's does: an eBay item sells out in hours. It was four
+  until 16 Nov 2026, when it turned out eBay refuses this application the
+  item checks between searches: with only the search to refresh a price,
+  roughly once a day for most products, four hours hid eBay for most of each
+  day. The owner chose 24 ("Spread out, show 24h"); each eBay row still says
+  when it was checked. Unconfirmed for longer, it is not
   buyable, not the cheapest and not Buy now anywhere on the site
   (`models.fresh`, used wherever a current price is chosen, and
   `Listing.is_stale`); its row on the product page says "Not checked since"
@@ -3313,7 +3324,7 @@ index.
 | `DJANGO_SQLITE_PATH`           | `db.sqlite3` | |
 | `RIPRAPTOR_CONTACT_EMAIL`      |         | Shows the "Report a problem" section on the how it works page, and is emailed when a refer a friend referral completes (see "Refer a friend"). When set, List your shop enquiries are emailed here instead of to `RIPRAPTOR_INBOX_NOTIFY_EMAIL`. |
 | `RIPRAPTOR_STALE_AFTER_HOURS`  | 72      | |
-| `RIPRAPTOR_EBAY_STALE_AFTER_HOURS` | 4   | How long an eBay price counts before it must be checked again to be shown as buyable. Never more than `RIPRAPTOR_STALE_AFTER_HOURS`. |
+| `RIPRAPTOR_EBAY_STALE_AFTER_HOURS` | 24  | How long an eBay price counts before it must be checked again to be shown as buyable. Never more than `RIPRAPTOR_STALE_AFTER_HOURS`. Was 4 until 16 Nov 2026, when eBay's item checks turned out to be refused to this application. |
 | `RIPRAPTOR_USE_FEED_IMAGES`    | on      | Keep retailer images for products without one. |
 | `RIPRAPTOR_CHECK_PICTURES`     | on      | Ask shops every hour whether product pictures are still there, and take gone ones off (off in the tests). |
 | `RIPRAPTOR_HOME_CACHE_SECONDS` | 300     | How old the cached page lists may grow before the background jobs build them again. Imports and edits mark them stale sooner. |
@@ -3329,8 +3340,8 @@ index.
 | `RIPRAPTOR_AMAZON_SHOW_HOURS`  | 24      | How long an Amazon price is shown on its product page after it was checked. |
 | `RIPRAPTOR_EBAY_APP_ID`        |         | Production App ID (Client ID) from developer.ebay.com. |
 | `RIPRAPTOR_EBAY_CERT_ID`       |         | Its Cert ID (Client Secret). |
-| `RIPRAPTOR_EBAY_CAMPAIGN_ID`   |         | eBay Partner Network campaign id. All three set means eBay is read once a day. |
-| `RIPRAPTOR_EBAY_DAILY_LIMIT`   | 4000    | Products checked on eBay per day. |
+| `RIPRAPTOR_EBAY_CAMPAIGN_ID`   |         | eBay Partner Network campaign id. All three set means eBay is read every hour. |
+| `RIPRAPTOR_EBAY_DAILY_LIMIT`   | 4800    | eBay searches a day at most, spread evenly over the hourly reads. |
 | `RIPRAPTOR_GEOIP_DB`           |         | Path of the DB-IP country database for visitor countries. Empty means countries are not recorded. |
 | `RIPRAPTOR_AWIN_PUBLISHER_ID`  | 3111686 | Awin publisher id; loads Awin's MasterTag on every public page. Empty means no Awin script. |
 | `RIPRAPTOR_ZEPTOMAIL_TOKEN`    |         | Send Mail token from a Zoho ZeptoMail Mail Agent. With `RIPRAPTOR_MAIL_FROM` set, turns on back-in-stock emails, drop reminders, search alerts and the Your alerts box. |
@@ -6780,6 +6791,21 @@ button"). One page, linked from the Admin home:
   a snapshot in the cache (`worklog.note_plan`), written every minute.
 - A lock file that cannot be opened no longer stops every job being started:
   reads wait, checks go on, and the log says why (`ImportLock.acquire`).
+
+**eBay searched every hour, 16 Nov 2026.** Test eBay now and the log showed
+eBay answering the item lookup at its right address with "Access denied,
+Insufficient permissions": the bulk lookup is a limited release this
+application does not have. So a price is kept up to date only by searching
+for its product again, from the same daily allowance of about 5,000. The
+search is now spread over every hour, the most viewed products first, with
+the last search that worked tried first, and an eBay price counts for 24
+hours. The item checks between searches still try every six hours
+(`REFUSED_PAUSE`), so they start working on their own if eBay grants access.
+Toys that carry a card game's name (`ebay.NOT_THE_THING`: Jazwares, Wicked
+Cool Toys, Funko, Lego, figures, plush, "58 pieces") are never taken for a
+card product: Jazwares' figure advent calendar was the Holiday Calendar 2024
+card box at £31.90 (the owner: "These aren't the same thing"); the hourly
+tidy hides such a listing already saved.
 
 **eBay's item lookup was asked at the wrong address, 22 Oct to 16 Nov 2026.**
 The owner's Log to copy showed it: "refreshing 1966 known listings", then "0

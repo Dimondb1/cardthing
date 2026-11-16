@@ -112,9 +112,10 @@ class RunLogTests(TestCase):
         self.assertLess(run.log.index("Reading the shop"), run.log.index("Traceback"))
 
     def test_a_marketplace_read_skipped_today_leaves_the_earlier_log_alone(self):
-        ebay = make_retailer("eBay", slug="ebay", source_type=Retailer.Source.EBAY)
-        earlier = ImportRun.objects.create(retailer=ebay, finished_at=timezone.now(), offers_found=5, log="kept")
-        self.assertEqual(run_import(ebay).pk, earlier.pk)
+        # Amazon, read every few hours. eBay is read every hour since 16 Nov 2026, so it skips none.
+        amazon = make_retailer("Amazon", slug="amazon", source_type=Retailer.Source.AMAZON)
+        earlier = ImportRun.objects.create(retailer=amazon, finished_at=timezone.now(), offers_found=5, log="kept")
+        self.assertEqual(run_import(amazon).pk, earlier.pk)
         self.assertEqual(ImportRun.objects.get(pk=earlier.pk).log, "kept")
 
     def test_logs_are_cleared_after_a_week(self):

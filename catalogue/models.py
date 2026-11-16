@@ -298,6 +298,9 @@ class Product(models.Model):
     )
     amazon_checked_at = models.DateTimeField(null=True, blank=True, editable=False)
     ebay_checked_at = models.DateTimeField(null=True, blank=True, editable=False)
+    # Which of the eBay searches for this product found it last time ("gtin" or the words), tried first next time,
+    # so a product searched every few hours costs one search rather than two or three (ebay.search_order).
+    ebay_query = models.CharField(max_length=120, blank=True, editable=False)
     # When the stockist finder (catalogue/finder.py) last looked for this product at the other shops.
     finder_checked_at = models.DateTimeField(null=True, blank=True, editable=False, db_index=True)
     release_date = models.DateField(

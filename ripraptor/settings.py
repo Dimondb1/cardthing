@@ -237,7 +237,7 @@ RIPRAPTOR_CONTACT_EMAIL = os.environ.get("RIPRAPTOR_CONTACT_EMAIL", "")
 RIPRAPTOR_STALE_AFTER_HOURS = int(os.environ.get("RIPRAPTOR_STALE_AFTER_HOURS", "72"))
 # An eBay price not confirmed for this long is not shown as buyable until it is checked again (catalogue/models.py
 # ebay_stale_cutoff): eBay items sell out in hours.
-RIPRAPTOR_EBAY_STALE_AFTER_HOURS = int(os.environ.get("RIPRAPTOR_EBAY_STALE_AFTER_HOURS", "4"))
+RIPRAPTOR_EBAY_STALE_AFTER_HOURS = int(os.environ.get("RIPRAPTOR_EBAY_STALE_AFTER_HOURS", "24"))
 
 # Window used for "Price drops this week" and "Popular this week".
 RIPRAPTOR_TRENDING_DAYS = 7
@@ -339,7 +339,7 @@ RIPRAPTOR_EBAY_APP_ID = os.environ.get("RIPRAPTOR_EBAY_APP_ID", "").strip()
 RIPRAPTOR_EBAY_CERT_ID = os.environ.get("RIPRAPTOR_EBAY_CERT_ID", "").strip()
 RIPRAPTOR_EBAY_CAMPAIGN_ID = os.environ.get("RIPRAPTOR_EBAY_CAMPAIGN_ID", "").strip()
 # Products checked on eBay per daily run. The Browse API allows 5,000 calls a day.
-RIPRAPTOR_EBAY_DAILY_LIMIT = int(os.environ.get("RIPRAPTOR_EBAY_DAILY_LIMIT", "4000"))
+RIPRAPTOR_EBAY_DAILY_LIMIT = int(os.environ.get("RIPRAPTOR_EBAY_DAILY_LIMIT", "4800"))
 
 # Price imports may record a retailer's product image for products that have
 # no uploaded image. Turn off if you would rather upload every image yourself.

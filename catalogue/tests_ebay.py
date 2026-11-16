@@ -237,6 +237,43 @@ class LookupTests(TestCase):
         self.assertEqual([o.product_pk for o in offers], [self.etb.pk])
         self.assertIsNotNone(twin.pk)
 
+    def test_the_search_that_found_a_product_last_time_is_tried_first(self):
+        """Barcode first, then the words, until one finds it: two or three searches a product. Remembered, the next
+        search of it costs one, which is what lets eBay be searched every hour on the same daily allowance."""
+        self.etb.refresh_from_db()
+        self.assertEqual([tag for tag, _url in ebay.search_order(self.etb)][0], "gtin")
+        found = item("Pokemon TCG Prismatic Evolutions Elite Trainer Box", price="79.99")
+
+        def api(url, headers, data=None):
+            if url.startswith(ebay.SEARCH_URL) and "gtin=" in url:
+                fake.calls.append((url, headers, data))
+                return {"itemSummaries": []}
+            return fake(url, headers, data)
+
+        fake = FakeApi([found])
+        ebay.ebay_offers(self.retailer, limit=10, request=api, pause=0)
+        self.etb.refresh_from_db()
+        self.assertEqual(self.etb.ebay_query, "Pokemon Prismatic Evolutions Elite Trainer Box")
+        self.assertEqual([tag for tag, _url in ebay.search_order(self.etb)][0], self.etb.ebay_query)
+        Product.objects.filter(pk=self.etb.pk).update(ebay_checked_at=None)
+        fake = FakeApi([found])
+        ebay.ebay_offers(self.retailer, limit=10, request=api, pause=0)
+        etb_searches = [url for url in fake.searches() if "Elite" in url or "gtin=" in url]
+        self.assertEqual(len(etb_searches), 1)   # one search, the words that found it
+
+    def test_products_visitors_look_at_are_searched_first_and_more_often(self):
+        now = timezone.now()
+        quiet = make_product(self.set, name="Quiet Booster Box", slug="quiet-box")
+        wanted = make_product(self.set, name="Wanted Booster Box", slug="wanted-box")
+        fresh = make_product(self.set, name="Fresh Booster Box", slug="fresh-box")
+        Product.objects.filter(pk=quiet.pk).update(ebay_checked_at=now - datetime.timedelta(hours=21))
+        Product.objects.filter(pk=wanted.pk).update(ebay_checked_at=now - datetime.timedelta(hours=5))
+        Product.objects.filter(pk=fresh.pk).update(ebay_checked_at=now - datetime.timedelta(hours=1))
+        products = Product.objects.filter(pk__in=[quiet.pk, wanted.pk, fresh.pk])
+        self.assertEqual([p.pk for p in ebay.due_known(products, {}, now)], [quiet.pk])
+        self.assertEqual([p.pk for p in ebay.due_known(products, {wanted.pk: 9, fresh.pk: 30}, now)],
+                         [wanted.pk, quiet.pk])   # looked at and due after four hours: first; an hour ago: not yet
+
     def test_known_listings_are_refreshed_in_bulk_without_spending_searches(self):
         make_listing(self.bundle, self.retailer, price="30.00", url="https://www.ebay.co.uk/itm/9?campid=1")
         fresh = item("Pokemon Prismatic Evolutions Booster Bundle", price="28.50", item_id="v1|9|0")
@@ -406,27 +443,35 @@ class ImportTests(TestCase):
         kept.refresh_from_db()
         self.assertEqual(kept.availability, Listing.Availability.IN_STOCK)
 
-    def test_import_runs_at_most_once_a_day(self):
-        ImportRun.objects.create(retailer=self.retailer, offers_found=10, finished_at=timezone.now() - datetime.timedelta(hours=2))
-        with mock.patch.object(ebay, "http") as called:
-            run = run_import(self.retailer)
-        called.assert_not_called()
-        self.assertEqual(run.error, "")
-
-    def test_a_skipped_hour_does_not_postpone_tomorrows_fetch(self):
-        # A real fetch 19 hours ago, then the hourly import skipped eBay (as it should).
-        ImportRun.objects.create(retailer=self.retailer, offers_found=5, finished_at=timezone.now() - datetime.timedelta(hours=19))
-        with mock.patch.object(ebay, "http") as called:
-            run_import(self.retailer)
-        called.assert_not_called()
-        self.assertEqual(ImportRun.objects.filter(retailer=self.retailer).count(), 1)   # the skip left no run behind
-        # Later the real fetch is older than the daily window, so eBay must be read again.
-        ImportRun.objects.update(finished_at=timezone.now() - datetime.timedelta(hours=25))
+    def test_every_hourly_read_searches_its_share_of_the_day(self):
+        """eBay's item lookup is refused to this application, so a price is kept up to date only by searching again.
+        One run a morning left every eBay price hidden after four hours; the owner chose on 16 Nov 2026 to spread the
+        day's searches over every hour ("Spread out, show 24h")."""
+        ImportRun.objects.create(retailer=self.retailer, offers_found=10, finished_at=timezone.now() - datetime.timedelta(hours=1))
         api = FakeApi([item("Pokemon TCG Prismatic Evolutions Elite Trainer Box", price="79.99")])
+        with mock.patch.object(ebay, "http", api), mock.patch.object(ebay, "PAUSE", 0):
+            run = run_import(self.retailer)
+        self.assertTrue(api.searches())   # a run an hour ago no longer holds this one back
+        self.assertEqual((run.error, run.offers_found), ("", 1))
+        # None of the day's searches left: nothing searched, and not a failed read, so eBay is not made to wait.
+        Product.objects.filter(pk=self.etb.pk).update(ebay_checked_at=None)
+        api = FakeApi([], searches_left=ebay.KEEP_BACK)
         with mock.patch.object(ebay, "http", api):
             run = run_import(self.retailer)
-        self.assertTrue(api.searches())
-        self.assertEqual(run.error, "")
+        self.assertEqual((run.error, api.searches()), ("", []))
+        self.retailer.refresh_from_db()
+        self.assertEqual(self.retailer.error_streak, 0)
+
+    def test_an_hours_share_is_whats_left_over_the_hours_to_ebays_reset(self):
+        now = timezone.now()
+        reset = (now + datetime.timedelta(hours=10, minutes=30)).isoformat().replace("+00:00", "Z")
+        with override_settings(RIPRAPTOR_EBAY_DAILY_LIMIT=4800):
+            self.assertEqual(ebay.hourly_searches(2250, reset, now), (2250 - ebay.KEEP_BACK) // 11)
+            self.assertEqual(ebay.hourly_searches(4950, reset, now), 200)   # never more than the day's limit an hour
+            self.assertEqual(ebay.hourly_searches(30, reset, now), 0)
+            self.assertEqual(ebay.hourly_searches(None, "", now), 200)
+            soon = (now + datetime.timedelta(minutes=20)).isoformat()
+            self.assertEqual(ebay.hourly_searches(150, soon, now), 100)   # the last hour before the reset takes the rest
 
     def test_old_empty_skip_runs_do_not_block_the_fetch(self):
         # What the server holds now: a stack of empty runs from hourly skips, the newest minutes old.
@@ -916,11 +961,25 @@ class WrongItemTests(TestCase):
         masters = make_product(magic, name="Ultimate Masters Booster Pack", slug="uma-pack", product_type="booster_pack")
         self.assertTrue(ebay.junk(masters, "Dragon ball super masters TCG Ultimate Advent booster pack factory sealed BT26"))
 
+    def test_a_toy_with_the_games_name_is_not_the_card_product(self):
+        """The owner, 16 Nov 2026, of the Holiday Calendar 2024 card box at £31.90 on eBay: "These aren't the same
+        thing". It was Jazwares' figure advent calendar."""
+        holiday = make_set(self.scarlet.game, name="Holiday 2024", slug="holiday-2024")
+        calendar = make_product(holiday, name="Holiday Calendar 2024", slug="holiday-calendar-2024",
+                                product_type="collection_box")
+        self.assertTrue(ebay.junk(calendar, "Pokémon 2024 Holiday Advent Calendar Jazwares 24 Gifts 58 Pieces New Sealed"))
+        self.assertTrue(ebay.junk(calendar, "Pokemon Holiday Advent Calendar 2024 Figures Sealed"))
+        self.assertFalse(ebay.junk(calendar, "Pokemon TCG Holiday Calendar 2024 New Sealed"))
+        figure_box = make_product(holiday, name="Paldea Figure Collection", slug="paldea-figure-collection",
+                                  product_type="collection_box")
+        self.assertFalse(ebay.junk(figure_box, "Pokemon TCG Paldea Figure Collection Box Sealed"))   # it says figure too
+
     def test_one_ebay_listing_stays_on_one_product(self):
         url = "https://www.ebay.co.uk/itm/336645392554"
         make_listing(self.scarlet, self.retailer, url=url, price="70.00")
         make_listing(self.violet, self.retailer, url=url, price="70.00")
-        Product.objects.filter(pk=self.violet.pk).update(ebay_checked_at=timezone.now())
+        # Searched after Scarlet, and due again: a product on eBay is searched again after ebay.KNOWN_EVERY.
+        Product.objects.filter(pk=self.violet.pk).update(ebay_checked_at=timezone.now() - ebay.KNOWN_EVERY)
         both = item("Pokemon Scarlet ex SV1S Japanese Booster Box", price="70", item_id="v1|336645392554|0")
         api = FakeApi([both], items=[both])
         offers = ebay.ebay_offers(self.retailer, limit=5, request=api, pause=0)

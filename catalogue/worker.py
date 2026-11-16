@@ -823,12 +823,8 @@ class Worker:
         if not ok:
             logger.error("%s: %s", shop, run.error)
         elif shop.source_type == Retailer.Source.EBAY:
-            if run.started_at < began:
-                logger.info("eBay: read handed back the search that finished at %s (one search a day)",
-                            f"{timezone.localtime(run.finished_at):%d %b %H:%M}" if run.finished_at else "an unknown time")
-            else:
-                logger.info("eBay: search finished in %d minutes: %d offers found, %d listings updated",
-                            int(seconds // 60), run.offers_found, run.listings_updated)
+            logger.info("eBay: this hour's search finished in %d minutes: %d products searched, %d listings updated",
+                        int(seconds // 60), run.offers_found, run.listings_updated)
         return ok
 
     def probe_shop(self, job):

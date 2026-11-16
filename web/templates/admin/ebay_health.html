@@ -77,14 +77,14 @@
 
   <section>
     <h2>Is it updating often enough?</h2>
-    <p class="note">Each eBay item in stock should be checked at least every {{ fresh.every_hours }} hours. One not checked for {{ fresh.hours }} hours stops counting and is not shown as buyable until it is checked again.</p>
+    <p class="note">eBay is searched every hour for a share of the day's allowance: a product visitors look at again after {{ fresh.popular_hours }} hours, the rest after {{ fresh.every_hours }}. An eBay price not checked for {{ fresh.hours }} hours stops counting and is not shown as buyable until it is checked again.</p>
     <ul class="figures">
       <li><b>{{ fresh.total|number }}</b><span>eBay items in stock</span></li>
       <li><b>{{ fresh.recent|number }}</b><span>checked in the last {{ fresh.every_hours }} hours</span></li>
       <li><b>{{ fresh.stale|number }}</b><span>past {{ fresh.hours }} hours, not shown as buyable</span></li>
       <li><b>{% if fresh.latest %}{{ fresh.latest|timesince }} ago{% else %}Never{% endif %}</b><span>latest check</span></li>
     </ul>
-    <p class="note" style="margin-top: 8px;">The daily eBay search looked at {{ searched.day|number }} products in the last day{% if searched.latest %}, the latest {{ searched.latest|timesince }} ago{% endif %}.{% if usage %} eBay said {% if usage.searches is not None %}{{ usage.searches|number }} searches and {% endif %}{% if usage.lookups is not None %}{{ usage.lookups|number }}{% else %}an unknown number of{% endif %} item lookups were left today{% if usage.asked %} ({{ usage.asked }}){% endif %}.{% endif %} More on <a href="{% url 'crawl' %}">Crawl health</a>.</p>
+    <p class="note" style="margin-top: 8px;">eBay's hourly searches looked at {{ searched.day|number }} products in the last day{% if searched.latest %}, the latest {{ searched.latest|timesince }} ago{% endif %}.{% if usage %} eBay said {% if usage.searches is not None %}{{ usage.searches|number }} searches and {% endif %}{% if usage.lookups is not None %}{{ usage.lookups|number }}{% else %}an unknown number of{% endif %} item lookups were left today{% if usage.asked %} ({{ usage.asked }}){% endif %}.{% endif %} More on <a href="{% url 'crawl' %}">Crawl health</a>.</p>
   </section>
 
   <section>
@@ -125,7 +125,7 @@
 
   <section id="rules">
     <h2>Seller rules</h2>
-    <p class="note">An eBay item is listed only when its seller has at least this positive feedback and this many ratings. A seller eBay gives no count for is judged on the feedback alone. Each price is judged on these at its next check, within {{ fresh.every_hours }} hours for an item in stock.</p>
+    <p class="note">An eBay item is listed only when its seller has at least this positive feedback and this many ratings. A seller eBay gives no count for is judged on the feedback alone. Each price is judged on these when its product is next searched, within {{ fresh.every_hours }} hours.</p>
     <form method="post" class="rules">{% csrf_token %}
       <p><label for="min_feedback">Least positive feedback (%)</label>
         <input type="number" id="min_feedback" name="min_feedback" min="{{ rules.feedback_least }}" max="{{ rules.feedback_most }}" step="0.1" inputmode="decimal" value="{{ rules.feedback }}" required></p>

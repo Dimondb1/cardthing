@@ -1892,8 +1892,13 @@ ENTRIES = [
           "After the packs and the price of each, on the same line under the cheapest price. Links to the Cheapest per "
           "card page.", placeholders=("each",)),
     Entry("product.cards.each", T, "Price per card", "{cards} cards inside, {each} a card",
+          "Under the cheapest price on a product page holding one pack, when its cards can be counted and the "
+          "cheapest shop's delivery is not known: the price shared over every card. Links to the Cheapest per card "
+          "page.", placeholders=("cards", "each")),
+    Entry("product.cards.each_delivered", T, "Price per card, delivered", "{cards} cards inside, {each} a card delivered",
           "Under the cheapest price on a product page holding one pack, when its cards can be counted: the cheapest "
-          "price shared over every card. Links to the Cheapest per card page.", placeholders=("cards", "each")),
+          "delivered price shared over every card, so it says it includes delivery. Links to the Cheapest per card "
+          "page.", placeholders=("cards", "each")),
     Entry("product.rrp.owner", T, "RRP under the price", "RRP {rrp}",
           "Under the cheapest price on a product page, when you have typed its RRP in Admin.", placeholders=("rrp",)),
     Entry("product.rrp.shops", T, "RRP from shops under the price", "RRP {rrp} from {count} UK shops",
@@ -1902,12 +1907,14 @@ ENTRIES = [
     Entry("product.rrp.found", T, "RRP Claude found under the price", "RRP {rrp} from {source}",
           "Under the cheapest price on a product page, when the RRP is the one Claude found on the publisher's site "
           "or a UK shop's page. {source} is that site's name.", placeholders=("rrp", "source")),
-    Entry("product.rrp.under", T, "Price under the RRP", "{amount} under RRP",
-          "In green beside the RRP, when the cheapest price is below it.", placeholders=("amount",)),
-    Entry("product.rrp.over", T, "Price over the RRP", "{amount} over RRP",
-          "In red beside the RRP, when the cheapest price is above it. Left off beside a shop that pays a commission.",
-          placeholders=("amount",)),
-    Entry("product.rrp.at", T, "Price at the RRP", "At RRP", "Beside the RRP, when the cheapest price is the RRP."),
+    Entry("product.rrp.under", T, "Price under the RRP", "{amount} under RRP (excl. delivery)",
+          "In green beside the RRP, after a down arrow, when the cheapest offer's item price, without its delivery, "
+          "is below it.", placeholders=("amount",)),
+    Entry("product.rrp.over", T, "Price over the RRP", "{amount} over RRP (excl. delivery)",
+          "In red beside the RRP, after an up arrow, when the cheapest offer's item price, without its delivery, is "
+          "above it. Left off beside a shop that pays a commission.", placeholders=("amount",)),
+    Entry("product.rrp.at", T, "Price at the RRP", "At RRP (excl. delivery)",
+          "Beside the RRP, when the cheapest offer's item price, without its delivery, is the RRP."),
     Entry(
         "product.badge.low_30", T, "Badge: lowest in 30 days",
         "Lowest in 30 days",

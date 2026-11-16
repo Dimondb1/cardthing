@@ -1814,7 +1814,7 @@ def price_check(product, listings, cheapest, today):
     same (web/askrip.py), so what he says and the badge never differ."""
     uk_shops = len({listing.retailer_id for listing in listings if listing.sanity != Listing.Sanity.EXCLUDED
                     and listing.retailer.source_type not in pricing.MARKETPLACES})
-    fair = (fair_price.verdict(product, cheapest.delivered_price, today, shops=uk_shops)
+    fair = (fair_price.verdict(product, cheapest.delivered_price, today, shops=uk_shops, item_price=cheapest.price)
             if cheapest and cheapest.delivery_known and cheapest.sanity != Listing.Sanity.DOUBTFUL else None)
     # The owner: never "High price" beside a shop that pays a commission, whatever the price. The check is left
     # off, not softened, so nothing on the page calls the price better than it is; the Terms page says so.
@@ -2045,9 +2045,11 @@ def product_detail(request, slug):
             # What one pack costs at the cheapest price, for a product holding two or more (catalogue/contents.py).
             "per_pack": per_pack(cheapest, product),
             "per_card": price_a_card(cheapest.shown_price if cheapest else None, product),
+            "per_card_delivered": bool(cheapest and cheapest.delivery_known),
             "cards_total": cards_total(product),
-            # The RRP under the price, where one is known, and how far the cheapest price is from it.
-            "rrp_line": fair_price.rrp_line(product, cheapest.shown_price, cheapest.retailer.pays_commission)
+            # The RRP under the price, where one is known, and how far the cheapest offer's item price is from it:
+            # an RRP never includes delivery.
+            "rrp_line": fair_price.rrp_line(product, cheapest.price, cheapest.retailer.pays_commission)
             if cheapest else None,
             "shop_count": shop_count,
             "summary": summary,

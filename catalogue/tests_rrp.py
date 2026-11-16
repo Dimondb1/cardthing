@@ -105,21 +105,21 @@ class PriceCheckTests(TestCase):
     def test_the_rrp_is_a_ceiling_never_a_reason_to_praise(self):
         alone = self.product("50.00", rrp=Decimal("49.99"))
         under = self.product("30.00", rrp=Decimal("49.99"))
-        lowest = self.product("40.00", usual="60.00", rrp=Decimal("27.99"))   # our record says lowest yet
-        above = self.product("62.00", rrp=Decimal("49.99"))
+        lowest = self.product("40.00", usual="60.00", rrp=Decimal("25.99"))   # our record says lowest yet
+        above = self.product("70.00", rrp=Decimal("49.99"))
         verdicts = {p: fair_price.verdict(p, p.listings.first().delivered_price) for p in (alone, under, lowest, above)}
-        self.assertEqual(verdicts[alone].key, "fair")      # within 15% of the RRP, and nothing else to go by
+        self.assertEqual(verdicts[alone].key, "fair")      # within 25% of the RRP, and nothing else to go by
         self.assertEqual(verdicts[under].key, "fair")      # well under it, but the RRP alone never says good
-        self.assertEqual(verdicts[lowest].key, "high")     # 43% over the RRP, however low for us
-        self.assertEqual(verdicts[above].key, "above")
+        self.assertEqual(verdicts[lowest].key, "high")     # 54% over the RRP, however low for us
+        self.assertEqual(verdicts[above].key, "above")     # 40% over it
         self.assertEqual((verdicts[alone].rrp, verdicts[alone].rrp_shops), (Decimal("49.99"), None))
         # Without an RRP our record's verdict stands.
         self.assertEqual(fair_price.verdict(self.product("40.00", usual="60.00"), Decimal("40.00")).key, "lowest")
 
     def test_the_hourly_refresh_keeps_the_shops_rrp_and_the_owners_wins(self):
-        shops = self.product("62.00")
+        shops = self.product("70.00")
         Listing.objects.filter(product=shops).update(list_price=Decimal("49.99"))
-        owner = self.product("62.00", rrp=Decimal("59.99"))
+        owner = self.product("70.00", rrp=Decimal("59.99"))
         Listing.objects.filter(product=owner).update(list_price=Decimal("49.99"))
         fair_price.refresh_bands()
         shops.refresh_from_db(), owner.refresh_from_db()

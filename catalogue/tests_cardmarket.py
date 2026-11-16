@@ -430,7 +430,9 @@ class SettleTests(TestCase):
         self.assertEqual(fp.settle([fp.LOWEST], Decimal("10"), None), fp.LOWEST)
         # The RRP still holds a dear price down, whatever the others say.
         self.assertEqual(fp.settle([fp.LOWEST, fp.GOOD_PRICE], Decimal("20"), Decimal("10")), fp.HIGH_PRICE)
-        self.assertEqual(fp.settle([fp.LOWEST, fp.GOOD_PRICE], Decimal("12"), Decimal("10")), fp.ABOVE)
+        self.assertEqual(fp.settle([fp.LOWEST, fp.GOOD_PRICE], Decimal("14"), Decimal("10")), fp.ABOVE)
+        # Set against the item price, without delivery, when it is given: £12 delivered is £10 at the RRP.
+        self.assertEqual(fp.settle([fp.FAIR], Decimal("14"), Decimal("10"), Decimal("10")), fp.FAIR)
         self.assertEqual(fp.settle([], Decimal("10"), Decimal("10")), fp.FAIR)
         self.assertIsNone(fp.settle([], Decimal("10"), None))
 

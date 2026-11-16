@@ -122,13 +122,14 @@ def span_words(delta):
     return f"{number} {unit}{'' if number == 1 else 's'}"
 
 
-def judged(product, price, delivery_known):
+def judged(product, price, delivery_known, item_price=None):
     """(the Price check's verdict on ``price``, or None, and how many UK shops list the product). eBay and Amazon
-    are not shops. No verdict while the delivery is unknown. One query, up to five more for the verdict."""
+    are not shops. No verdict while the delivery is unknown. ``item_price`` is the price without delivery, which the
+    RRP is set against. One query, up to five more for the verdict."""
     shops = (Listing.objects.filter(product=product, is_active=True, retailer__is_active=True)
              .exclude(sanity=Listing.Sanity.EXCLUDED).exclude(retailer__source_type__in=MARKETPLACES)
              .values("retailer_id").distinct().count())
-    return (fair_price.verdict(product, price, shops=shops) if delivery_known else None), shops
+    return (fair_price.verdict(product, price, shops=shops, item_price=item_price) if delivery_known else None), shops
 
 
 def price_check_field(product, price, delivery_known, store, judgement=None):
@@ -184,13 +185,13 @@ def look_back(channel):
 
 def shop_news(model, kind, title_key, availability, now, store, channel, games, sets=frozenset()):
     """Restocks or pre-order openings since look_back(), newest first, one a day per product, while the shop
-    still has it that way, unless the Price check calls the price high: more than 35% over the European market
-    or the RRP, or 15% over its own average."""
+    still has it that way, unless the Price check calls the price high: more than 35% over the European market,
+    50% over the RRP before delivery, or 15% over its own average."""
     rows = (
         model.objects.filter(at__gte=now - look_back(channel), product__is_active=True, retailer__is_active=True,
                              listing__is_active=True, listing__availability=availability)
         .exclude(retailer__source_type__in=MARKETPLACES).exclude(listing__sanity=Listing.Sanity.EXCLUDED)
-        .select_related("product__game").order_by("-at")
+        .select_related("product__game", "listing").order_by("-at")
     )
     if sets:
         rows = rows.filter(product__product_set_id__in=sets)
@@ -202,7 +203,7 @@ def shop_news(model, kind, title_key, availability, now, store, channel, games, 
         if key in seen:
             continue
         seen.add(key)
-        judgement = judged(row.product, row.price, row.delivery_known)
+        judgement = judged(row.product, row.price, row.delivery_known, row.listing.price if row.listing_id else None)
         if judgement[0] is not None and judgement[0].band == fair_price.HIGH_PRICE:
             # Stock at a price far over what it should cost is no news to share. The owner: "ensure that deals
             # we share on Discord aren't massively overpriced".
@@ -225,11 +226,13 @@ def price_drop_news(now, store, channel, games, sets=frozenset()):
         if product.drop_ratio < channel.min_drop_percent / 100 or not in_scope(product.game_id, product.product_set_id,
                                                                                   games, sets):
             continue
-        judgement = judged(product, product.lowest_price, True)
+        checked, item_price = (Listing.objects.filter(product=product).buyable().filter(delivery_known=True)
+                               .order_by("delivered_price", "price").values_list("last_checked", "price").first()
+                               or (None, None))
+        checked = checked or now
+        judgement = judged(product, product.lowest_price, True, item_price)
         if judgement[0] is None or judgement[0].band < fair_price.FAIR:
             continue
-        checked = (Listing.objects.filter(product=product).buyable().filter(delivery_known=True)
-                   .order_by("delivered_price").values_list("last_checked", flat=True).first()) or now
         yield Post(
             key=f"{PRICE_DROP}-{product.pk}-{today.isoformat()}",
             title=product.name, label=copy.get("discord.price_drop.title", store=store, product=product.name),

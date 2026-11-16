@@ -1184,8 +1184,9 @@ we need to."
   what will happen; and who it suits, with another product of the set for
   another budget.
 - Any red flags? Our own code finds the warning signs and Rip states them
-  (`askrip.warning_signs`, sent as each offer's `warning_signs`): a price
-  more than 15% over the RRP, a delivered price more than 35% over the
+  (`askrip.warning_signs`, sent as each offer's `warning_signs`): an item
+  price (without delivery) more than 25% over the RRP, a delivered price
+  more than 35% over the
   cheapest UK shop we read, words in a marketplace or shop listing's own
   title such as repack, resealed, unsealed, replica, custom or proxy
   (`DODGY_WORDS`; not when the seller denies it, "not resealed", or the
@@ -4112,10 +4113,18 @@ product page (`web.views.product_detail`) and on a card led by that shop
   outside references are Cardmarket's European price (see The European
   market below) and the RRP (below).
 - **RRP**: the recommended retail price is a ceiling, never a reason to
-  praise a price. Up to 15% over it (delivery included) changes nothing,
-  and is Fair price when nothing else measures the product; up to 35% over
-  it is at best Above average; more is High price, however low the price
-  is against our record or Cardmarket. The RRP is the one you type on the
+  praise a price. It is set against the item price, never the delivered
+  total, since no RRP includes postage (the owner, 16 Nov 2026: a £5.99
+  pack with £2.99 delivery read "£4.69 over RRP" against £4.29 and High
+  price). Up to 25% over it changes nothing, and is Fair price when nothing
+  else measures the product; up to 50% over it is at best Above average;
+  more is High price, however low the price is against our record or
+  Cardmarket. Our record and Cardmarket still use the delivered price.
+  On the product page the RRP line says how far the cheapest offer's item
+  price is from the RRP, "(excl. delivery)", with an up arrow in red over
+  it, a down arrow in green under it, and "At RRP (excl. delivery)" on it;
+  a single pack's cost a card says "a card delivered" when its delivery is
+  known. The RRP is the one you type on the
   product in Admin (RRP box), which always wins; otherwise the one UK
   shops give beside their own price, when at least two give the same
   figure (to the pound) and more give it than any other. Each read keeps
@@ -4805,7 +4814,8 @@ cron, posts news to the channels set up in admin (`catalogue/discord.py`):
   offer.
 
 Nothing the Price check calls High price is posted: a restock or a
-pre-order more than 35% over its RRP or the European market, or 15% over
+pre-order more than 50% over its RRP (before delivery) or 35% over the
+European market, or 15% over
 its own usual price, is not shared. The owner, 24 Oct 2026: "ensure that
 deals we share on Discord aren't massively overpriced, not just a
 pointless discount".

@@ -236,16 +236,50 @@ class LineTests(RRPBase):
         Product.objects.filter(pk=self.etb.pk).update(found_rrp=Decimal("54.99"), found_rrp_source="pokemon.com")
         html = self.page()
         self.assertIn('<span class="buybox__rrp-figure">RRP £54.99 from pokemon.com</span>', html)
-        self.assertIn('<span class="buybox__rrp-gap buybox__rrp-gap--under">£5.00 under RRP</span>', html)
+        self.assertIn('<span class="buybox__rrp-dot" aria-hidden="true">·</span><span class="buybox__rrp-gap '
+                      'buybox__rrp-gap--under"><span aria-hidden="true">↓</span> £5.00 under RRP (excl. delivery)</span>',
+                      html)
         # The UK shops' figure wins over Claude's, and the owner's over both.
         Product.objects.filter(pk=self.etb.pk).update(shop_rrp=Decimal("49.99"), shop_rrp_shops=3)
         html = self.page()
         self.assertIn('<span class="buybox__rrp-figure">RRP £49.99 from 3 UK shops</span>', html)
-        self.assertIn('<span class="buybox__rrp-gap">At RRP</span>', html)
+        self.assertIn('<span class="buybox__rrp-gap">At RRP (excl. delivery)</span>', html)
         Product.objects.filter(pk=self.etb.pk).update(rrp=Decimal("44.99"))
         html = self.page()
         self.assertIn('<span class="buybox__rrp-figure">RRP £44.99</span>', html)
-        self.assertIn('<span aria-hidden="true">↑</span> £5.00 over RRP</span>', html)
+        self.assertIn('<span aria-hidden="true">↑</span> £5.00 over RRP (excl. delivery)</span>', html)
+
+    def test_the_rrp_is_set_against_the_item_price_not_the_delivered_total(self):
+        """The owner, 16 Nov 2026: a £5.99 pack with £2.99 delivery read "£4.69 over RRP" against its £4.29 RRP, and
+        its Price check said High price, since both counted the postage, which no RRP includes."""
+        pack = make_product(self.set, name="Surging Sparks Booster Pack", slug="surging-sparks-pack",
+                            product_type="booster_pack", rrp=Decimal("4.29"))
+        make_listing(pack, self.harbour, price="5.99", delivery="2.99", url=SHOP_PAGE + "-pack")
+        html = self.client.get(pack.get_absolute_url()).content.decode()
+        self.assertIn("£8.98", html)   # the headline is still the delivered price
+        self.assertIn('<span aria-hidden="true">↑</span> £1.70 over RRP (excl. delivery)</span>', html)
+        self.assertNotIn("£4.69", html)
+        # The Price check: 40% over the RRP is Above, not High; up to 25% over changes nothing; over 50% is High.
+        pack = Product.objects.get(pk=pack.pk)
+        found = fair_price.verdict(pack, Decimal("8.98"), shops=1, item_price=Decimal("5.99"))
+        self.assertEqual(found.band, fair_price.ABOVE)
+        self.assertEqual(fair_price.verdict(pack, Decimal("8.98"), shops=1, item_price=Decimal("5.36")).band,
+                         fair_price.FAIR)
+        self.assertEqual(fair_price.verdict(pack, Decimal("9.50"), shops=1, item_price=Decimal("6.50")).band,
+                         fair_price.HIGH_PRICE)
+        # The bands lists sort by are worked out the same way.
+        fair_price.refresh_bands()
+        self.assertEqual(Product.objects.get(pk=pack.pk).price_band, fair_price.ABOVE)
+
+    def test_the_cost_of_a_card_says_it_includes_delivery(self):
+        pack = make_product(self.set, name="Surging Sparks Booster Pack", slug="surging-sparks-pack",
+                            product_type="booster_pack", cards_per_pack=10)
+        listing = make_listing(pack, self.harbour, price="4.00", delivery="1.00", url=SHOP_PAGE + "-pack")
+        html = self.client.get(pack.get_absolute_url()).content.decode()
+        self.assertIn("10 cards inside, 50p a card delivered", html)
+        type(listing).objects.filter(pk=listing.pk).update(delivery_known=False)
+        html = self.client.get(pack.get_absolute_url()).content.decode()
+        self.assertIn("10 cards inside, 40p a card<", html)
 
     def test_over_the_rrp_is_never_said_beside_a_shop_that_pays_a_commission(self):
         Product.objects.filter(pk=self.etb.pk).update(rrp=Decimal("44.99"))

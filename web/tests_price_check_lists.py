@@ -47,7 +47,9 @@ class BandTests(TestCase):
         lowest = self.product("lowest-box", "40.00", ["50.00"] * 20)
         new = self.product("new-box", "40.00", ["50.00"] * 5)                  # too few days
         lone = self.product("lone-box", "40.00", ["50.00"] * 20, shops=1)      # nothing to compare with
-        with self.assertNumQueries(7):   # one is the RRP shops give; an eighth, the exchange rate, once Cardmarket prices one
+        # One is the RRP shops give and one the item prices it is set against; a ninth, the exchange rate, once
+        # Cardmarket prices one.
+        with self.assertNumQueries(8):
             changed = fair_price.refresh_bands(self.today)
         self.assertEqual(changed, 3)
         for product in (good, high, lowest, new, lone):

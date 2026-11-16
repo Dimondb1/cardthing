@@ -38,7 +38,9 @@ The RRP (Product.rrp_now): the owner's, typed in Admin, or the one at least RRP_
 price (shop_rrps), or else the one Claude found on a cited page (rrp_finder). It is a ceiling, never a reason to praise a price: up to RRP_FAIR of it changes nothing (and
 is a fair price when nothing else measures it), up to RRP_ABOVE of it is above, more is high, whatever the other
 references say. The owner: "ensure that deals we share on Discord aren't massively overpriced, not just a
-pointless discount".
+pointless discount". The RRP is set against the item price, never the delivered total: an RRP never includes
+postage, and a £4.29 pack with £2.99 delivery read as 70% over its RRP and High price (the owner, 16 Nov 2026,
+who set 25% and 50%).
 
 A product gets no verdict without any reference, or without a delivered price now (a shop whose delivery
 is unknown). Every game has it: Pokémon first, on trial, then all of them at the owner's request.
@@ -67,7 +69,7 @@ LOW_DAYS = 90       # at_lowest: the lowest of this many days back
 MARKET_GOOD, MARKET_FAIR, MARKET_ABOVE = Decimal("1.00"), Decimal("1.15"), Decimal("1.35")
 MARKET_FRESH_DAYS = 7
 RRP_SHOPS = 2
-RRP_FAIR, RRP_ABOVE = Decimal("1.15"), Decimal("1.35")
+RRP_FAIR, RRP_ABOVE = Decimal("1.25"), Decimal("1.50")
 # A shop's RRP more than this many times its own price, or under its price divided by it, is not believed.
 RRP_SPREAD = Decimal("2")
 LOWEST, GOOD_PRICE, FAIR, ABOVE, HIGH_PRICE = 5, 4, 3, 2, 1
@@ -152,19 +154,21 @@ def market_band(price, market_gbp):
     return HIGH_PRICE
 
 
-def rrp_cap(price, rrp):
-    """The band the RRP holds ``price`` down to, or None when it is within RRP_FAIR of it."""
-    if price <= rrp * RRP_FAIR:
+def rrp_cap(item_price, rrp):
+    """The band the RRP holds a price down to, or None when its item price (without delivery) is within RRP_FAIR of
+    it."""
+    if item_price <= rrp * RRP_FAIR:
         return None
-    return ABOVE if price <= rrp * RRP_ABOVE else HIGH_PRICE
+    return ABOVE if item_price <= rrp * RRP_ABOVE else HIGH_PRICE
 
 
-def settle(bands, price, rrp):
+def settle(bands, price, rrp, item_price=None):
     """The verdict's band from the record's and the market's bands and the RRP, or None without any of them: the
     lowest of them, but a good price beside our record's lowest yet is the lowest yet, since only the record can say
-    lowest and the market's best is good."""
+    lowest and the market's best is good. The RRP is set against ``item_price``, the price without delivery (the
+    delivered ``price`` when it is not known)."""
     if rrp:
-        cap = rrp_cap(price, rrp)
+        cap = rrp_cap(price if item_price is None else item_price, rrp)
         if cap is not None:
             bands = bands + [cap]
         elif not bands:
@@ -205,9 +209,10 @@ def shop_rrps(product_ids=None):
     return found
 
 
-def verdict(product, price, today=None, shops=MIN_SHOPS):
+def verdict(product, price, today=None, shops=MIN_SHOPS, item_price=None):
     """The Verdict for ``product`` at ``price`` (its cheapest delivered price now), or None. ``shops`` is how
-    many UK shops list it, in stock or not. Up to five queries."""
+    many UK shops list it, in stock or not; ``item_price`` is that price without delivery, which the RRP is set
+    against. Up to five queries."""
     if price is None:
         return None
     today = today or timezone.localdate()
@@ -232,7 +237,7 @@ def verdict(product, price, today=None, shops=MIN_SHOPS):
         found.rrp, found.rrp_shops = rrp
         source = product.rrp_from
         found.rrp_source = source[1] if source and source[0] == "found" else ""
-    band = settle(bands, price, found.rrp)
+    band = settle(bands, price, found.rrp, item_price)
     if band is None:
         return None
     found.band = band
@@ -254,9 +259,10 @@ class RRPLine:
 
 
 def rrp_line(product, price, pays_commission=False):
-    """The RRPLine for ``product`` at ``price`` (the cheapest price the page shows), or None without an RRP. As with
-    the Price check, nothing calls a price over the RRP beside a shop that pays a commission: the RRP is shown
-    and the gap left off."""
+    """The RRPLine for ``product`` at ``price``, the item price of the cheapest offer the page shows without its
+    delivery (an RRP never includes postage: the owner, 16 Nov 2026, of "£4.69 over RRP" on a £4.29 pack at £5.99
+    with £2.99 delivery), or None without an RRP. As with the Price check, nothing calls a price over the RRP beside
+    a shop that pays a commission: the RRP is shown and the gap left off."""
     source = product.rrp_from
     if source is None:
         return None
@@ -275,8 +281,8 @@ def refresh_bands(today=None):
     """Store every active product's Price check band and what it rests on (Product.price_band, price_basis), as
     verdict() works it out, so lists can sort by it and show it with no query of their own, and the RRP UK shops
     give for it (Product.shop_rrp, shop_rrp_shops). A product whose verdict is gone has both emptied; the basis is
-    the RRP's only when nothing else measures it. Seven queries and one write for those that changed, however many
-    products. Returns how many changed."""
+    the RRP's only when nothing else measures it. Eight queries (one of them for the item prices the RRP is set
+    against) and one write for those that changed, however many products. Returns how many changed."""
     from .cardmarket import in_pounds
 
     today = today or timezone.localdate()
@@ -292,6 +298,14 @@ def refresh_bands(today=None):
         .values_list("product_id", "price", "doubtful")
         if doubtful is None or doubtful > price
     }
+    # The item price (without delivery) of each product's cheapest delivered offer, which the RRP is set against.
+    items = {}
+    for pk, delivered, item in (
+        Listing.objects.buyable().filter(delivery_known=True, product_id__in=list(prices))
+        .order_by("product_id", "delivered_price", "price").values_list("product_id", "delivered_price", "price")
+    ):
+        if delivered == prices[pk]:
+            items.setdefault(pk, item)
     shops = dict(
         Listing.objects.live().exclude(sanity=Listing.Sanity.EXCLUDED).exclude(retailer__source_type__in=MARKETPLACES)
         .filter(product_id__in=list(prices))
@@ -327,7 +341,7 @@ def refresh_bands(today=None):
         if euros and rate is not None:
             bands.append(market_band(price, in_pounds(euros, rate)))
             basis.append(MARKET)
-        band = settle(bands, price, rrp)
+        band = settle(bands, price, rrp, items.get(product_id))
         if band is None:
             return None, ""
         return band, BOTH if len(basis) == 2 else basis[0] if basis else RRP

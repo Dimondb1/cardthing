@@ -16,7 +16,7 @@ products, how many legit clicks. Maybe add a seller rating config button").
 Staff only, never for editors, never indexed or cached.
 """
 
-from datetime import timedelta
+from datetime import datetime, timedelta
 from decimal import Decimal, InvalidOperation
 
 from django.contrib import admin, messages
@@ -41,6 +41,8 @@ ALL_MOST = 500      # and at most this many with See all
 # latest check is this recent; not updating once nothing has been checked for as long as a price counts.
 STALE_SHARE_OK = Decimal("0.05")
 LATEST_OK = timedelta(minutes=45)
+# eBay's read due this long without starting is worth saying: it starts within a minute or two when nothing holds it.
+READ_STUCK = timedelta(minutes=30)
 FEEDBACK_LEAST, FEEDBACK_MOST = Decimal("50.0"), Decimal("100.0")
 RATINGS_MOST = 100_000
 
@@ -142,15 +144,41 @@ def below_rules(least_feedback, least_ratings):
             .filter(Q(seller_feedback__lt=least_feedback) | Q(seller_ratings__lt=least_ratings)).count())
 
 
+def when(text):
+    """An ISO time note_check kept, or None."""
+    try:
+        return datetime.fromisoformat(text) if text else None
+    except (TypeError, ValueError):
+        return None
+
+
+def item_numbers(ended):
+    """Of eBay's items in stock: how many have no item number in their link, so cannot be checked, and how many are
+    on the ended list though the daily search found them since (checked again, ebay.check_listings). One query."""
+    no_number = on_list = 0
+    for url in Listing.objects.live().filter(retailer__source_type=EBAY, availability__in=Listing.BUYABLE
+                                             ).values_list("url", flat=True):
+        item_id = ebay.item_id_of(url)
+        no_number += not item_id
+        on_list += bool(item_id) and item_id in ended
+    return no_number, on_list
+
+
 def reasons(fresh, now):
     """Why eBay's prices are not being kept up to date, the most likely first (the owner, 16 Nov 2026, with no eBay
     price counting: "something is wrong"): the background reader stopped or paused, eBay paused or waiting after
-    errors with eBay's last error, or its items checked and marked out of stock. Each is [{"line", "detail"}], with
-    the facts behind them for the page. Three queries."""
+    errors with eBay's last error, the last item checks stopped by a problem, eBay's read due a long time without
+    starting, items that cannot be checked, or its items checked and marked out of stock. Each is [{"line",
+    "detail"}], with the facts behind them for the page. Four queries."""
     worker = WorkerState.current()
     shops = list(Retailer.objects.filter(source_type=EBAY, is_active=True))
     out = Listing.objects.live().filter(retailer__source_type=EBAY, availability=Listing.Availability.OUT_OF_STOCK)
     marked = out.filter(last_checked__gte=now - timedelta(days=1)).count()
+    alive = worker is not None and worker.alive(now)
+    check = ebay.last_check()
+    check["at"], check["problem_at"] = when(check.get("at")), when(check.get("problem_at"))
+    ended = ebay.ended_items()
+    no_number, on_list = item_numbers(ended)
     found = []
     if not shops:
         found.append({"line": "There is no eBay shop switched on.", "detail": "Add eBay under Shops, or switch it on."})
@@ -174,11 +202,34 @@ def reasons(fresh, now):
         elif shop.error_streak and shop.last_error:
             found.append({"line": f"{shop.name}'s last {shop.error_streak} tr{'y' if shop.error_streak == 1 else 'ies'} "
                                   "failed.", "detail": f"eBay's last error: {shop.last_error}"})
+        shop.waiting = now - shop.next_read_at if shop.next_read_at and shop.next_read_at <= now else None
+        if alive and not worker.paused and not shop.reading_paused and shop.waiting and shop.waiting > READ_STUCK \
+                and not (shop.backoff_until and shop.backoff_until > now):
+            found.append({"line": f"{shop.name}'s read has been due for {timesince(shop.next_read_at, now)} without "
+                                  "starting.",
+                          "detail": "Another job is holding the lock that reads share, or every reading slot is busy. "
+                                    "Its item checks go on meanwhile; only the daily search waits."})
+    if check["problem_at"] and (check["at"] is None or check["problem_at"] > check["at"]):
+        found.append({"line": f"The last eBay item check did not get through, {timesince(check['problem_at'], now)} ago.",
+                      "detail": check.get("problem", "")})
+    if no_number:
+        found.append({"line": f"{no_number:,} eBay item{'s' if no_number != 1 else ''} in stock "
+                              f"{'have' if no_number != 1 else 'has'} no item number in the link, so "
+                              f"{'they cannot' if no_number != 1 else 'it cannot'} be checked.",
+                      "detail": f"Only the daily search updates {'them' if no_number != 1 else 'it'}."})
+    if on_list:
+        found.append({"line": f"{on_list:,} eBay item{'s' if on_list != 1 else ''} in stock "
+                              f"{'are' if on_list != 1 else 'is'} on the ended list.",
+                      "detail": "eBay once said they had ended, yet the daily search found them again. They are "
+                                "checked like any other item and leave the list once eBay shows them." if on_list != 1
+                      else "eBay once said it had ended, yet the daily search found it again. It is checked like any "
+                           "other item and leaves the list once eBay shows it."})
     if marked and fresh["total"] == 0:
         found.append({"line": f"{marked:,} eBay item{'s were' if marked != 1 else ' was'} checked in the last day and "
                               "marked out of stock, and none is in stock.",
                       "detail": "eBay no longer has them, or they now fail the seller rules or the other checks."})
-    facts = {"worker": worker, "alive": worker is not None and worker.alive(now), "shops": shops, "marked": marked}
+    facts = {"worker": worker, "alive": alive, "shops": shops, "marked": marked, "check": check,
+             "ended": len(ended), "ended_days": ebay.ENDED_DAYS, "on_list": on_list}
     return found, facts
 
 

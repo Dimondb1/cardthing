@@ -173,6 +173,46 @@ class EbayHealthTests(TestCase):
         Retailer.objects.filter(pk=self.ebay.pk).update(reading_paused=True)
         self.assertIn("<b>eBay is paused, so its items are not checked.</b>", self.why())
 
+    def test_it_says_when_ebays_read_waits_how_the_last_check_went_and_what_is_on_the_ended_list(self):
+        """The owner, 16 Nov 2026, with the reader running, eBay not waiting and nothing checked for hours: "something
+        is wrong". The page now shows what was hidden: eBay's read due for hours without starting, the last check and
+        its problem, and the items in stock that could not be checked."""
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        from catalogue.models import Listing, WorkerState
+
+        now = timezone.now()
+        WorkerState.objects.create(pk=1, heartbeat_at=now)
+        Listing.objects.filter(retailer=self.ebay).update(last_checked=now - timedelta(hours=6))
+        Listing.objects.filter(pk=self.cheaper_item.pk).update(url="https://www.ebay.co.uk/itm/111")
+        Retailer.objects.filter(pk=self.ebay.pk).update(next_read_at=now - timedelta(hours=2, minutes=5))
+        ebay.note_check(asked=20, in_stock=18, gone=2, now=now - timedelta(hours=5))
+        ebay.note_check(problem="eBay did not answer: eBay API 503: Service Unavailable", now=now - timedelta(hours=4))
+        ebay.note_ended(["v1|111|0", "v1|222|0"])
+        part = self.why()
+        self.assertIn("<b>eBay&#x27;s read has been due for 2\xa0hours", part)
+        self.assertIn("without starting.</b> Another job is holding the lock that reads share", part)
+        self.assertIn("<b>The last eBay item check did not get through, 4\xa0hours ago.</b> eBay did not answer: eBay "
+                      "API 503: Service Unavailable", part)
+        self.assertIn("<b>3 eBay items in stock have no item number in the link, so they cannot be checked.</b>", part)
+        self.assertIn("<b>1 eBay item in stock is on the ended list.</b> eBay once said it had ended, yet the daily search "
+                      "found it again.", part)
+        self.assertIn("eBay: not waiting, next read due for 2\xa0hours", part)
+        self.assertIn("Last item check: 5\xa0hours ago, 20 asked about: 18 in stock, 2 gone.", part)
+        self.assertIn("Last problem, 4\xa0hours ago: eBay did not answer", part)
+        self.assertIn("Ended list: 2 items eBay said had ended, not asked about again for 30 days, 1 of them in stock.",
+                      part)
+        # A check that works after the problem: the problem is no longer a reason, and is still shown as a fact.
+        ebay.note_check(asked=1, in_stock=1, now=now)
+        Retailer.objects.filter(pk=self.ebay.pk).update(next_read_at=now + timedelta(minutes=40))
+        part = self.why()
+        self.assertNotIn("did not get through", part)
+        self.assertNotIn("without starting", part)
+        self.assertIn("Last item check: 0\xa0minutes ago, 1 asked about: 1 in stock, 0 gone.", part)
+        self.assertIn(", next read at ", part)
+
     def test_try_ebay_again_now_clears_its_wait(self):
         from datetime import timedelta
 

@@ -18,6 +18,8 @@
   .eh .reasons { margin: 0 0 8px; padding-left: 20px; }
   .eh .reasons li { margin-bottom: 6px; }
   .eh .reasons b { font-weight: 600; }
+  .eh .facts { margin: 0 0 8px; padding-left: 20px; }
+  .eh .facts li { margin-bottom: 2px; }
   .eh form.inline { margin: 8px 0 0; }
   .eh table { width: 100%; }
   .eh td, .eh th { vertical-align: top; }
@@ -49,7 +51,14 @@
     {% else %}
     <p>The background reader is running and eBay is neither paused nor waiting after errors, yet its items are not being checked. Its log will say why: <code>journalctl -u ripraptor-worker --since today | grep -i ebay</code></p>
     {% endif %}
-    <p class="note">Background reader: {% if facts.alive %}running, last sign of life {{ facts.worker.heartbeat_at|timesince }} ago{% elif facts.worker.heartbeat_at %}stopped, last sign of life {{ facts.worker.heartbeat_at|timesince }} ago{% else %}never started{% endif %}.{% for shop in facts.shops %} {{ shop.name }}: {% if shop.reading_paused %}paused{% elif shop.backoff_until and shop.error_streak %}waiting after errors{% else %}not waiting{% endif %}{% if shop.last_ok_at %}, last good read {{ shop.last_ok_at|timesince }} ago{% endif %}.{% endfor %} {{ facts.marked|number }} eBay items were marked out of stock in the last day.</p>
+    <ul class="facts note">
+      <li>Background reader: {% if facts.alive %}running, last sign of life {{ facts.worker.heartbeat_at|timesince }} ago{% elif facts.worker.heartbeat_at %}stopped, last sign of life {{ facts.worker.heartbeat_at|timesince }} ago{% else %}never started{% endif %}.</li>
+      {% for shop in facts.shops %}<li>{{ shop.name }}: {% if shop.reading_paused %}paused{% elif shop.backoff_until and shop.error_streak %}waiting after errors{% else %}not waiting{% endif %}{% if shop.last_ok_at %}, last good read {{ shop.last_ok_at|timesince }} ago{% endif %}{% if shop.waiting %}, next read due for {{ shop.next_read_at|timesince }}{% elif shop.next_read_at %}, next read at {{ shop.next_read_at|time:"H:i" }}{% endif %}.</li>{% endfor %}
+      <li>Last item check: {% if facts.check.at %}{{ facts.check.at|timesince }} ago, {{ facts.check.asked|number }} asked about: {{ facts.check.in_stock|number }} in stock, {{ facts.check.gone|number }} gone{% if facts.check.left %}, {{ facts.check.left|number }} not reached{% endif %}{% else %}none noted yet{% endif %}.</li>
+      {% if facts.check.problem_at %}<li>Last problem, {{ facts.check.problem_at|timesince }} ago: {{ facts.check.problem }}</li>{% endif %}
+      <li>Ended list: {{ facts.ended|number }} item{{ facts.ended|pluralize }} eBay said had ended, not asked about again for {{ facts.ended_days }} days{% if facts.on_list %}, {{ facts.on_list|number }} of them in stock{% endif %}.</li>
+      <li>Marked out of stock in the last day: {{ facts.marked|number }}.</li>
+    </ul>
     <form method="post" class="inline">{% csrf_token %}<input type="hidden" name="action" value="try_again"><input type="submit" value="Try eBay again now"></form>
   </section>
   {% endif %}

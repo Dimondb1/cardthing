@@ -6744,6 +6744,30 @@ button"). One page, linked from the Admin home:
   the cheapest".
 - `ebay.seller_rules` falls back to the defaults if the database cannot
   answer, so the rules can never be what stops eBay's checks.
+- The why box also lists the facts behind it, one a line: the reader,
+  eBay's last good read and when its next read is due (or how long it has
+  been due), the last item check (asked about, in stock, gone, not reached)
+  and the last problem one hit (`ebay.note_check`, kept in the shared cache
+  under `ebay:last-check`), the size of the ended list and how many of its
+  items are in stock. Reasons added: eBay's read due over 30 minutes without
+  starting, the last check stopped by a problem (eBay not answering, the
+  day's lookups used, or an error nobody foresaw), items in stock with no
+  item number in their link, and items in stock on the ended list.
+
+**Why eBay stopped updating, 16 Nov 2026.** Two faults stopped eBay's item
+checks with no error anywhere:
+
+- A shop due a read is not probed, since its read sees every listing. eBay
+  is due its read every hour (the daily search, handed back the rest of the
+  day), and while that read could not start (another command holding the
+  import lock) every eBay check waited with it. eBay's checks now go on
+  while its read is waiting (`Worker.plan`); while eBay is actually being
+  read they still wait, one job per shop.
+- An item eBay once said had ended was never checked again, even after the
+  daily search found it in stock, so its price stopped counting four hours
+  after each search. Such an item is now checked like any other and leaves
+  the ended list once eBay shows it (`ebay.check_listings`,
+  `ebay.forget_ended`); an ended item out of stock is still left alone.
 - Seller rules: the least positive feedback (50 to 100%) and number of
   ratings a seller needs, saved in `EbaySettings` and used for every offer
   (`ebay.seller_rules`, cached, cleared on save). The defaults are the old

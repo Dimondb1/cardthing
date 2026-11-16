@@ -107,6 +107,42 @@ def note_ended(item_ids):
     cache.set(ENDED_KEY, kept, None)
 
 
+def forget_ended(item_ids):
+    """Take items off the ended list: eBay has shown them again, so its word that they had ended was wrong or out of
+    date (the daily search found them in stock)."""
+    gone = set(item_ids) & set(ended_items())
+    if gone:
+        cache.set(ENDED_KEY, {item: at for item, at in ended_items().items() if item not in gone}, None)
+
+
+# How the background reader's last checks of eBay's items went (note_check), for the eBay health page: the last
+# check that got an answer and the last problem, kept apart so a problem shows until a check works again. The owner,
+# 16 Nov 2026, with no eBay price counting and nothing on the page to say why: "something is wrong".
+CHECK_KEY = "ebay:last-check"
+
+
+def note_check(asked=0, in_stock=0, gone=0, left=0, problem="", now=None):
+    """Note a check: how many items were asked about, found in stock, found gone and not reached, or the problem
+    that stopped it."""
+    now = now or timezone.now()
+    try:
+        kept = last_check()
+        if problem:
+            kept.update(problem=problem[:300], problem_at=now.isoformat())
+        else:
+            kept.update(at=now.isoformat(), asked=asked, in_stock=in_stock, gone=gone, left=left)
+        cache.set(CHECK_KEY, kept, None)
+    except Exception:  # noqa: BLE001 - the page's figures are a courtesy; they must never stop a check
+        logger.warning("eBay: could not note the check for the eBay health page")
+
+
+def last_check():
+    """What note_check kept: {"at", "asked", "in_stock", "gone", "left", "problem", "problem_at"}, each there once
+    noted, the times as ISO text."""
+    found = cache.get(CHECK_KEY)
+    return dict(found) if isinstance(found, dict) else {}
+
+
 def halves(batch):
     """A batch eBay refused because one of its items has ended, as two halves to ask about instead: about ten
     lookups find the ended one in twenty, where asking for each alone took twenty-one."""
@@ -118,6 +154,7 @@ def forget_live():
     """Drop the kept token, allowance and ended items (tests, and a run that got a new keyset)."""
     _live.update(token="", token_until=0.0, bulk_left=None, bulk_asked=None)
     cache.delete(ENDED_KEY)
+    cache.delete(CHECK_KEY)
 
 
 class EbayError(Exception):
@@ -215,7 +252,10 @@ def check_listings(listings, request=None, clock=None, pause=None, sleep=None, s
             wanted.setdefault(item_id, []).append(listing)
     results = {}
     ended = ended_items()
-    for item_id in [item_id for item_id in wanted if item_id in ended]:
+    # An item eBay said had ended is not asked about again, unless the daily search has found it in stock since: then
+    # it is asked about like any other, and leaves the list once eBay shows it.
+    for item_id in [item_id for item_id in wanted if item_id in ended
+                    and not any(listing.availability in Listing.BUYABLE for listing in wanted[item_id])]:
         for listing in wanted.pop(item_id):
             results[listing.pk] = (listing.price, Listing.Availability.OUT_OF_STOCK, listing.delivery_cost)
     if not wanted:
@@ -234,6 +274,7 @@ def check_listings(listings, request=None, clock=None, pause=None, sleep=None, s
     ids = list(wanted)
     batches = [ids[start:start + BULK] for start in range(0, len(ids), BULK)]
     done = 0
+    shown = set()   # items eBay answered about: none of them has ended
     while done < len(batches):
         if stop is not None and stop():
             break
@@ -277,7 +318,9 @@ def check_listings(listings, request=None, clock=None, pause=None, sleep=None, s
         for item_id in batch:
             if item_id not in found:
                 gone(item_id)
+        shown |= found
         sleep(pause)
+    forget_ended(shown & set(ended))
     return results
 
 

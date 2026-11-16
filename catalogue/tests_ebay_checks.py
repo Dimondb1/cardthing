@@ -107,6 +107,10 @@ class CheckTests(WorkerTestCase):
         """The owner, 12 Nov 2026: "ebay hasn't updated in 8 hours". Every check of a batch holding an ended item asked
         about each of its twenty alone, again and again, and the day's allowance ran out."""
         self.check(FakeEbay([]))
+        # Out of stock, as the reader records it, and due its six-hourly look.
+        Listing.objects.filter(pk=self.row.pk).update(availability=Listing.Availability.OUT_OF_STOCK,
+                                                      last_checked=self.clock() - timedelta(hours=7))
+        self.row.refresh_from_db()
         api = FakeEbay([item(123)])
         found = self.check(api)
         self.assertEqual(found[self.row.pk][1], Listing.Availability.OUT_OF_STOCK)
@@ -114,6 +118,99 @@ class CheckTests(WorkerTestCase):
         # Nor is it planned: the reader leaves it to the daily run, which searches for a new listing.
         reader = self.make_worker(ebay_request=api)
         self.assertEqual(reader.plan(self.clock()), [])
+
+    def test_an_ended_item_the_daily_search_found_in_stock_again_is_checked_again(self):
+        """In stock and on the ended list, it was never checked between daily searches, so its price stopped counting
+        four hours after each (the owner, 16 Nov 2026, with no eBay price counting: "something is wrong")."""
+        ebay.note_ended(["v1|123|0"])
+        api = FakeEbay([item(123, price="79.99")])
+        reader = self.make_worker(ebay_request=api)
+        [task] = reader.plan(self.clock())
+        self.assertEqual(task.listings, [self.row.pk])
+        now = self.clock()
+        reader.run_job(worker.Job(task, now, now + worker.PROBE_DEADLINE))
+        self.row.refresh_from_db()
+        self.assertEqual((self.row.price, self.row.availability), (Decimal("79.99"), Listing.Availability.IN_STOCK))
+        self.assertNotIn("v1|123|0", ebay.ended_items())   # eBay showed it: off the list
+
+    def test_ebay_due_a_read_that_cannot_start_still_has_its_items_checked(self):
+        """The owner, 16 Nov 2026: the reader running, eBay neither paused nor waiting, 5,000 lookups unused and no eBay
+        price counting. eBay's hourly read was due and could not start while another command held the import lock, and
+        a shop about to be read is not probed, so every eBay check waited with it."""
+        import fcntl
+        import os
+
+        from .tests_worker import HeldExecutor
+
+        Retailer.objects.filter(pk=self.ebay.pk).update(next_read_at=self.clock() - timedelta(hours=3))
+        held = os.open(self.import_lock, os.O_RDONLY | os.O_CREAT)
+        self.addCleanup(os.close, held)
+        fcntl.flock(held, fcntl.LOCK_EX)
+        executor = HeldExecutor()
+        reader = self.make_worker(executor=executor, ebay_request=FakeEbay([item(123)]))
+        reader.queue = reader.plan(self.clock())
+        self.assertEqual([(t.kind, t.retailer_id) for t in reader.queue],
+                         [(worker.SHOP_READ, self.ebay.pk), (worker.PROBE, self.ebay.pk)])
+        reader.dispatch(self.clock())
+        self.assertEqual([(t.kind, t.retailer_id) for t in executor.jobs], [(worker.PROBE, self.ebay.pk)])
+        # The lock let go: the read goes first, and its checks wait for it, one job for eBay at a time.
+        fcntl.flock(held, fcntl.LOCK_UN)
+        executor.jobs.clear()
+        reader.running.clear()
+        reader.queue = reader.plan(self.clock())
+        reader.dispatch(self.clock())
+        self.assertEqual([(t.kind, t.retailer_id) for t in executor.jobs], [(worker.SHOP_READ, self.ebay.pk)])
+        self.assertEqual([t.kind for t in reader.queue], [worker.PROBE])
+        # While eBay is being read, its checks are not planned.
+        self.assertEqual([t.kind for t in reader.plan(self.clock())], [])
+        # Any other shop about to be read is still not probed: its read sees every listing.
+        shop = self.shop("Due Shop", due=True)
+        self.listing(self.product("shop-box", views=3), shop, 30)
+        reader.running.clear()
+        reader.import_lock.release()
+        self.assertNotIn((worker.PROBE, shop.pk), [(t.kind, t.retailer_id) for t in reader.plan(self.clock())])
+
+    def test_each_check_is_noted_for_the_ebay_health_page(self):
+        api = FakeEbay([item(123)])
+        reader = self.make_worker(ebay_request=api)
+
+        def run():
+            [task] = reader.plan(self.clock())
+            now = self.clock()
+            reader.run_job(worker.Job(task, now, now + worker.PROBE_DEADLINE))
+
+        def check():
+            run()
+            Listing.objects.filter(pk=self.row.pk).update(last_checked=self.clock() - timedelta(hours=3))
+            reader.probe_failed.clear()
+            return ebay.last_check()
+
+        noted = check()
+        self.assertEqual((noted["asked"], noted["in_stock"], noted["gone"], noted["left"]), (1, 1, 0, 0))
+        self.assertNotIn("problem", noted)
+        api.fail = "eBay API 503: Service Unavailable"
+        noted = check()
+        self.assertEqual(noted["problem"], "eBay did not answer: eBay API 503: Service Unavailable")
+        self.assertEqual(noted["asked"], 1)   # the last check that got an answer is kept
+        Retailer.objects.filter(pk=self.ebay.pk).update(backoff_until=None, error_streak=0)
+
+        def broken(url, headers, data=None):
+            raise RuntimeError("boom")
+
+        reader.ebay_request = broken
+        ebay.forget_live()
+        with self.assertLogs("catalogue.worker", "ERROR"):
+            noted = check()
+        self.assertEqual(noted["problem"], "The check stopped on an unexpected error: RuntimeError: boom")
+        # The note is a courtesy: a cache that cannot answer never stops a check saving what eBay said.
+        from unittest import mock
+
+        reader.ebay_request = FakeEbay([item(123, price="77.00")])
+        with mock.patch.object(ebay, "last_check", side_effect=OSError("disk full")), \
+                self.assertLogs("catalogue.ebay", "WARNING"):
+            run()
+        self.row.refresh_from_db()
+        self.assertEqual(self.row.price, Decimal("77.00"))
 
     def test_one_ended_item_in_twenty_costs_about_ten_lookups_not_twenty_one(self):
         rows, items = [], []

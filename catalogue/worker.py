@@ -447,7 +447,7 @@ class Worker:
 
     def plan(self, now):
         """Every job due now: the due reads, then the rest highest priority first. A shop whose read has room
-        to start is neither probed nor pulsed. Reads nothing from any shop."""
+        to start is neither probed nor pulsed, except eBay, whose checks go on. Reads nothing from any shop."""
         if crawl.all_paused():
             return []
         with self.lock:
@@ -474,8 +474,12 @@ class Worker:
                     continue
                 website_free -= 1
             chosen.append(task)
-        # A shop being read, or about to be, is neither probed nor pulsed: the read sees every listing.
-        skip = set(busy) | {t.retailer_id for t in chosen}
+        # A shop being read, or about to be, is neither probed nor pulsed: the read sees every listing. Not eBay about
+        # to be read: its read is the daily search, handed back the rest of the day, and never sees every listing, and
+        # its checks have their own allowance. A read of it that could not start (another command holding the import
+        # lock) kept every eBay check waiting with it, so no eBay price counted (the owner, 16 Nov 2026: "something
+        # is wrong"). While eBay is being read its checks wait, as any shop's do: one job per shop.
+        skip = set(busy) | {t.retailer_id for t in chosen if t.source_type != Retailer.Source.EBAY}
         # One job per shop. A shop with listings to check this minute is pulsed at the next plan, unless its
         # pulse is late (PULSE_LATE): then the pulse goes first and the probe waits a minute, so a shop with
         # so many listings due that it has a probe every minute is still looked at for pre-orders.
@@ -549,9 +553,12 @@ class Worker:
         hot, warm, cold = [], [], []
         for row in rows:
             # An eBay listing is checked through eBay's item lookup, which needs the item's id from its address, and
-            # never once eBay has said the item ended.
-            if row[3] == Retailer.Source.EBAY and (not ebay.item_id_of(row[6]) or ebay.item_id_of(row[6]) in ended):
-                continue
+            # never once eBay has said the item ended, unless the daily search has found it in stock since
+            # (ebay.check_listings asks about those again).
+            if row[3] == Retailer.Source.EBAY:
+                item_id = ebay.item_id_of(row[6])
+                if not item_id or (item_id in ended and row[7] not in Listing.BUYABLE):
+                    continue
             points = scores.get(row[1], 0)
             if points >= heat.HOT:
                 hot.append((points, row))
@@ -790,7 +797,17 @@ class Worker:
         """eBay's listings of the products that matter, twenty a request through eBay's bulk item lookup, which has
         its own daily allowance (ebay.check_listings), so a price eBay shows is as fresh as any shop's between the
         daily runs. eBay not answering backs the marketplace off like a failed read; its allowance run down only
-        makes the listings wait. The owner, 6 Nov 2026: "20 hours ago isn't good enough"."""
+        makes the listings wait. The owner, 6 Nov 2026: "20 hours ago isn't good enough".
+
+        How each check went is noted for the eBay health page (ebay.note_check), an error nobody foresaw too, so a
+        check that keeps failing shows there rather than only in the log."""
+        try:
+            return self.check_ebay_items(job, listings)
+        except Exception as exc:
+            ebay.note_check(problem=f"The check stopped on an unexpected error: {type(exc).__name__}: {exc}")
+            raise
+
+    def check_ebay_items(self, job, listings):
         from .signals import clear_list_caches
 
         retailer_id = job.task.retailer_id
@@ -806,13 +823,18 @@ class Worker:
             )
         except ebay.AllowanceUsed as exc:
             logger.warning("eBay: %s", exc)
+            ebay.note_check(problem=str(exc))
             with self.lock:
                 for listing in wanted:
                     self.probe_failed[listing.pk] = now
             return True
         except ebay.EbayError as exc:
+            ebay.note_check(problem=f"eBay did not answer: {exc}")
             self.back_off(retailer_id, self.clock(), crawl.http_status(str(exc)), f"Checking eBay listings: {exc}")
             return False
+        stock = [availability for _price, availability, *_postage in found.values()]
+        ebay.note_check(asked=len(wanted), in_stock=sum(1 for a in stock if a in Listing.BUYABLE),
+                        gone=sum(1 for a in stock if a not in Listing.BUYABLE), left=len(wanted) - len(found))
         with self.lock:
             for listing in wanted:
                 if listing.pk not in found:

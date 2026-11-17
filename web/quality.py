@@ -16,6 +16,7 @@ number of products.
 
 from collections import Counter
 from datetime import timedelta
+from decimal import Decimal
 
 from django.contrib import admin
 from django.contrib.admin.views.decorators import staff_member_required
@@ -27,7 +28,7 @@ from django.views.decorators.http import require_GET
 from catalogue import checks, languages, not_products
 from catalogue.classify import tidy_name
 from catalogue.management.commands.merge_duplicates import (
-    CERTAINTY_LABELS, certainty, duplicate_pairs, shown_products, undone_merges, why_not_merge,
+    CERTAIN, CERTAINTY_LABELS, LIKELY, certainty, duplicate_pairs, shown_products, undone_merges, why_not_merge,
 )
 from catalogue.matching import MOJIBAKE, own_name_off, set_codes
 from catalogue.models import CheckAnswer, ClaudeAsk, Game, Listing, Product, ProductAlias, ProductSet, RemovedProduct
@@ -38,7 +39,11 @@ from guides.access import not_for_editors
 from . import sitemaps
 
 EXAMPLES = 5               # examples shown beside a count
-PAIRS_LISTED = 40          # possible duplicate pairs the log lists
+EXAMPLES_PER_REASON = 6    # possible duplicate pairs shown for each reason they wait
+SHOP_PAIRS_LISTED = 40     # same-name pairs a shop lists both of, shown with that shop's two listings
+KINDS_LISTED = 8           # pairs of product kinds shown for the pairs filed under different kinds
+CHUNK = 400                # ids in one query, well inside SQLite's limit
+CLOSE_PRICE = Decimal("0.10")   # two prices within a tenth of the dearer one are about the same price
 LONG_NAME = 80             # characters past which a name is called long
 RECENT_DAYS = 30
 
@@ -80,40 +85,118 @@ def offered(total):
     ]
 
 
+SHOP_REASONS = ("a shop sells both", "a shop's price would leave the site")
+# How alike the two names of a pair a shop stands in the way of are, as the reason says it.
+ALIKE = {CERTAIN: "the names are the same product", LIKELY: "the names are nearly the same"}
+SET_ONLY = "the names only share a set or code"
+
+
+def kept_apart_by():
+    """{frozenset of two product pks: whether the owner said so} for the pairs someone said are not the same and
+    whose answer stands. Claude's answers are kept apart too, and the page says whose each is. One query."""
+    rows = CheckAnswer.objects.filter(kind=CheckAnswer.Kind.APART, undone_at__isnull=True, product__isnull=False,
+                                      other__isnull=False).values_list("product_id", "other_id", "by_owner")
+    said = {}
+    for product_id, other_id, by_owner in rows:
+        pair = frozenset((product_id, other_id))
+        said[pair] = said.get(pair, False) or by_owner
+    return said
+
+
 def why_it_waits(keep, other, apart, undone, shops):
-    """Why a possible duplicate pair has not merged by itself, in the owner's words."""
+    """(why a possible duplicate pair has not merged by itself, in the owner's words; whether the rules call the
+    two names one product while a shop stands in the way)."""
     pair = frozenset((keep.pk, other.pk))
     if pair in undone:
-        return "Its merge was undone"
+        return "Its merge was undone", False
     if pair in apart:
-        return "You said they are not the same"
+        return ("You said they are not the same" if apart[pair] else "Claude said they are not the same"), False
     different = why_not_merge(keep, other)
     if different:
-        return f"The names differ: {different}"
+        return f"The names differ: {different}", False
     if languages.product_language(keep) != languages.product_language(other):
-        return "Their languages may differ"
+        return "Their languages may differ", False
     if keep.product_type != other.product_type:
-        return "They are filed under different kinds of product"
+        return "They are filed under different kinds of product", False
     blocked = checks.shops_in_the_way(shops.get(keep.pk, {}), shops.get(other.pk, {}))
     if blocked:
-        return blocked[0].upper() + blocked[1:]
-    return CERTAINTY_LABELS[certainty(keep, other)]
+        level = certainty(keep, other)
+        return f"{blocked[0].upper()}{blocked[1:]}, and {ALIKE.get(level, SET_ONLY)}", level in ALIKE
+    return CERTAINTY_LABELS[certainty(keep, other)], False
+
+
+def money(value):
+    return f"£{value:,.2f}"
+
+
+def said_of(listing, now):
+    """One shop listing as the log gives it: its price, its stock and how long ago it was checked."""
+    days = (now - listing["last_checked"]).days
+    checked = "today" if days < 1 else f"{days} day{'s' if days != 1 else ''} ago"
+    return f"{money(listing['price'])} {Listing.Availability(listing['availability']).label.lower()}, checked {checked}"
+
+
+def shop_evidence(pairs, now):
+    """For the pairs the rules call one product but a shop lists both of: what that shop's two listings say, so
+    the owner can see whether it is one item listed twice or two items. {"kinds": [(label, pairs)], "listed":
+    [{"keep", "other", "shop", "first", "second"}]}. One query for each CHUNK products."""
+    ids = sorted({product.pk for pair in pairs for product in pair})
+    listings = {}
+    for start in range(0, len(ids), CHUNK):
+        rows = (Listing.objects.filter(product_id__in=ids[start:start + CHUNK], is_active=True)
+                .exclude(retailer__source_type__in=MARKETPLACES)
+                .values("product_id", "retailer_id", "retailer__name", "price", "availability", "last_checked"))
+        for row in rows:
+            listings.setdefault(row["product_id"], {})[row["retailer_id"]] = row
+    kinds, listed = Counter(), []
+    for keep, other in pairs:
+        ours, theirs = listings.get(keep.pk, {}), listings.get(other.pk, {})
+        for shop in sorted(set(ours) & set(theirs)):
+            first, second = ours[shop], theirs[shop]
+            on_sale = [row["availability"] in Listing.BUYABLE for row in (first, second)]
+            low, high = sorted((first["price"], second["price"]))
+            close = high - low <= high * CLOSE_PRICE
+            if all(on_sale):
+                kind = "Both on sale at about the same price" if close else "Both on sale at different prices"
+            elif any(on_sale):
+                kind = "One on sale, the other sold out"
+            else:
+                kind = "Both sold out"
+            kinds[kind] += 1
+            if len(listed) < SHOP_PAIRS_LISTED:
+                listed.append({"keep": keep, "other": other, "shop": first["retailer__name"], "kind": kind,
+                               "first": said_of(first, now), "second": said_of(second, now)})
+            break   # one shop is enough to say why the pair waits
+    return {"kinds": kinds.most_common(), "listed": listed}
 
 
 def duplicates(products, now):
-    """The possible duplicate pairs among ``products`` and why each waits, and the merges of the last RECENT_DAYS
-    days. Four queries."""
-    apart, undone, shops = checks.kept_apart(), undone_merges(), checks.shop_listings()
-    pairs = [(keep, other, why_it_waits(keep, other, apart, undone, shops)) for keep, other in duplicate_pairs(products)]
-    reasons = Counter(why for _keep, _other, why in pairs)
+    """The possible duplicate pairs among ``products`` and why each waits, with a few examples of each reason, what
+    the shops say of the pairs the rules call one product, and the merges of the last RECENT_DAYS days. A handful
+    of queries."""
+    apart, undone, shops = kept_apart_by(), undone_merges(), checks.shop_listings()
+    reasons, by_reason, kinds, same_name = Counter(), {}, Counter(), []
+    pairs = duplicate_pairs(products)
+    for keep, other in pairs:
+        why, held_by_shop = why_it_waits(keep, other, apart, undone, shops)
+        reasons[why] += 1
+        some = by_reason.setdefault(why, [])
+        if len(some) < EXAMPLES_PER_REASON:
+            some.append({"keep": keep, "other": other})
+        if held_by_shop:
+            same_name.append((keep, other))
+        if keep.product_type != other.product_type and why.startswith("They are filed"):
+            kinds[" and ".join(sorted((keep.type_name, other.type_name)))] += 1
     merges = CheckAnswer.objects.filter(kind=CheckAnswer.Kind.MERGE, created_at__gte=now - timedelta(days=RECENT_DAYS))
     made = merges.aggregate(
         hourly=Count("pk", filter=Q(by_owner=False, ask__isnull=True)), claude=Count("pk", filter=Q(ask__isnull=False)),
         owner=Count("pk", filter=Q(by_owner=True, ask__isnull=True)), undone=Count("pk", filter=Q(undone_at__isnull=False)))
     return {
         "pairs": len(pairs),
-        "reasons": reasons.most_common(),
-        "listed": [{"keep": keep, "other": other, "why": why} for keep, other, why in pairs[:PAIRS_LISTED]],
+        "reasons": [{"why": why, "count": count, "some": by_reason[why]} for why, count in reasons.most_common()],
+        "kinds": kinds.most_common(KINDS_LISTED),
+        "same_name": len(same_name),
+        "shops": shop_evidence(same_name, now),
         "merges": [(f"Merged by the hourly tidy in the last {RECENT_DAYS} days", made["hourly"]),
                    ("Merged by Claude", made["claude"]), ("Merged by you", made["owner"]),
                    ("Of those, undone", made["undone"])],
@@ -231,12 +314,21 @@ def log_text(data):
     section("What search engines are offered", data["offered"])
     duplicate = data["duplicates"]
     section("Possible duplicates", [("Pairs waiting", duplicate["pairs"]), *duplicate["merges"]])
-    out.append("Why each pair waits:")
-    out.extend(f"    {count} x {why}" for why, count in duplicate["reasons"])
-    if duplicate["listed"]:
-        out.append(f"The first {len(duplicate['listed'])} pairs:")
-        for pair in duplicate["listed"]:
-            out.append(f"    {pair['keep'].name}  |  {pair['other'].name}  |  {pair['why']}")
+    out.append("Why each pair waits, with a few of each:")
+    for reason in duplicate["reasons"]:
+        out.append(f"    {reason['count']} x {reason['why']}")
+        out.extend(f"        {pair['keep'].name}  |  {pair['other'].name}" for pair in reason["some"])
+    if duplicate["kinds"]:
+        out.append("Filed under different kinds, the commonest:")
+        out.extend(f"    {count} x {kinds}" for kinds, count in duplicate["kinds"])
+    out.extend(["", "SAME PRODUCT BY THE RULES, BUT A SHOP LISTS BOTH",
+                f"Pairs: {duplicate['same_name']}"])
+    out.extend(f"{kind}: {count}" for kind, count in duplicate["shops"]["kinds"])
+    if duplicate["shops"]["listed"]:
+        out.append(f"The first {len(duplicate['shops']['listed'])}, with what that shop says of each page:")
+        for pair in duplicate["shops"]["listed"]:
+            out.append(f"    {pair['keep'].name}  |  {pair['other'].name}")
+            out.append(f"        {pair['shop']}: {pair['first']}  |  {pair['second']}  ({pair['kind']})")
     listed("Names", data["names"])
     listed("Filing", data["filing"])
     out.append("By language: " + ", ".join(f"{language} {count}" for language, count in data["languages"]))

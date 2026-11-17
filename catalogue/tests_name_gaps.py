@@ -416,6 +416,9 @@ class RepeatedWordingTests(SimpleTestCase):
             ("Emperors in the New World Booster Box Booster Box", "Emperors in the New World Booster Box"),
             ("Prismatic Evolutions Elite Trainer Box Pokémon TCG Elite Trainer Box", "Prismatic Evolutions Elite Trainer Box"),
             ("Fates Collide Elite Trainer Box Pokemon TCG Elite Trainer Box", "Fates Collide Elite Trainer Box"),
+            # A shop's "UK" after the repeat goes with it (the owner's catalogue log, 17 Nov 2026).
+            ("Mega Evolution Perfect Order Pokémon Centre Elite Trainer Box Elite Trainer Box UK",
+             "Mega Evolution Perfect Order Pokémon Centre Elite Trainer Box"),
         ):
             with self.subTest(name=name):
                 self.assertEqual(tidy_name(name), tidy)

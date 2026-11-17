@@ -43,10 +43,24 @@
       {% for label, count in data.duplicates.merges %}<li><span>{{ label }}</span><b>{{ count }}</b></li>{% endfor %}
     </ul>
     {% if data.duplicates.reasons %}<h3>Why each pair waits</h3>
-    <ul class="facts">{% for why, count in data.duplicates.reasons %}<li><span>{{ why }}</span><b>{{ count }}</b></li>{% endfor %}</ul>{% endif %}
-    {% if data.duplicates.listed %}<h3>The first {{ data.duplicates.listed|length }} pairs</h3>
-    <ul class="rows">{% for pair in data.duplicates.listed %}
-      <li><a href="{{ pair.keep.get_absolute_url }}" target="_blank" rel="noopener">{{ pair.keep.name }}</a> and <a href="{{ pair.other.get_absolute_url }}" target="_blank" rel="noopener">{{ pair.other.name }}</a><span class="why">{{ pair.why }}</span></li>{% endfor %}
+    <ul class="rows">{% for reason in data.duplicates.reasons %}
+      <li><div class="head"><span>{{ reason.why }}</span><b>{{ reason.count }}</b></div>
+        <details><summary>A few of them</summary>{% for pair in reason.some %}<p class="some"><a href="{{ pair.keep.get_absolute_url }}" target="_blank" rel="noopener">{{ pair.keep.name }}</a> and <a href="{{ pair.other.get_absolute_url }}" target="_blank" rel="noopener">{{ pair.other.name }}</a></p>{% endfor %}</details></li>{% endfor %}
+    </ul>{% endif %}
+    {% if data.duplicates.kinds %}<h3>Filed under different kinds, the commonest</h3>
+    <ul class="facts">{% for kinds, count in data.duplicates.kinds %}<li><span>{{ kinds }}</span><b>{{ count }}</b></li>{% endfor %}</ul>{% endif %}
+  </section>
+
+  <section>
+    <h2>Same product by the rules, but a shop lists both</h2>
+    <p class="note">The rules call these two pages one product, yet one shop has a listing on each, so they are not merged by themselves. What that shop says of each page shows which it is: one item listed twice, an old page of the same item, or two different items.</p>
+    <ul class="facts">
+      <li><span>Pairs</span><b>{{ data.duplicates.same_name }}</b></li>
+      {% for kind, count in data.duplicates.shops.kinds %}<li><span>{{ kind }}</span><b>{{ count }}</b></li>{% endfor %}
+    </ul>
+    {% if data.duplicates.shops.listed %}<h3>The first {{ data.duplicates.shops.listed|length }}</h3>
+    <ul class="rows">{% for pair in data.duplicates.shops.listed %}
+      <li><a href="{{ pair.keep.get_absolute_url }}" target="_blank" rel="noopener">{{ pair.keep.name }}</a> and <a href="{{ pair.other.get_absolute_url }}" target="_blank" rel="noopener">{{ pair.other.name }}</a><span class="why">{{ pair.shop }}: {{ pair.first }} and {{ pair.second }}. {{ pair.kind }}.</span></li>{% endfor %}
     </ul>{% endif %}
   </section>
 

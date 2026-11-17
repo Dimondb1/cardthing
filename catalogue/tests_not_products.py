@@ -50,6 +50,8 @@ NOT_PRODUCTS = (
     "Blue-Eyes White Dragon V2 Starter Deck Kaiba Reloaded English Light Played Normal",
     "25th Anniversary Rarity Collection RA01-EN001 Lava Golem",
     "CBB1C Chinese Shiny 6 Card Lot Quaxly Fuecoco Sprigatito",
+    # From the owner's catalogue log of 17 Nov 2026: a card's number written with a space.
+    "Legendary Collection 2 The Duel Academy Years Elemental HERO Glow Neos LCGX EN061 As New Rare card",
 )
 # Products whose names come close to a rule and must stay.
 PRODUCTS = (
@@ -147,8 +149,14 @@ class SuspectTests(Base):
                          ("claude", "Its name has no word for a kind of product"))
         self.assertEqual(not_products.suspicion("Chinese Gem Pack Badge Set"),
                          ("claude", "Its name has a word merchandise uses"))
+        # A place at a shop's event, with a kind word in its name (the owner's catalogue log, 17 Nov 2026).
+        self.assertEqual(not_products.suspicion("One Piece: PEB 01 Box Sealed Battle"),
+                         ("claude", "Its name has a word a shop's event uses"))
         for name in ("Surging Sparks Booster Box", "Reign of Jafar Illumineer's Quest", "Star Trek Draft Night",
-                     "Holiday Calendar 2025", "Prismatic Evolutions Elite Trainer Box", "Pokemon Trading Card Game Classic"):
+                     "Holiday Calendar 2025", "Prismatic Evolutions Elite Trainer Box", "Pokemon Trading Card Game Classic",
+                     # Products the same log showed bound for Claude for nothing.
+                     "Mega Evolution Pitch Black Premium Checklane Luxray", "Shimmering Skies Gateway",
+                     "Paradox Veil csv6c Slim", "One Piece Sealed Battle Kit Vol.1"):
             self.assertIsNone(not_products.suspicion(name), name)
 
     def test_claude_takes_down_what_it_is_sure_is_no_product_with_undo(self):

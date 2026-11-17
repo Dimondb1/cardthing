@@ -52,8 +52,16 @@ class QualityPageTests(TestCase):
             "With no price to quote now": 1})
         duplicates = data["duplicates"]
         self.assertEqual(duplicates["pairs"], 1)
-        self.assertEqual(duplicates["reasons"], [("A shop sells both", 1)])
-        self.assertEqual({duplicates["listed"][0]["keep"].pk, duplicates["listed"][0]["other"].pk}, {self.box.pk, self.twin.pk})
+        reason = duplicates["reasons"][0]
+        self.assertEqual((reason["why"], reason["count"]), ("A shop sells both, and the names are the same product", 1))
+        self.assertEqual({reason["some"][0]["keep"].pk, reason["some"][0]["other"].pk}, {self.box.pk, self.twin.pk})
+        # What that shop says of each page: here both are on sale at about the same price, one item listed twice.
+        self.assertEqual(duplicates["same_name"], 1)
+        self.assertEqual(duplicates["shops"]["kinds"], [("Both on sale at about the same price", 1)])
+        listed = duplicates["shops"]["listed"][0]
+        self.assertEqual(listed["shop"], "Harbour Games")
+        self.assertEqual({listed["first"], listed["second"]},
+                         {"£119.95 in stock, checked today", "£125.00 in stock, checked today"})
         names = {label: (count, some) for label, count, some in data["names"]}
         self.assertEqual(names["Names carrying the name of a shop that lists them"],
                          (1, ["Heroines Edition Vol.2 Booster Pack Topaz Cards"]))
@@ -62,19 +70,57 @@ class QualityPageTests(TestCase):
         self.assertEqual((filing["Filed under no set"], filing["Of those, with one set code in the name (could be filed)"]), (2, 1))
         self.assertEqual(dict(data["languages"]), {"English": 4, "Japanese": 1})
         self.assertEqual(dict(data["addresses"])["Old addresses that redirect to a live page"], 1)
-        self.assertContains(response, "A shop sells both")
+        self.assertContains(response, "A shop sells both, and the names are the same product")
+        self.assertContains(response, "Same product by the rules, but a shop lists both")
         self.assertContains(response, "Log to copy")
 
     def test_the_log_holds_the_whole_page_as_text(self):
         log = self.client.get(self.url).context["log"]
         self.assertTrue(log.startswith("RipRaptor catalogue quality, "))
         for line in ("A REAL COMPARISON", "In stock at two shops or more (a real comparison): 1", "POSSIBLE DUPLICATES",
-                     "Pairs waiting: 1", "    1 x A shop sells both",
-                     "Heroines Edition Vol.2 Booster Box  |  Heroines Edition Vol.2 Booster Display Box  |  A shop sells both",
+                     "Pairs waiting: 1", "    1 x A shop sells both, and the names are the same product",
+                     "SAME PRODUCT BY THE RULES, BUT A SHOP LISTS BOTH", "Pairs: 1",
+                     "Both on sale at about the same price: 1",
+                     "(Both on sale at about the same price)",
                      "Names carrying the name of a shop that lists them: 1",
                      "    Heroines Edition Vol.2 Booster Pack Topaz Cards", "By language: English 4, Japanese 1",
                      "NOT PRODUCTS", "ADDRESSES"):
             self.assertIn(line, log)
+
+    def test_what_the_shop_says_tells_one_item_listed_twice_from_two_items(self):
+        """The owner's log of 17 Nov 2026 had 731 pairs under "A shop sells both": different theme decks beside
+        real duplicates, with nothing to tell them apart."""
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        # The same shop has the twin sold out and last checked a week ago: an old page of the same item.
+        Listing.objects.filter(product=self.twin, retailer=self.harbour).update(
+            availability=Listing.Availability.OUT_OF_STOCK, last_checked=timezone.now() - timedelta(days=7, hours=1))
+        shops = quality.gather()["duplicates"]["shops"]
+        self.assertEqual(shops["kinds"], [("One on sale, the other sold out", 1)])
+        self.assertIn("£125.00 out of stock, checked 7 days ago", {shops["listed"][0]["first"], shops["listed"][0]["second"]})
+        # Both on sale far apart in price: two items.
+        Listing.objects.filter(product=self.twin, retailer=self.harbour).update(
+            availability=Listing.Availability.IN_STOCK, price="1400.00")
+        self.assertEqual(quality.gather()["duplicates"]["shops"]["kinds"], [("Both on sale at different prices", 1)])
+        # Two decks of one set are not the same name: counted under their own reason, never here.
+        for name in ("Heroines Edition Vol.2 Starter Deck Nami", "Heroines Edition Vol.2 Starter Deck Robin"):
+            deck = make_product(self.set, name=name, product_type=Product.Type.DECK)
+            make_listing(deck, self.tollgate, price="12.00", url=f"https://tollgate.example/{deck.slug}")
+        data = quality.gather()["duplicates"]
+        self.assertEqual(data["same_name"], 1)
+
+    def test_a_pair_kept_apart_says_whose_answer_it_is(self):
+        from catalogue.models import CheckAnswer
+
+        Listing.objects.filter(product=self.twin).delete()
+        make_listing(self.twin, self.topaz, price="125.00")
+        answer = CheckAnswer.objects.create(kind=CheckAnswer.Kind.APART, product=self.box, other=self.twin,
+                                            what="Not the same", by_owner=False)
+        self.assertEqual(quality.gather()["duplicates"]["reasons"][0]["why"], "Claude said they are not the same")
+        CheckAnswer.objects.filter(pk=answer.pk).update(by_owner=True)
+        self.assertEqual(quality.gather()["duplicates"]["reasons"][0]["why"], "You said they are not the same")
 
     def test_the_sitemap_is_counted_as_the_sitemap_counts_it(self):
         # The sold-out Japanese box has never had a price recorded, so the sitemap leaves it out.

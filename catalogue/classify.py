@@ -115,8 +115,10 @@ NOT_PRODUCT_PATTERN = (
     # ("RA02-EN023", "CBLZ-EN065"), and a lot of cards ("Chinese Shiny 6 Card Lot").
     r"\b(?:english|french|german|spanish|italian|portuguese|japanese|korean|chinese)\s+(?:near mint|mint|excellent|"
     r"good|light(?:ly)? played|played|poor)\s+(?:normal|foil|holo|1st edition|first edition|unlimited)\s*$|"
-    r"\b(?:ultimate|ghost|starlight|platinum|starfoil) rare\b|\b[a-z0-9]{3,4}-(?:en|fr|de|it|sp|pt|jp|kr)\d{3}\b|"
-    r"\bcard lot\b"
+    r"\b(?:ultimate|ghost|starlight|platinum|starfoil) rare\b|\b[a-z0-9]{3,4}[- ](?:en|fr|de|it|sp|pt|jp|kr)\d{3}\b|"
+    # "... Elemental HERO Glow Neos LCGX EN061 As New Rare card" (the owner's catalogue log, 17 Nov 2026): the
+    # card's number written with a space, and a title that calls itself a card.
+    r"\b(?:common|rare) card\b|\bcard lot\b"
 )
 
 # A title with any of these is not a sealed product we list. A card number leads a single's title ("OP01-001",
@@ -466,7 +468,8 @@ GAME_WORDING = (r"(?:(?:pok[eé]mon|one piece|disney lorcana|lorcana|digimon|dra
 # The kind of product written twice, with or without the game between ("Final Fantasy Play Booster Box Booster Box",
 # "Prismatic Evolutions Elite Trainer Box Pokémon TCG Elite Trainer Box"): 114 live addresses repeated a phrase on
 # 17 Nov 2026. Two to four words, so one repeated word stays tidy_name's own rule.
-REPEATED_KIND = re.compile(rf"^(.*?\b(\w+(?: \w+){{1,3}}))(?: {GAME_WORDING})? \2$", re.I)
+# A shop's "UK" after the repeat goes with it ("... Elite Trainer Box Elite Trainer Box UK").
+REPEATED_KIND = re.compile(rf"^(.*?\b(\w+(?: \w+){{1,3}}))(?: {GAME_WORDING})? \2(?: uk)?$", re.I)
 # The game after the product ("Destined Rivals Booster Box Pokémon TCG").
 TRAILING_GAME = re.compile(rf"(?<=\w) {GAME_WORDING}$", re.I)
 

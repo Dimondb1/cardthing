@@ -64,12 +64,20 @@ KIND_WORDS = re.compile(
     r"\b(?:boosters?|box(?:es|set)?|packs?|packets?|decks?|decksets?|tins?|collections?|bundles?|sets?|displays?|"
     r"blisters?|cases?|kits?|binders?|troves?|calendars?|stadium|academy|toolkit|etb|upc|starters?|albums?|"
     r"portfolios?|chests?|vaults?|playsets?|gift|tuckbox|cartons?|draft night|illumineer'?s quest|"
-    r"proving grounds|classic)\b", re.I)
+    # A checklane blister, Lorcana's Gateway starter game and a Chinese box's size are products: the owner's
+    # catalogue log of 17 Nov 2026 had them among the names with no word for a kind, bound for Claude for nothing.
+    r"proving grounds|classic|checklane|gateway|slim|jumbo)\b", re.I)
 # Words merchandise uses, which a sealed product's name seldom does.
 MERCHANDISE = re.compile(
     r"\bcoins?\b|\bbadges?\b|\bmagnets?\b|\bmagazines?\b|\bpouch(?:es)?\b|\bdeck ?cases?\b|\bvinyl\b|\btop trumps\b|"
     r"\bkey ?rings?\b|\blanyards?\b|\bbottles?\b|\btowels?\b|\bblankets?\b|\bjigsaws?\b|\bboard games?\b|\btoys?\b|"
     r"\bvouchers?\b|\bgift cards?\b|\bmembership\b|\btreasure cup\b|\bleague night\b|\bgame night\b", re.I)
+
+# Words a shop's own event uses. One Piece's Sealed Battle Kit is a product; "PEB 01 Box Sealed Battle" was a
+# place at a shop's event, with a kind word in its name (the owner's catalogue log, 17 Nov 2026).
+EVENTS = re.compile(
+    r"\bsealed battle\b(?! kit)|\b(?:store|shop|club|league) (?:event|tournament|battle|night)\b|\btournament entry\b",
+    re.I)
 
 SCHEMA = {
     "type": "object",
@@ -124,6 +132,8 @@ def suspicion(name):
     for why, pattern in OWNERS:
         if pattern.search(name):
             return "owner", why
+    if EVENTS.search(name):
+        return "claude", "Its name has a word a shop's event uses"
     if MERCHANDISE.search(name):
         return "claude", "Its name has a word merchandise uses"
     if not KIND_WORDS.search(name):

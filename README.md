@@ -1665,7 +1665,10 @@ to remove these for me as long as it doesn't cost too much"):
   Claude is never asked. Magic's Mystery Booster is a set and is left alone.
 - **Suspects** (`catalogue/not_products.py`): a page whose name has no word
   for a kind of product ("One Piece Heroines Battle Vol.2" was a place at an
-  event) or a word merchandise uses (a coin, a badge, a magazine). Claude is
+  event), a word a shop's event uses ("PEB 01 Box Sealed Battle"; a Sealed
+  Battle Kit is a product) or a word merchandise uses (a coin, a badge, a
+  magazine). A checklane blister, Lorcana's Gateway and a slim or jumbo box
+  are kinds of product, so they are never suspects. Claude is
   shown the page and each shop's title, address and description, without
   the photo, and is asked once (twice at most, if the page's words change).
   Only an answer nothing could change takes a live page off the site: it is
@@ -1701,7 +1704,18 @@ products with no set (and how many of those carry a set code and could be
 filed) or no picture, and the products by language; the pages that may be
 no product; and the old addresses. Each count has a few examples, and the
 whole page is in a **Log to copy** box as plain text, counts and product
-names only. It only reads. It reads every product once and pairs the
+names only. The owner's first log (17 Nov 2026) had 731 pairs under "A shop
+sells both", different theme decks beside real duplicates with nothing to
+tell them apart, so that reason now says how alike the names are ("the
+names are the same product", "nearly the same", "only share a set or
+code"), and the pairs the rules call one product have a section of their
+own, **Same product by the rules, but a shop lists both**: what that
+shop's two listings say (price, stock, when last checked), counted as both
+on sale at about the same price (one item listed twice), both on sale at
+different prices (two items), one on sale and the other sold out (an old
+page of the same item) or both sold out. A pair kept apart says whether
+you or Claude said so, each reason shows a few of its pairs, and the pairs
+filed under different kinds name the kinds. It only reads. It reads every product once and pairs the
 duplicates as Things to check does, so it takes a few seconds: about a
 dozen queries however many products there are. Staff only, never indexed
 or cached. The dashboard report's "Pages the sitemap offers Google" now

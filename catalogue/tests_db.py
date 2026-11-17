@@ -361,5 +361,6 @@ class ShortTidyTransactionTests(TestCase):
         call_command("tidy_catalogue", stdout=out)
         self.assertIn("merged: Alpha  Booster Box -> Alpha Booster Box", out.getvalue())
         self.assertNotIn("removed (no shop lists it): Alpha Booster Box", out.getvalue())
-        self.assertFalse(Product.objects.filter(pk=spaced.pk).exists())
+        # Switched off, never deleted, so the merge can be undone (since 17 Nov 2026).
+        self.assertFalse(Product.objects.get(pk=spaced.pk).is_active)
         self.assertEqual(Listing.objects.get(pk=listing.pk).product_id, target.pk)

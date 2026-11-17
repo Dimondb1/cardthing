@@ -39,7 +39,8 @@ from django.utils import timezone
 from catalogue.languages import CHINESE, SIMPLIFIED, name as language_name, plain, product_language
 from catalogue.matching import (
     BOX_SIZES, KIND_MARKS, KIND_WORDS, VARIANT_WORDS, booster_kinds, chinese_code, code_key, codes_differ, contradiction,
-    identity_numbers, key_text, key_words, marked_different, match_key, naming_words, same_product, set_codes,
+    identity_numbers, key_text, key_words, marked_different, match_key, naming_words, same_letters, same_product, set_codes,
+    squash_key,
 )
 from catalogue.models import (
     DailyLowestPrice, Listing, OutboundClick, PreorderOpen, Product, ProductAlias, Restock, ShopProduct, StockAlert,
@@ -187,9 +188,9 @@ def merge_undoable(keep, others):
         "day_low": str(DailyLowestPrice.objects.filter(product=keep, date=today).values_list("price", flat=True).first() or ""),
     }
     for other in others:
-        entry = {"pk": other.pk, "listings": [], "restocks": [], "clicks": [], "alerts": [], "aliases": [],
-                 "pages": [], "found": [], "lows_added": [], "lows_lowered": [], "alias": None, "alias_was": None,
-                 "ean": other.ean, "active": other.is_active}
+        entry = {"pk": other.pk, "listings": [], "restocks": [], "preorders": [], "clicks": [], "alerts": [],
+                 "aliases": [], "pages": [], "found": [], "lows_added": [], "lows_lowered": [], "alias": None,
+                 "alias_was": None, "ean": other.ean, "active": other.is_active}
         shops = set(keep.listings.values_list("retailer_id", flat=True))
         for listing in other.listings.all():
             if listing.retailer_id not in shops:
@@ -204,7 +205,8 @@ def merge_undoable(keep, others):
                 DailyLowestPrice.objects.filter(product=keep, date=day).update(price=price)
                 entry["lows_lowered"].append([day.isoformat(), str(lows[day]), str(price)])
                 lows[day] = price
-        for model, key in ((Restock, "restocks"), (OutboundClick, "clicks"), (ShopPage, "pages")):
+        for model, key in ((Restock, "restocks"), (PreorderOpen, "preorders"), (OutboundClick, "clicks"),
+                           (ShopPage, "pages")):
             rows = model.objects.filter(product=other)
             entry[key] = list(rows.values_list("pk", flat=True))
             rows.update(product=keep)
@@ -283,6 +285,7 @@ def unmerge(note):
                         Listing.objects.filter(pk=listing.pk).update(product=other, changed_at=shown_change(timezone.now()))
             ShopProduct.objects.filter(pk=row.pk).update(suggested=other)
         Restock.objects.filter(pk__in=entry["restocks"], **on_keep).update(product=other)
+        PreorderOpen.objects.filter(pk__in=entry.get("preorders", []), **on_keep).update(product=other)
         OutboundClick.objects.filter(pk__in=entry["clicks"], **on_keep).update(product=other)
         ShopPage.objects.filter(pk__in=entry.get("pages", []), **on_keep).update(product=other)
         StockAlert.objects.filter(pk__in=entry["alerts"], **on_keep).update(product=other)
@@ -371,15 +374,17 @@ def duplicate_groups(loose=False):
     most listings, then one whose name says its language in words (the page then says it too), then one with
     an image, then the shortest name.
 
-    The loose rule gives a product two keys when it carries a Simplified Chinese code (its words, and its
-    code), and products sharing either are one group."""
+    A product has up to three keys: its words, its letters (matching.squash_key: "Super Heroes" and "Superheroes")
+    and, under the loose rule, its Simplified Chinese code. Products sharing any are one group."""
     groups = defaultdict(list)
     products = {}
     said = {}
     for product in shown_products():
-        keys = [loose_key(product.name, product.game.slug) if loose else merge_key(product.name, product.game.slug)]
-        if loose:
-            keys.append(chinese_code_key(product.name, product.game.slug))
+        # Each kind of key in its own place: the words, a Simplified Chinese code (the loose rule only), and the
+        # letters, which pair two names that differ only in where a shop put a space or a hyphen.
+        keys = [loose_key(product.name, product.game.slug) if loose else merge_key(product.name, product.game.slug),
+                chinese_code_key(product.name, product.game.slug) if loose else "",
+                squash_key(product.name, product.game.slug)]
         # The key drops set codes and language words, so the language keeps a Japanese box (sv11B)
         # from ever being merged into the English one of the same name.
         language = said[product.pk] = product_language(product)
@@ -449,6 +454,8 @@ def pair_keys(product, language):
 
     words: the loose key (merge_key without filler and series words), across product types, since shops
         file one product under two ("Gift Set" and "Gift Box"); the kind of product is in the key.
+    letters: the name with its spaces taken out (matching.squash_key): "Marvel Super Heroes Gift Bundle" and
+        "Marvel Superheroes Gift Bundle".
     chinese: a Pokémon name's one Simplified Chinese set code, size and kind (translations differ).
     code: a name's one set code, size and kind ("Eeveelutions Terastal Festival ex sv8a" and "Terastal
         Festival sv8a High Class Booster Box").
@@ -464,6 +471,7 @@ def pair_keys(product, language):
     family = language_family(language)
     keys = [
         ("words", product.game_id, family, loose_key(product.name, slug)),
+        ("letters", product.game_id, family, squash_key(product.name, slug)),
         ("chinese", product.game_id, family, chinese_code_key(product.name, slug)),
         ("code", product.game_id, family, code_key(product.name, slug)),
         ("barcode", product.game_id, family, ean_key(product.ean)),
@@ -568,6 +576,10 @@ def why_not_merge(keep, other, apart=frozenset()):
     ``apart`` holds the pairs the owner said are not the same (checks.kept_apart)."""
     if frozenset((keep.pk, other.pk)) in apart:
         return "you said they are not the same"
+    if same_letters(keep.name, other.name, game_slug_of(keep)):
+        # One name with the spaces in other places: nothing below can differ but how it reads a split word
+        # ("Jumpstart Booster" and "Jump Start Booster").
+        return ""
     if identity_numbers(keep.name, game_slug_of(keep)) != identity_numbers(other.name, game_slug_of(other)):
         return "their numbers differ"
     if codes_differ(keep.name, other.name, game_slug_of(keep)):
@@ -657,6 +669,8 @@ def certainty(keep, other):
     if keep.product_type != other.product_type:
         return POSSIBLE
     if merge_key(keep.name, keep.game.slug) == merge_key(other.name, other.game.slug) and merge_key(keep.name, keep.game.slug):
+        return CERTAIN
+    if same_letters(keep.name, other.name, keep.game.slug):
         return CERTAIN
     if loose_key(keep.name, keep.game.slug) == loose_key(other.name, other.game.slug) and loose_key(keep.name, keep.game.slug):
         return LIKELY

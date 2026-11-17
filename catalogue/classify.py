@@ -15,7 +15,7 @@ import unicodedata
 from dataclasses import dataclass
 
 from . import languages
-from .matching import SHOP_NOTES, chosen_option, expand
+from .matching import SHOP_NOTES, chosen_option, expand, mend
 
 # slug, name, short name, words that identify the game in a title, vendor or tag
 GAMES = [
@@ -247,7 +247,7 @@ NOT_SEALED_TYPES = {"single", "single card", "singles", "pokemon single", "playm
 
 # Words removed from the start or end of a title when building the clean name.
 PREFIXES = re.compile(
-    r"^(?:pok[eé]mon(?: tcg| trading card game)?|magic(?: the gathering|: the gathering)?|mtg|one piece(?: card game| tcg)?|"
+    r"^(?:pok[eé]mon(?: tcg| trading card game| card game)?|magic(?: the gathering|: the gathering)?|mtg|one piece(?: card game| tcg)?|"
     r"disney lorcana(?: tcg)?|lorcana(?: tcg)?|yu-gi-oh!?|yugioh|star wars(?::)? unlimited|flesh (?:and|&) blood(?: tcg)?|"
     r"digimon(?: card game| tcg)?|dragon ball super(?: card game| tcg)?|riftbound(?::)?(?: league of legends tcg)?|"
     r"cardfight!*(?: vanguard)?(?: overdress)?|weiss schwarz|weiß schwarz|union[- ]arena(?: tcg| card game)?)\s*[:\-–|]*\s*",
@@ -423,6 +423,8 @@ def drop_repeated_tail(name):
 
 SHOP_TAILS = re.compile(
     r"(?<=\S)\s*:?\s*[:\-–]?\s*(?:brand new(?: and| &)? sealed(?: box| inc .*)?|new (?:and|&) sealed(?: box)?|(?<![\[(])pre[- ]?order\b.*|"
+    # "Official Factory Sealed", "Factory Sealed Box", "100% Factory Sealed": every sealed product is.
+    r"(?:100% )?(?:official(?:ly)? )?factory(?:[- ]sealed)?(?: box)?|"
     r"in stock(?: now)?|sealed|\(margin\))\s*!*\s*$",
     re.I,
 )
@@ -460,9 +462,49 @@ TGC = re.compile(r"\btgc\b", re.I)
 TCG_NOTE = re.compile(r"\s*[(\[]\s*tcg\s*[)\]]|^\s*tcg\s*[:\-–|]\s*", re.I)
 
 
+# A shop's sales wording, which other shops' names for the product never carry, so with it the product got a page
+# of its own (the audit of 17 Nov 2026: "Buy Lorcana Reign of Jafar Booster Box 2026" beside "Reign of Jafar Booster
+# Box", "Card Game SV Destined Rivals Booster Box Official Factory" beside the Destined Rivals box).
+# "Buy" in front, and the year a shop that writes "Buy" ends its titles with. Never an offer ("Buy 2 ... Save 10",
+# "Buy Both"), which is no product, nor a year without "Buy": "Holiday Calendar 2025" is not 2024's.
+BUY_HEAD = re.compile(r"^buy\s+(?!(?:both|one|two|three|any|all|more|now)\b)(?=[a-z])", re.I)
+BUY_YEAR = re.compile(r"\s+20\d\d$")
+# "Card Game" left in front once the game's own name has gone ("Pokemon Card Game SV Destined Rivals").
+CARD_GAME_HEAD = re.compile(r"^(?:trading )?card game\b\s*[:\-–|]*\s*(?=\S)", re.I)
+# A language as a shop's heading in front of a name that says it again: "Japanese TCG: Super Electric Breaker SV8
+# Japanese Booster Box", "Korean TCG 151 Korean Booster Pack". Said once, it is the name's only word for it and stays.
+LANGUAGE_HEAD = re.compile(
+    r"^(?P<language>japanese|korean|chinese|simplified chinese|traditional chinese|thai|indonesian)\s+"
+    r"(?:(?:pok[eé]mon\s+)?tcg|pok[eé]mon)\s*[:\-–|]*\s+(?=.*\b(?P=language)\b)", re.I)
+# Words a name written all in small letters keeps small, and those written in capitals.
+SMALL_WORDS = {"a", "an", "and", "at", "for", "from", "in", "of", "on", "or", "the", "to", "vs", "with", "ex", "x"}
+CAPITAL_WORDS = {"tcg", "ccg", "etb", "upc", "gx", "vmax", "vstar", "uk", "nfl", "nba", "mlb", "uefa", "fifa", "mtg"}
+
+
+def proper_case(name):
+    """Capitals for a name a shop wrote all in small letters ("one piece card game extra booster box eb 05" was a
+    page's heading, the audit of 17 Nov 2026). A name with any capital in it is the shop's own and left alone.
+    Set codes go in capitals ("eb 05" is "EB 05", "op09" is "OP09"), Pokémon's "ex" stays small."""
+    if not name or name != name.lower() or not re.search(r"[a-z]{2}", name):
+        return name
+    words = name.split()
+    cased = []
+    for i, word in enumerate(words):
+        bare = word.strip("()[]:,.")
+        following = words[i + 1].strip("()[]:,.") if i + 1 < len(words) else ""
+        if bare in CAPITAL_WORDS or (re.search(r"\d", bare) and len(bare) <= 6 and re.search(r"[a-z]", bare)) \
+                or (bare.isalpha() and len(bare) <= 3 and following.isdigit() and bare not in SMALL_WORDS):
+            cased.append(word.upper())
+        elif i and bare in SMALL_WORDS:
+            cased.append(word)
+        else:
+            cased.append(re.sub(r"[a-z]", lambda m: m.group(0).upper(), word, count=1))
+    return " ".join(cased)
+
+
 def tidy_name(title):
     """The light fixes safe to apply to a name that is already in the catalogue."""
-    name = re.sub(r"\s+", " ", html.unescape(title)).strip()
+    name = re.sub(r"\s+", " ", mend(html.unescape(title))).strip()
     name = TCG_NOTE.sub("", TGC.sub("TCG", name)).strip()
     # A long dash between words is a shop's separator ("Booster Box — Simplified Chinese"), and the site
     # never shows one: it becomes the plain " - " every other rule here already treats as a separator.
@@ -478,7 +520,12 @@ def tidy_name(title):
     name = re.sub(r"\b(\w+)( \1\b)+", r"\1", name, flags=re.I)  # "Booster Booster Pack"
     # "(Default)" from a shop's system, and of "Sylveon / Greninja Ex Tin (Greninja)" only the one chosen.
     name = chosen_option(name)
-    return drop_repeated_tail(drop_repeated_set(name).replace(" | ", " "))
+    name = drop_repeated_tail(drop_repeated_set(name).replace(" | ", " "))
+    bought = BUY_HEAD.sub("", name)
+    if bought != name:
+        name = BUY_YEAR.sub("", bought)
+    name = LANGUAGE_HEAD.sub("", CARD_GAME_HEAD.sub("", name))
+    return proper_case(name)
 
 
 def language_of(title, game="", loose=False):

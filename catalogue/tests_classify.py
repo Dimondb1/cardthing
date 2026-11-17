@@ -384,7 +384,9 @@ class TidyCatalogueTests(TestCase):
 
         out = StringIO()
         call_command("tidy_catalogue", stdout=out)
-        names = set(Product.objects.values_list("name", flat=True))
+        # A merged product is switched off, never deleted, so the merge can be undone (since 17 Nov 2026).
+        self.assertFalse(Product.objects.get(pk=dupe.pk).is_active)
+        names = set(Product.objects.filter(is_active=True).values_list("name", flat=True))
         self.assertNotIn("Challenger Deck 2020 Wolf Token", names)
         self.assertNotIn("Booster Pack", names)
         self.assertNotIn("Hyena Pack Amonkhet", names)

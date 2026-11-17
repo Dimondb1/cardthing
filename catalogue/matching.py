@@ -71,6 +71,83 @@ def shop_marks_off(text):
     if ONE_SIZE.search(text):
         text = TILL_HEAD.sub("", ONE_SIZE.sub("", text))
     return re.sub(r"\s+", " ", MARKET_TAG.sub(" ", SHOP_ADDRESS.sub(" ", text))).strip(" :,-–|")
+# Text a shop's feed sends in the wrong character set: "Pokémon" arrives as "PokÃ©mon" and a dash or a quote
+# as "â€“" or "â€™". Read back the way it was written, it mends. Some feeds have already swapped what they
+# could not show for question marks ("Commander Deck â?? Tyranid Swarm", the audit of 17 Nov 2026, a page of its
+# own with that name): what was lost cannot be read back, but it was a dash between words or a quote inside one.
+MOJIBAKE = re.compile(r"[ÃÂâ][\u0080-\u00bf\u2018-\u203a\u20ac\u0152\u0153\u0160\u0161\u0178\u017d\u017e\u02c6\u02dc\u2122]")
+LOST_MARK = re.compile(r"â\?{1,2}")
+
+
+def mend(text):
+    """The text with wrongly decoded characters put right, where they can be: "PokÃ©mon" is "Pokémon", "â€“" a
+    dash, and a lost "â??" a dash between words or an apostrophe inside one. Text with none is left as it is."""
+    text = text or ""
+    if MOJIBAKE.search(text):
+        try:
+            mended = text.encode("cp1252").decode("utf-8")
+        except (UnicodeEncodeError, UnicodeDecodeError):
+            mended = text
+        if mended != text and not MOJIBAKE.search(mended):
+            text = mended
+    if "â?" in text:
+        text = LOST_MARK.sub(lambda m: "'" if (m.start() and text[m.start() - 1].isalnum()
+                                               and m.end() < len(text) and text[m.end()].isalnum()) else " - ", text)
+        text = re.sub(r"\s+", " ", text).strip()
+    return text
+
+
+# A shop's own name on its titles. Page titles end with it ("Girls Band Cry Premium Booster Box | Topaz Cards": 72
+# pages carried that shop's name on 17 Nov 2026, each beside the page other shops' prices are on) and some tills
+# put it in front ("Northumbrian Tin Soldier One Piece: Heroines Battle Vol.2", which was then filed as a tin). It is
+# only ever taken off the titles of the shop itself, and only when its name is its own: a shop called Display Box
+# or TCG Box is named in the words of the products.
+SHOP_NAME_WORDS = {"the", "and", "of", "uk", "ltd", "limited", "shop", "store", "online", "card", "cards", "game", "games",
+                   "gaming", "tcg", "ccg", "trading", "collectables", "collectibles", "collectable", "collectible",
+                   "collectors", "collector", "hobbies", "hobby", "toys", "toy", "comics", "box", "boxes", "pack", "packs",
+                   "booster", "boosters", "display", "deck", "decks", "tin", "tins", "bundle", "collection", "sealed",
+                   "pokemon", "magic", "direct", "world", "club", "co", "company"}
+# What a shop's name may follow with only a space between: the end of a product's name.
+NAME_ENDS = {"box", "pack", "packs", "deck", "decks", "display", "bundle", "tin", "collection", "set", "case", "kit",
+             "blister", "trove", "english", "japanese", "korean", "chinese", "edition", "sealed", "booster", "boosters",
+             "game", "tcg"}
+
+
+@lru_cache(maxsize=1024)
+def _shop_pattern(shop_name):
+    words = normalise(shop_name).split()
+    own = [w for w in words if w not in SHOP_NAME_WORDS and not w.isdigit()]
+    if not any(len(w) >= 4 for w in own):
+        return None
+    if words and words[0] == "the":
+        words = words[1:]
+    # As the shop writes it or run together, with whatever stands between its words.
+    name = r"[\W_]*".join(re.escape(w) for w in words)
+    return (re.compile(rf"^\s*(?:the\s+)?{name}(?:\s*[-–—|:,]\s*|\s+)(?=\S)", re.I),
+            re.compile(rf"(?P<before>\S)(?P<gap>\s*[-–—|:,(\[@]\s*|\s+(?:at|by|from)\s+|\s+)(?:the\s+)?{name}\s*[)\]]?\s*$", re.I))
+
+
+def own_name_off(title, shop_name):
+    """A shop's ``title`` without the shop's own name at its end or its start. Left alone: a shop whose name is
+    made of the words products are named in, a mystery box or pack (the shop's own make, which its name is part
+    of), a name that would be all that is left, and a name in the middle of a title."""
+    title = title or ""
+    pattern = _shop_pattern(shop_name or "")
+    if pattern is None or re.search(r"\bmystery\b", title, re.I):
+        return title
+    head, tail = pattern
+    found = tail.search(title)
+    if found:
+        before = title[:found.start("gap")]
+        last = normalise(before).split()[-1:] or [""]
+        if found.group("gap").strip() or last[0] in NAME_ENDS:
+            title = before.rstrip(" -–—|:,([")
+    found = head.match(title)
+    if found and len(title[found.end():].split()) >= 2:
+        title = title[found.end():]
+    return title.strip()
+
+
 # Notes a shop adds to a name that never say which product it is: how many each customer may buy ("*1pp limit*",
 # "WEBSTORE 1 PER CUSTOMER", "Limit 2"), and when it comes out or came back ("(Releases 27.03.26)", "February
 # Restock", "Final Drop", "Wave 2"), and that it is a pre-order ("(Pre Order)", "Pre-Order", "Preorder"): "Gem Pack
@@ -243,6 +320,7 @@ SET_CODE = re.compile(r"^(?:(?:sv|swsh|sm|xy|bw|dp|hgss)(?:\d{1,2}(?:\.5)?)?|(?:
                       r"(?:(?:op|eb|prb)[ck]?|st|bt|ex|lm|pb|b|fb|fs|sd|led)\d{1,3}[a-z]?)$")
 POKEMON_SET_CODE = re.compile(r"^(?:me(?:\d{1,2}(?:\.5)?)?|m\d{1,2}[a-z]{0,2}|s\d{1,2}[a-z]{0,2})$")
 POKEMON = "pokemon"
+ONE_PIECE = "one-piece"
 STAR_WARS_UNLIMITED = "star-wars-unlimited"
 VANGUARD = "cardfight-vanguard"
 YUGIOH = "yu-gi-oh"
@@ -334,6 +412,14 @@ def key_text(text, game=""):
     expanded = BOOSTER_DISPLAY.sub("booster box", expanded)
     expanded = re.sub(r"\bfull (?=booster box\b)", "", expanded)
     expanded = NO_SHRINK.sub("noshrink", expanded)
+    if game == ONE_PIECE:
+        # "Extra Booster" is One Piece's name for its EB sets, which shops add or leave out: "Heroines Edition Vol.2
+        # Booster Box Extra Booster" and "Extra Booster Box EB-05" are the set's Booster Box, and were pages of
+        # their own beside "EB05 Heroines Edition Vol.2 Booster Box" (the audit of 17 Nov 2026). The word "extra"
+        # goes, and with it a second "booster" that then says nothing the box or pack has not.
+        expanded = re.sub(r"\bextra (?=boosters?\b)", "", expanded)
+        if re.search(r"\bbooster (?:box|pack)\b", expanded):
+            expanded = re.sub(r"\bboosters?\b(?! box| pack| bundle)", " ", expanded)
     if game == POKEMON:
         # A Japanese High Class box is the set's only box, and the Booster Bundle the set's only bundle:
         # shops say so or not ("Mega Dream ex High Class Booster Box", "Journey Together Bundle").
@@ -546,6 +632,30 @@ def match_key(text, game=""):
     kept = sorted(_key_words(text, game))
     kept += [mark for mark, pattern in KIND_MARKS if pattern.search(expanded)]
     return " ".join(kept)
+
+
+def squash_key(text, game=""):
+    """The name with its spaces taken out, and its numbers as they were written: two names that differ only in
+    where a shop put a space or a hyphen share it ("Marvel Super Heroes" and "Marvel Superheroes", "Knockout"
+    and "Knock Out", "Jumpstart" and "Jump Start", "LT-01" and "LT01", "Tuck Box" and "Tuckbox"). A key of
+    whole words never pairs these: the audit of 17 Nov 2026 found sixteen such pairs live, each product on two
+    pages.
+
+    Every letter and every number must be the same: only shops' notes (without_notes), the marks some add to
+    every name and the game's own name are set aside, never a pack count or a volume as key_text sets them
+    aside for the words' key ("1 Pack Blister" is not "3 Pack Blister", "Gem Pack 4" not "Gem Pack 6"). The
+    numbers are kept beside the letters so "Vol 1 2" is not "Vol 12". "" for a name that says nothing but its
+    kind."""
+    words = [w for w in expand(without_notes(chosen_option(text or ""), game)).split() if w not in STOP]
+    if not any(w not in KIND_WORDS for w in words):
+        return ""
+    return "".join(words) + " " + ",".join(re.findall(r"\d+", " ".join(words)))
+
+
+def same_letters(a, b, game=""):
+    """Whether two names are one name written with the spaces in other places (squash_key)."""
+    key = squash_key(a, game)
+    return bool(key) and key == squash_key(b, game)
 
 
 # A Magic booster's kind: a set booster box is not a draft booster box, though "set" is a word shops drop.

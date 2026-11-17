@@ -76,10 +76,9 @@ class MergeBoxTests(TestCase):
         from django.utils import timezone
 
         DailyLowestPrice.objects.create(product=self.other, date=timezone.localdate(), price="204.99")
-        # The site's rules do not see these two names as one product (which is why it never offered them), so the
-        # owner ticks that they are.
-        self.assertContains(self.merge(self.keep.slug, self.other.slug), "Tick that they are the same product first")
-        response = self.merge(self.keep.slug, self.other.slug, same="yes")
+        # One Piece's "Extra Booster" names its EB sets and shops add it or leave it out, so the rules see these
+        # two names as one product and no tick is asked for.
+        response = self.merge(self.keep.slug, self.other.slug)
         self.assertContains(response, "Merged One Piece Heroines Edition Vol.2 Booster Box Extra Booster into "
                                       "EB05 Heroines Edition Vol.2 Booster Box.")
         self.assertEqual(set(Listing.objects.filter(product=self.keep).values_list("retailer__name", flat=True)),

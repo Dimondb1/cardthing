@@ -496,7 +496,7 @@ class UndoableMergeTests(Base):
         from datetime import timedelta as days
 
         from .management.commands.merge_duplicates import merge_undoable, unmerge
-        from .models import OutboundClick, ProductAlias, Restock
+        from .models import OutboundClick, PreorderOpen, ProductAlias, Restock
 
         keep = make_product(self.set, name="Phantasmal Flames Elite Trainer Box")
         other = make_product(self.set, name="Mega Evolution Phantasmal Flames Elite Trainer Box",
@@ -510,6 +510,7 @@ class UndoableMergeTests(Base):
         DailyLowestPrice.objects.create(product=other, date=today - days(1), price=Decimal("44.00"))
         DailyLowestPrice.objects.create(product=other, date=today - days(2), price=Decimal("47.00"))
         restock = Restock.objects.create(product=other, retailer=here, listing=moved, price=Decimal("44.00"))
+        opened = PreorderOpen.objects.create(product=other, retailer=here, listing=moved, price=Decimal("44.00"))
         click = OutboundClick.objects.create(product=other, retailer=here, listing=moved)
         old_address = ProductAlias.objects.create(slug="old-etb-address", product=other)
 
@@ -520,6 +521,9 @@ class UndoableMergeTests(Base):
         self.assertEqual(Listing.objects.get(pk=stays.pk).product, other)   # kept, not deleted
         self.assertEqual(ProductAlias.objects.get(slug=other.slug).product, keep)
         self.assertEqual(ProductAlias.objects.get(pk=old_address.pk).product, keep)
+        # The kept page's history says when the other's shops restocked and opened pre-orders.
+        self.assertEqual((Restock.objects.get(pk=restock.pk).product, PreorderOpen.objects.get(pk=opened.pk).product),
+                         (keep, keep))
         lows = dict(DailyLowestPrice.objects.filter(product=keep).values_list("date", "price"))
         self.assertEqual(lows, {today - days(1): Decimal("44.00"), today - days(2): Decimal("47.00")})
         keep.refresh_from_db()
@@ -538,6 +542,7 @@ class UndoableMergeTests(Base):
         self.assertEqual(Listing.objects.get(pk=kept_listing.pk).product, keep)
         self.assertEqual((Restock.objects.get(pk=restock.pk).product, OutboundClick.objects.get(pk=click.pk).product),
                          (other, other))
+        self.assertEqual(PreorderOpen.objects.get(pk=opened.pk).product, other)
         self.assertFalse(ProductAlias.objects.filter(slug=other.slug).exists())
         self.assertEqual(ProductAlias.objects.get(pk=old_address.pk).product, other)
         lows = dict(DailyLowestPrice.objects.filter(product=keep).values_list("date", "price"))

@@ -41,7 +41,7 @@ from . import languages, pricing, sports
 from .classify import GAMES, classify, find_game, game_word, variant_differs
 from .matching import (
     AUTO_LINK, SUGGEST, VARIANT_WORDS, best_match, chinese_code, code_key, contradiction, covers, match_key, names_something,
-    naming_words, same_product, score, set_codes, shop_title,
+    naming_words, own_name_off, same_product, score, set_codes, shop_title, squash_key,
 )
 from .models import (
     Game, ImportRun, Listing, Product, ProductAlias, Retailer, RetailerCollection, ShopPage, ShopProduct, ebay_stale_cutoff,
@@ -1734,6 +1734,15 @@ def stamp_checked(pks, checked_at):
     pks.clear()
 
 
+def without_shop_name(offer, shop_name):
+    """An offer's title without the shop's own name at its end or start (matching.own_name_off). A variant keeps its
+    place: "Booster Box | Topaz Cards (18 Packs)" is "Booster Box (18 Packs)"."""
+    suffix = f" ({offer.variant})" if offer.variant else ""
+    page = offer.title.removesuffix(suffix) if suffix else offer.title
+    cleaned = own_name_off(page, shop_name)
+    return cleaned + suffix if cleaned != page and cleaned else offer.title
+
+
 def apply_offers(retailer, offers, checked_at=None, run=None, complete=True, short=None):
     """Update listings from ``offers``.
 
@@ -1934,6 +1943,9 @@ def apply_offers(retailer, offers, checked_at=None, run=None, complete=True, sho
                 if run is not None:
                     ImportRun.objects.filter(pk=run.pk).update(offers_found=found, listings_updated=updated)
             found += 1
+            if not marketplace:
+                # The shop's own name on its titles ("... Booster Box | Topaz Cards") is no part of the product's.
+                offer.title = without_shop_name(offer, retailer.name)
             if one_game and find_game(offer.title, offer.vendor, " ".join(offer.tags), offer.shop_type) is None:
                 # A shop that sells one game and leaves it out of its names ("Surging Sparks Booster Box").
                 offer.tags = (*offer.tags, one_game)
@@ -2180,6 +2192,7 @@ class Catalogue:
         self.games = {}
         self.index = {}
         self.by_key = {}
+        self.by_letters = {}   # (game, squash_key) -> [pk]: the same name with the spaces in other places
         self._by_code = None   # (game, code_key) -> [pk], made when first asked
         self._words = words
         for row in rows:
@@ -2189,6 +2202,9 @@ class Catalogue:
         self.names[pk] = name
         self.games[pk] = game
         self.by_key.setdefault((game, match_key(name, game or "")), []).append(pk)
+        letters = squash_key(name, game or "")
+        if letters:
+            self.by_letters.setdefault((game, letters), []).append(pk)
         for word in set(self._words(name)):
             self.index.setdefault(word, set()).add(pk)
         if self._by_code is not None:
@@ -2229,6 +2245,12 @@ class Catalogue:
                 if (same_language(pk) and same_product(name, self.names[pk], slug)
                         and same_product(plain, self.names[pk], slug)):
                     return pk
+        # Or the same letters with a space or a hyphen in another place ("Marvel Superheroes Gift Bundle" for our
+        # "Marvel Super Heroes Gift Bundle"), when the shop's own title says nothing against it.
+        letters = squash_key(name, slug)
+        for pk in self.by_letters.get((game, letters), ()) if letters else ():
+            if same_language(pk) and not contradiction(self.names[pk], title, slug):
+                return pk
         code = code_key(name, slug)
         if not code:
             return None
@@ -2288,6 +2310,13 @@ class Catalogue:
                     return (pk, self.names[pk]), AUTO_LINK
             if not theirs:
                 return (keyed[0], self.names[keyed[0]]), SUGGEST
+        # The same letters with the spaces in other places is the same name, in the title's language.
+        letters = squash_key(title, game or "")
+        if letters and not languages.mixed(title, game or ""):
+            theirs = languages.language_of(title, game or "")
+            for pk in self.by_letters.get((game, letters), ()):
+                if languages.same(languages.language_of(self.names[pk], game or ""), theirs):
+                    return (pk, self.names[pk]), AUTO_LINK
         counts = {}
         for word in title_words:
             for pk in self.index.get(word, ()):

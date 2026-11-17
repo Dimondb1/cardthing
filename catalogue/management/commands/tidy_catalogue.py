@@ -2,8 +2,11 @@
 
 A product removed here leaves its address behind as a RemovedProduct, so a visit answers 410 Gone with links
 to its set and game. A product renamed onto the name of another of the same game, type and language is merged
-into it as merge_duplicates merges, so its old address redirects there and its history and alerts move too.
-A rename never changes an address.
+into it as merge_duplicates merges, so its old address redirects there and its history and alerts move too,
+and the merge is listed under Sorted for you on Things to check with Undo (since 17 Nov 2026, when the owner
+chose that the pairs the rules are sure of merge by themselves, each with Undo; before, this merge deleted the
+product). A pair the owner said are not the same, or whose merge anyone undid, is never merged here: the
+product is renamed and the two stand side by side. A rename never changes an address.
 """
 
 from contextlib import nullcontext
@@ -14,9 +17,15 @@ from django.db.models import Count, Min
 
 from catalogue.classify import find_type, MIN_PRICE, NOT_SEALED, is_generic, tidy_name
 from catalogue.languages import product_language
-from catalogue.management.commands.merge_duplicates import merge
-from catalogue.models import Product, ProductAlias, RemovedProduct
+from catalogue.management.commands.merge_duplicates import merge_with_undo, undone_merges
+from catalogue.matching import own_name_off
+from catalogue.models import Listing, Product, ProductAlias, RemovedProduct
+from catalogue.pricing import MARKETPLACES
 from catalogue.types import owner_typed
+
+
+# Why the tidy joined two products, as Sorted for you on Things to check says it.
+TIDY_WHY = "The hourly tidy merged them: with the shop's wording taken off, the two names are the same"
 
 
 class Command(BaseCommand):
@@ -32,6 +41,16 @@ class Command(BaseCommand):
         removed = renamed = merged = 0
         # A type the owner set (in Django Admin or his spreadsheet) is his, as refresh_types leaves it.
         typed = owner_typed()
+        # His Not the same stands, and so does an Undo of a merge, as for the hourly merge.
+        from catalogue.checks import kept_apart
+
+        self.apart = kept_apart() | undone_merges()
+        # The shops listing each product, by name: a name carrying one of theirs at its end or start loses it
+        # ("Girls Band Cry Premium Booster Box Topaz Cards", from before a read took it off a shop's titles).
+        self.shops = {}
+        for product_id, shop in (Listing.objects.exclude(retailer__source_type__in=MARKETPLACES)
+                                 .values_list("product_id", "retailer__name").order_by()):
+            self.shops.setdefault(product_id, set()).add(shop)
         rows = (
             Product.objects.filter(image="")
             # A product an undoable merge switched off has no listings; deleting it would leave nothing
@@ -58,6 +77,8 @@ class Command(BaseCommand):
     def tidy(self, product, dry_run, typed=frozenset()):
         """Remove, retype, merge or rename one product. Returns what was done, or "" for nothing."""
         name = tidy_name(product.name)
+        for shop in sorted(getattr(self, "shops", {}).get(product.pk, ())):
+            name = tidy_name(own_name_off(name, shop)) or name
         reason = None
         # The count was taken before the walk; a product merged into this one earlier in the run now
         # has its listings, so ask again before removing it and taking a live price with it.
@@ -95,12 +116,15 @@ class Command(BaseCommand):
             if other is not None and product_language(other) != product_language(product):
                 # One name in two languages (one filed under a Japanese set): two products, never merged.
                 other = None
+            if other is not None and frozenset((other.pk, product.pk)) in getattr(self, "apart", ()):
+                # The owner said they are not the same, or undid their merge: renamed, and left side by side.
+                other = None
             if other is not None:
                 self.stdout.write(f"{'would merge' if dry_run else 'merged'}: {product.name} -> {other.name}")
                 if not dry_run:
-                    # Listings, price history, restocks, clicks and alerts move across, and the old address
-                    # redirects to the kept product for good.
-                    merge(other, [product])
+                    # Listings, price history, restocks, clicks and alerts move across, the old address redirects
+                    # to the kept product for good, and Things to check lists it with Undo.
+                    merge_with_undo(other, product, TIDY_WHY)
                 return "merged"
             self.stdout.write(f"{'would rename' if dry_run else 'renamed'}: {product.name} -> {name}")
             if not dry_run:

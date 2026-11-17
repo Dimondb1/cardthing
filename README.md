@@ -210,6 +210,59 @@ old one redirects to, and each merge can be undone under Things to check.
 Blister": Seel names the promo card inside, which a shop that leaves it out
 may or may not mean.
 
+An audit of the live site on 17 Nov 2026 found six more ways one product
+became two pages, and the owner approved closing all six ("Approve all").
+Each is tested with the pages the audit found
+(`catalogue/tests_name_gaps.py`):
+
+- **A name written joined or split.** "Marvel Super Heroes Gift Bundle"
+  and "Marvel Superheroes Gift Bundle", "Knockout" and "Knock Out",
+  "Jumpstart" and "Jump Start", "LT-01" and "LT01": sixteen pairs were
+  live. The key of whole words never pairs them, so there is a second key,
+  the name's letters with the spaces out (`matching.squash_key`). Every
+  letter and number must be the same: a pack count or a volume, which the
+  words' key sets aside, stays here, so "1 Pack Blister" is not "3 Pack
+  Blister" and "Vol 1 2" is not "Vol 12". (The first version read the
+  words' cleaned text and would have merged those blisters; a dry run over
+  the live sitemap's 6,847 product addresses and the existing tests both
+  caught it.) A shop read joins such a title to the page
+  (`Catalogue.by_letters`), the hourly merge joins two such pages, and a
+  pair it holds back is listed as Certain.
+- **A shop's own name on its titles.** Page titles end with it ("Girls
+  Band Cry Premium Booster Box | Topaz Cards": 72 pages carried that
+  shop's name) and some tills put it in front ("Northumbrian Tin Soldier
+  One Piece: ...", which was then filed as a tin). A read takes the shop's
+  own name off the end or start of its titles (`matching.own_name_off`),
+  never another shop's and never a marketplace's. Left alone: a shop
+  whose name is made of the words products are named in (Display Box, TCG
+  Box, The Game Collection), a mystery box or pack (the shop's own make),
+  and a name with neither a separator nor a kind of product before it
+  ("Pokemon Cosmic Eclipse Cards" at Eclipse Cards). The hourly
+  `tidy_catalogue` takes it off pages already made, by the shops that list
+  each, and folds a page into its twin.
+- **Sales wording** (`classify.tidy_name`): "Buy" in front with the year
+  such a shop ends its titles with ("Buy Lorcana Reign of Jafar Booster
+  Box 2026"), "Official Factory" and "Factory Sealed" at the end, "Card
+  Game" left in front once the game's name has gone, and a language as a
+  heading in front of a name that says it again ("Japanese TCG: ...
+  Japanese Booster Box"). A year without "Buy" stays ("Holiday Calendar
+  2025"), and so does an offer ("Buy 2 ... Save 10"), which is no product.
+- **One Piece's "Extra Booster"**, the name of its EB sets, which shops add
+  or leave out: "Heroines Edition Vol.2 Booster Box Extra Booster" is the
+  set's Booster Box (it was a second page saying from £204.99 beside one
+  saying from £119.95). Only for One Piece: Vanguard's Extra Boosters are
+  sets of their own. A Premium Booster box no longer reads as a pack.
+- **Damaged text** (`matching.mend`): "PokÃ©mon" and "â€“" are read back
+  the way they were written, and "â??", where the feed has already lost
+  the character, becomes a dash between words or an apostrophe inside one
+  ("Commander Deck â?? Tyranid Swarm" was a page's heading).
+- **A name all in small letters** gets capitals (`classify.proper_case`),
+  with set codes in capitals and Pokémon's "ex" left small. A name with
+  any capital in it is left as the shop wrote it.
+
+None of these changes a page's address: a rename never does, and a merge
+leaves the old address redirecting.
+
 Since Impact League TCG joined (15 Oct 2026): a price of nothing but nines
 (£999, £999.99, £9,999) means not for sale and the offer is left out;
 second-hand stock ("trade in", a bracketed "(TRADE)" or "(TRADE/IMPORT)"
@@ -1019,7 +1072,8 @@ listed because a community source says otherwise.
 ### Possible duplicates
 
 Each pair is labelled with how sure the rules are, from the names alone:
-- **Certain:** the same strict name, numbers and language. The hourly merge joins these itself.
+- **Certain:** the same strict name, numbers and language, or the same name with a space or a hyphen in
+  another place ("Super Heroes" and "Superheroes"). The hourly merge joins these itself.
 - **Likely:** the same product words, with one detail (such as a word like "Exclusive") to check.
 - **Possible:** shares only a code or set.
 - **Different:** a number, language, edition or kind differs. Never merged.
@@ -5767,7 +5821,13 @@ pair whose merge anyone undid is never merged by the hourly run again, and
 nor is a pair a shop shows both of (two products, to that shop), or whose
 merge would take a shop's shown price off the site; those are left for
 Things to check. No shop's listing is ever deleted. `tidy_catalogue`
-merges the old way when it tidies a name onto another product's. A count
+merges the same undoable way when it tidies a name onto another product's
+("The hourly tidy merged them: with the shop's wording taken off, the two
+names are the same"), and never a pair the owner kept apart or whose merge
+anyone undid: that product is renamed and left beside its twin. Before 17
+Nov 2026 the tidy's merge deleted the product and could not be undone; the
+owner chose that pairs the rules are sure of merge by themselves, each
+with Undo. A count
 with and without its noun ("Display (10 Bundles)" and "Display (10)")
 counts as the same name; a name
 with nothing but the kind of product left ("Scarlet & Violet Elite Trainer

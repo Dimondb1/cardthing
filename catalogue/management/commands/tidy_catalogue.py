@@ -9,6 +9,7 @@ product). A pair the owner said are not the same, or whose merge anyone undid, i
 product is renamed and the two stand side by side. A rename never changes an address.
 """
 
+import re
 from contextlib import nullcontext
 
 from django.core.management.base import BaseCommand
@@ -19,10 +20,13 @@ from catalogue.classify import find_type, MIN_PRICE, NOT_SEALED, is_generic, tid
 from catalogue.languages import product_language
 from catalogue.management.commands.merge_duplicates import merge_with_undo, undone_merges
 from catalogue.matching import own_name_off
-from catalogue.models import Listing, Product, ProductAlias, RemovedProduct
+from catalogue.models import Game, Listing, Product, ProductAlias, RemovedProduct
 from catalogue.pricing import MARKETPLACES
 from catalogue.types import owner_typed
 
+
+# "Center Chaos Rising Elite Trainer Box": what is left of "Pokémon Center ..." once the game's name went.
+CENTER_HEAD = re.compile(r"Cent(?:er|re)\s+\S")
 
 # Why the tidy joined two products, as Sorted for you on Things to check says it.
 TIDY_WHY = "The hourly tidy merged them: with the shop's wording taken off, the two names are the same"
@@ -45,6 +49,7 @@ class Command(BaseCommand):
         from catalogue.checks import kept_apart
 
         self.apart = kept_apart() | undone_merges()
+        self.pokemon = Game.objects.filter(slug="pokemon").values_list("pk", flat=True).first()
         # The shops listing each product, by name: a name carrying one of theirs at its end or start loses it
         # ("Girls Band Cry Premium Booster Box Topaz Cards", from before a read took it off a shop's titles).
         self.shops = {}
@@ -79,6 +84,9 @@ class Command(BaseCommand):
         name = tidy_name(product.name)
         for shop in sorted(getattr(self, "shops", {}).get(product.pk, ())):
             name = tidy_name(own_name_off(name, shop)) or name
+        if product.game_id == getattr(self, "pokemon", None) and CENTER_HEAD.match(name):
+            # A Pokémon Center edition whose "Pokémon" a read took for the game's name (classify.PREFIXES).
+            name = f"Pokémon {name}"
         reason = None
         # The count was taken before the walk; a product merged into this one earlier in the run now
         # has its listings, so ask again before removing it and taking a live price with it.

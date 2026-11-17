@@ -803,9 +803,10 @@ class LanguageAndSortTests(PageTestCase):
 class DiscoverabilityTests(PageTestCase):
     def test_product_page_has_price_led_title_description_and_sharing_tags(self):
         response = self.client.get(self.etb.get_absolute_url())
-        # The longest wording that fits in about 60 characters before the site name (web/hubs.py).
-        self.assertContains(response, "<title>Prismatic Evolutions Elite Trainer Box UK from £54.99 | RipRaptor</title>")
-        self.assertContains(response, 'content="Cheapest Prismatic Evolutions Elite Trainer Box today is £54.99 delivered at Harbour Games. Compare 2 UK shops')
+        # The game in front, then the longest wording that fits in about 60 characters before the site name
+        # (web/hubs.py): here "UK" gives way to the game, and the price stays.
+        self.assertContains(response, "<title>Pokémon Prismatic Evolutions Elite Trainer Box from £54.99 | RipRaptor</title>")
+        self.assertContains(response, 'content="Cheapest Pokémon Prismatic Evolutions Elite Trainer Box today is £54.99 delivered at Harbour Games. Compare 2 UK')
         self.assertContains(response, '<meta property="og:type" content="product">')
         self.assertContains(response, '<meta property="og:url" content="http://testserver' + self.etb.get_absolute_url() + '">')
         self.assertContains(response, '"@type": "BreadcrumbList"')
@@ -857,7 +858,7 @@ class DiscoverabilityTests(PageTestCase):
 
     def test_unpriced_product_keeps_the_plain_title(self):
         response = self.client.get(self.unpriced.get_absolute_url())
-        self.assertContains(response, "<title>Prismatic Evolutions Booster Bundle: UK prices | RipRaptor</title>")
+        self.assertContains(response, "<title>Pokémon Prismatic Evolutions Booster Bundle: UK prices | RipRaptor</title>")
 
     def test_home_declares_the_site_and_its_search(self):
         response = self.client.get(reverse("web:home"))

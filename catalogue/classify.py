@@ -282,8 +282,11 @@ NOT_SEALED_TYPES = {"single", "single card", "singles", "pokemon single", "playm
                     "footwear", "shoes", "trainers", "boots", "football boots", "sneakers"}
 
 # Words removed from the start or end of a title when building the clean name.
+# The game in front of a name goes, since the page says the game. Not "Pokémon" in front of "Center": a Pokémon
+# Center edition is its own product, and its name read "Center Chaos Rising Elite Trainer Box" (the audit of 17 Nov
+# 2026).
 PREFIXES = re.compile(
-    r"^(?:pok[eé]mon(?: tcg| trading card game| card game)?|magic(?: the gathering|: the gathering)?|mtg|one piece(?: card game| tcg)?|"
+    r"^(?:pok[eé]mon(?!\s+cent(?:er|re)\b)(?: tcg| trading card game| card game)?|magic(?: the gathering|: the gathering)?|mtg|one piece(?: card game| tcg)?|"
     r"disney lorcana(?: tcg)?|lorcana(?: tcg)?|yu-gi-oh!?|yugioh|star wars(?::)? unlimited|flesh (?:and|&) blood(?: tcg)?|"
     r"digimon(?: card game| tcg)?|dragon ball super(?: card game| tcg)?|riftbound(?::)?(?: league of legends tcg)?|"
     r"cardfight!*(?: vanguard)?(?: overdress)?|weiss schwarz|weiß schwarz|union[- ]arena(?: tcg| card game)?)\s*[:\-–|]*\s*",
@@ -457,6 +460,27 @@ def drop_repeated_tail(name):
     return name
 
 
+# The game as a shop words it in the middle or at the end of a name.
+GAME_WORDING = (r"(?:(?:pok[eé]mon|one piece|disney lorcana|lorcana|digimon|dragon ball super|yu-gi-oh!?|"
+                r"magic the gathering) )?(?:tcg|trading card game)")
+# The kind of product written twice, with or without the game between ("Final Fantasy Play Booster Box Booster Box",
+# "Prismatic Evolutions Elite Trainer Box Pokémon TCG Elite Trainer Box"): 114 live addresses repeated a phrase on
+# 17 Nov 2026. Two to four words, so one repeated word stays tidy_name's own rule.
+REPEATED_KIND = re.compile(rf"^(.*?\b(\w+(?: \w+){{1,3}}))(?: {GAME_WORDING})? \2$", re.I)
+# The game after the product ("Destined Rivals Booster Box Pokémon TCG").
+TRAILING_GAME = re.compile(rf"(?<=\w) {GAME_WORDING}$", re.I)
+
+
+def drop_repeated_kind(name):
+    """'Final Fantasy Play Booster Box Booster Box' -> 'Final Fantasy Play Booster Box', and the game a shop put
+    after the product goes when at least two words are left."""
+    repeated = REPEATED_KIND.match(name)
+    if repeated:
+        name = repeated.group(1)
+    bare = TRAILING_GAME.sub("", name)
+    return bare if len(bare.split()) >= 2 else name
+
+
 SHOP_TAILS = re.compile(
     r"(?<=\S)\s*:?\s*[:\-–]?\s*(?:brand new(?: and| &)? sealed(?: box| inc .*)?|new (?:and|&) sealed(?: box)?|(?<![\[(])pre[- ]?order\b.*|"
     # "Official Factory Sealed", "Factory Sealed Box", "100% Factory Sealed": every sealed product is.
@@ -557,7 +581,7 @@ def tidy_name(title):
     name = re.sub(r"\b(\w+)( \1\b)+", r"\1", name, flags=re.I)  # "Booster Booster Pack"
     # "(Default)" from a shop's system, and of "Sylveon / Greninja Ex Tin (Greninja)" only the one chosen.
     name = chosen_option(name)
-    name = drop_repeated_tail(drop_repeated_set(name).replace(" | ", " "))
+    name = drop_repeated_kind(drop_repeated_tail(drop_repeated_set(name).replace(" | ", " ")))
     bought = BUY_HEAD.sub("", name)
     if bought != name:
         name = BUY_YEAR.sub("", bought)

@@ -292,7 +292,7 @@ class ProductMetaTests(PageTestCase):
         Listing.objects.filter(product=self.etb).update(availability=Listing.Availability.PREORDER)
         html = self.client.get(self.etb.get_absolute_url()).content.decode()
         description = description_of(html)
-        self.assertTrue(description.startswith(f"{self.etb.name} is on pre-order from £54.99 delivered at Harbour Games."))
+        self.assertTrue(description.startswith(f"Pokémon {self.etb.name} is on pre-order from £54.99 delivered at Harbour Games."))
         self.assertNotIn("today", description)
         self.assertNotIn("Cheapest", description)
 
@@ -306,13 +306,14 @@ class ProductMetaTests(PageTestCase):
         html = self.client.get(self.etb.get_absolute_url()).content.decode()
         description = description_of(html)
         self.assertTrue(description.startswith(
-            f"Cheapest {self.etb.name} in stock is £54.99 delivered at Harbour Games, or on pre-order from £40.00 "
-            "at Total Cards."
+            f"Cheapest Pokémon {self.etb.name} in stock is £54.99 delivered at Harbour Games, or on pre-order from "
+            "£40.00 at Total Cards."
         ), description)
         self.assertNotIn("today", description)
         self.assertLessEqual(len(description), 160)
         # The title quotes the price the page leads with. It does not say pre-order: a shop has it in stock.
-        self.assertTrue(title_of(html).startswith(f"{self.etb.name} UK from £54.99"), title_of(html))
+        # With the game in front, "UK" no longer fits beside the price.
+        self.assertTrue(title_of(html).startswith(f"Pokémon {self.etb.name} from £54.99"), title_of(html))
         self.assertNotIn("pre-order", title_of(html))
 
 

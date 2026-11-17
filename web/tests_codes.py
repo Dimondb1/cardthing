@@ -89,10 +89,28 @@ class NameWithCodeTests(TestCase):
         product = fake_product("Heroines Edition Vol.2 Sleeve Set", "EB05", "Something Else", type_name="Other")
         self.assertEqual(hubs.name_with_code(product), "EB05 Heroines Edition Vol.2 Sleeve Set")
 
-    def test_a_name_with_the_code_in_any_spelling_is_left_alone(self):
-        for name in ("One Piece OP18 Booster Box", "One Piece OP 18 Booster Box", "One Piece OP-18 Booster Box"):
+    def test_a_name_with_the_code_in_any_spelling_gives_it_once_the_sets_way(self):
+        """The audit of 17 Nov 2026: one set's code read "EB05", "EB 05" and "EB-05" on three pages' titles."""
+        for name in ("One Piece OP18 Booster Box", "One Piece OP 18 Booster Box", "One Piece OP-18 Booster Box",
+                     "One Piece op-018 Booster Box"):
             with self.subTest(name=name):
-                self.assertEqual(hubs.name_with_code(fake_product(name, "OP-18", "The Time Traveler")), name)
+                self.assertEqual(hubs.name_with_code(fake_product(name, "OP-18", "The Time Traveler")),
+                                 "One Piece OP-18 Booster Box")
+
+    def test_a_one_piece_product_filed_under_no_set_has_its_code_written_the_publishers_way(self):
+        game = SimpleNamespace(slug="one-piece")
+        for name, shown in (("EB 05 Heroines Edition Vol.2 Japanese Booster Box", "EB-05 Heroines Edition Vol.2 Japanese Booster Box"),
+                            ("OP13 Carrying On His Will Japanese Booster Box", "OP-13 Carrying On His Will Japanese Booster Box"),
+                            ("Starter Deck ST-21 Japanese", "Starter Deck ST-21 Japanese"),
+                            ("Premium Booster PRB1 Japanese Booster Box", "Premium Booster PRB-01 Japanese Booster Box"),
+                            ("Top Trainer Stop 10 Deck", "Top Trainer Stop 10 Deck")):
+            with self.subTest(name=name):
+                product = SimpleNamespace(name=name, product_set=None, product_set_id=None, game=game, type_name="")
+                self.assertEqual(hubs.name_with_code(product), shown)
+        # Another game's names are left as written.
+        other = SimpleNamespace(name="ST 10 Starter Deck", product_set=None, product_set_id=None,
+                                game=SimpleNamespace(slug="digimon"), type_name="")
+        self.assertEqual(hubs.name_with_code(other), "ST 10 Starter Deck")
 
     def test_a_name_giving_another_code_is_left_alone(self):
         name = "One Piece OP-17 Booster Box"
@@ -175,13 +193,16 @@ class CodePageTests(TestCase):
         self.assertIn("<h1", html)
         self.assertNotIn("Vol.2 EB05 Booster Box</h1>", html)
 
-    def test_a_name_that_gives_the_code_is_not_changed(self):
+    def test_a_name_that_gives_the_code_is_not_given_it_twice_and_reads_the_sets_way(self):
         box = make_product(self.eb05, name="One Piece EB-05 Heroines Edition Vol.2 Booster Box",
                            product_type=Product.Type.BOOSTER_BOX)
         make_listing(box, self.shop, price="96.00")
-        title = self.page(box)[1]
+        html, title, _description = self.page(box)
         self.assertEqual(title.count("EB"), 1)
-        self.assertTrue(title.startswith("One Piece EB-05 Heroines Edition Vol.2 Booster Box "))
+        # One spelling everywhere search engines read: the set's own, here EB05.
+        self.assertTrue(title.startswith("One Piece EB05 Heroines Edition Vol.2 Booster Box "))
+        # The heading keeps the name as stored.
+        self.assertIn("One Piece EB-05 Heroines Edition Vol.2 Booster Box</h1>", html)
 
     def test_pre_order_title_and_dated_description(self):
         out = timezone.localdate() + timedelta(days=30)
@@ -302,6 +323,103 @@ class CodePageTests(TestCase):
         self.assertIn("Compare UK shop prices", description)
 
 
+class GameInTitleTests(TestCase):
+    """The audit of 17 Nov 2026: "EB05 Heroines Edition Vol.2 Booster Box UK from £119.95" named no game, and
+    "Premium Booster Pack: UK prices" could have been any game's. The owner approved the game in front, the price
+    kept."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.one_piece = make_game(name="One Piece Card Game", slug="one-piece", short_name="One Piece")
+        cls.pokemon = make_game(name="Pokémon", slug="pokemon", short_name="Pokémon")
+        cls.magic = make_game(name="Magic: The Gathering", slug="magic-the-gathering", short_name="Magic")
+        cls.sports = make_game(name="Sports cards", slug="sports-cards", short_name="Sports")
+        cls.eb05 = make_set(cls.one_piece, name="Heroines Edition Vol.2", slug="heroines-edition-vol-2", code="EB-05")
+        cls.shop = make_retailer("Harbour Games")
+
+    def page(self, product):
+        html = self.client.get(product.get_absolute_url()).content.decode()
+        return title_of(html), description_of(html)
+
+    def game_word(self, name, game):
+        return hubs.game_word(SimpleNamespace(name=name, game=game))
+
+    def test_the_game_goes_in_front_only_when_the_name_does_not_say_it(self):
+        for name, game, word in (
+            ("EB05 Heroines Edition Vol.2 Booster Box", self.one_piece, "One Piece"),
+            ("One Piece Heroines Edition Vol.2 Booster Box", self.one_piece, ""),
+            ("One Piece Card Game Premium Booster Pack", self.one_piece, ""),
+            ("Prismatic Evolutions Elite Trainer Box", self.pokemon, "Pokémon"),
+            ("Pokemon Prismatic Evolutions Elite Trainer Box", self.pokemon, ""),
+            ("Prismatic Evolutions Elite Trainer Box Pokémon TCG", self.pokemon, ""),
+            ("Edge of Eternities Play Booster Box", self.magic, "Magic"),
+            ("MTG Edge of Eternities Play Booster Box", self.magic, ""),
+            ("Magic: The Gathering Final Fantasy Bundle", self.magic, ""),
+            # A sports card's game is its product line, which its name has.
+            ("Topps Chrome UEFA Club Competitions 2025/26 Hobby Box", self.sports, ""),
+            # "Magical" is not "Magic".
+            ("Magical Shop Gift Box", self.magic, "Magic"),
+        ):
+            with self.subTest(name=name):
+                self.assertEqual(self.game_word(name, game), word)
+
+    def test_a_priced_page_names_the_game_the_code_and_the_price(self):
+        box = make_product(self.eb05, name="EB05 Heroines Edition Vol.2 Booster Box", product_type=Product.Type.BOOSTER_BOX)
+        make_listing(box, self.shop, price="119.95")
+        title, description = self.page(box)
+        # The report's own example. The set's spelling of the code, the price kept, the site's name after it.
+        self.assertEqual(title, "One Piece EB-05 Heroines Edition Vol.2 Booster Box from £119.95")
+        self.assertTrue(description.startswith(
+            "Cheapest One Piece EB-05 Heroines Edition Vol.2 Booster Box today is £119.95 delivered at Harbour Games."))
+
+    def test_a_short_name_keeps_uk_and_the_sites_name(self):
+        op10 = make_set(self.one_piece, name="Royal Blood", slug="royal-blood", code="OP-10")
+        box = make_product(op10, name="Royal Blood Booster Box", product_type=Product.Type.BOOSTER_BOX)
+        make_listing(box, self.shop, price="80.00")
+        title = self.page(box)[0]
+        self.assertEqual(title, "One Piece Royal Blood OP-10 Booster Box UK from £80.00 | RipRaptor")
+
+    def test_a_page_with_no_price_names_the_game(self):
+        loose = make_set(self.one_piece, name="Premium Booster", slug="premium-booster", code="")
+        pack = make_product(loose, name="Premium Booster Pack", product_type=Product.Type.BOOSTER_PACK)
+        title, description = self.page(pack)
+        self.assertEqual(title, site("One Piece Premium Booster Pack: UK prices"))
+        self.assertTrue(description.startswith("Compare delivered prices for One Piece Premium Booster Pack "))
+
+    def test_the_game_the_name_and_the_price_are_never_dropped(self):
+        name = "Heroines Edition Vol.2 Japanese Booster Box With Special Promotional Card"
+        box = make_product(self.eb05, name=name, product_type=Product.Type.BOOSTER_BOX)
+        make_listing(box, self.shop, price="91.90")
+        title = self.page(box)[0]
+        self.assertEqual(title, "One Piece Heroines Edition Vol.2 EB-05 Japanese Booster Box With Special Promotional Card from £91.90")
+        # The ladder alone: "delivered" goes first, then "UK".
+        w = words()
+        self.assertEqual(hubs.product_title(w, "Royal Blood Booster Box", "£80.00", False, game="One Piece"),
+                         "One Piece Royal Blood Booster Box UK from £80.00 delivered")
+        self.assertEqual(hubs.product_title(w, "Royal Blood OP-10 Booster Box", "£80.00", False, game="One Piece"),
+                         "One Piece Royal Blood OP-10 Booster Box UK from £80.00")
+        self.assertEqual(hubs.product_title(w, "Royal Blood OP-10 Japanese Booster Box", "£80.00", False, game="One Piece"),
+                         "One Piece Royal Blood OP-10 Japanese Booster Box from £80.00")
+
+    def test_a_sold_out_page_says_what_it_last_cost_and_when(self):
+        """About 9,000 pages with no price shared one sentence that differed only in the name."""
+        from catalogue.models import DailyLowestPrice
+
+        box = make_product(self.eb05, name="EB05 Heroines Edition Vol.2 Booster Box", product_type=Product.Type.BOOSTER_BOX)
+        make_listing(box, self.shop, price="119.95", availability=Listing.Availability.OUT_OF_STOCK)
+        day = timezone.localdate() - timedelta(days=9)
+        DailyLowestPrice.objects.create(product=box, date=day, price="114.99")
+        title, description = self.page(box)
+        self.assertEqual(title, site("One Piece EB-05 Heroines Edition Vol.2 Booster Box UK"))
+        self.assertEqual(description, "One Piece EB-05 Heroines Edition Vol.2 Booster Box is out of stock at the UK shops we "
+                                      f"check. Its cheapest price when last available was £114.99 on {short_date(day)}.")
+        self.assertLessEqual(len(description), 160)
+        # With no history there is nothing to quote.
+        bare_page = make_product(self.eb05, name="EB05 Double Pack Set", product_type=Product.Type.BOOSTER_PACK)
+        make_listing(bare_page, self.shop, price="9.95", availability=Listing.Availability.OUT_OF_STOCK)
+        self.assertTrue(self.page(bare_page)[1].startswith("Compare delivered prices for One Piece EB-05 Double Pack Set"))
+
+
 class SetTitleFitTests(TestCase):
     """set_title on its own, with words from the registry."""
 
@@ -319,10 +437,21 @@ class SetTitleFitTests(TestCase):
         self.assertEqual(title, "Royal Blood (OP-10) booster boxes UK: cheapest prices")
         self.assertLessEqual(len(title), hubs.TITLE_LIMIT)
 
+    def test_the_code_stays_while_the_title_fits_without_the_sites_name(self):
+        """The audit of 17 Nov 2026: "One Piece Heroines Edition Vol.2 booster boxes: UK prices" had lost its EB-05,
+        which is what people search for."""
+        from .templatetags.ripraptor import TITLE_MAX
+
+        title = self.title(self.set("One Piece Heroines Edition Vol.2", "EB-05"))
+        self.assertEqual(title, "One Piece Heroines Edition Vol.2 (EB-05) booster boxes: UK prices")
+        self.assertTrue(hubs.TITLE_LIMIT < len(title) <= TITLE_MAX)
+        self.assertEqual(site(title), title)   # the site's name gives way, not the code
+
     def test_the_code_goes_before_the_set_name_does(self):
-        # 35 characters of name: with the code even the short form runs over, without it the short form fits.
+        # 35 characters of name and a long code: with the code even the short form runs past what search engines
+        # show, and without it the short form fits.
         name = "A Considerably Lengthy Set Name Abc"
-        title = self.title(self.set(name, "OP-18"))
+        title = self.title(self.set(name, "BT19-20A"))
         self.assertEqual(title, f"{name} booster boxes: UK prices")
         self.assertLessEqual(len(title), hubs.TITLE_LIMIT)
 

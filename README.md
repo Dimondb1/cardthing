@@ -1685,6 +1685,18 @@ Claude never renames a product. The new-page check's instructions name the
 same kinds (prompt version 3), so such a page is kept off before it goes
 live.
 
+**Names that repeat themselves.** `classify.tidy_name` writes the kind of
+product once when a shop wrote it twice, with or without the game between
+("Final Fantasy Play Booster Box Booster Box", "Prismatic Evolutions Elite
+Trainer Box Pokémon TCG Elite Trainer Box"), and takes the game off the end
+of a name ("Destined Rivals Booster Box Pokémon TCG"). A read keeps
+"Pokémon" in front of "Center", and the hourly tidy gives it back to a
+Pokémon name that starts "Center" ("Center Chaos Rising Elite Trainer
+Box"). The rules were run over the 6,847 live addresses first: 31 names
+change, each a repeat or a trailing game. As ever a rename changes the
+heading and the title, never the address, and a name that then equals
+another product's is merged with Undo.
+
 **RRPs.** A product page shows the RRP under the cheapest price, with how far
 the price is under it (green) or over it (red; left off beside a shop that pays
 a commission): yours from Django Admin first, then the one two UK shops agree
@@ -6106,9 +6118,14 @@ and description (`meta.set.name_code`): "{set} ({code}) booster boxes UK:
 cheapest prices" while something is in stock, "{set} ({code}) pre-orders
 UK: release date and prices" while shops take pre-orders before the
 release date, "{set} ({code}) release date" when no shop does. A title
-keeps the code ahead of a longer wording or more product types, and drops
-the code before the set's name; when even the shortest wording runs past
-60 characters without the code, the code stays. The line under the
+keeps the code ahead of a longer wording or more product types. When the
+code does not fit in 60 characters it stays while the title is within the
+70 search engines show, and the site's name gives way instead ("One Piece
+Heroines Edition Vol.2 (EB-05) booster boxes: UK prices": the audit of 17
+Nov 2026 found that page's title without its code, which is what people
+search for); past 70 the code goes before the set's name does, and when
+even the shortest wording runs past 60 without the code, the code stays.
+The line under the
 heading of a set still to come gives its release date and how many shops
 take pre-orders, or how many list it when none takes pre-orders yet
 (`browse.hub.upcoming_listed`); "prices appear once shops list it" is
@@ -6117,9 +6134,29 @@ with its set's code put in when the name does not give it in any spelling
 (`OP18`, `op 18`, `OP-18`, `EB-5` for `EB05`): after the set's name, else
 before the product type, else in front. A name giving some other set's
 code is left alone. A range code such as BT19-20 matches "BT19 20" and
-"BT19-20". An em dash in a product's name becomes a space in titles and
-descriptions (`hubs.search_name`). The heading and breadcrumbs keep the
-name as it is.
+"BT19-20". A code the name gives in another spelling is written the set's
+way, so one set's code reads one way on every page's title ("EB05", "EB 05"
+and "EB-05" were all live on 17 Nov 2026); a One Piece product filed under
+no set has its codes written the publisher's way (OP-13, EB-05, ST-21,
+PRB-01: `hubs.one_piece_codes`). An em dash in a product's name becomes a
+space in titles and descriptions (`hubs.search_name`). The heading and
+breadcrumbs keep the name as it is.
+
+**The game in product titles and descriptions** (`hubs.game_word`, since 17
+Nov 2026, approved by the owner with the price kept): the game's short name
+goes in front of the product's name when the name does not already say the
+game, in any of the words shops use for it ("Pokemon", "MTG", "Disney
+Lorcana"). "EB05 Heroines Edition Vol.2 Booster Box UK from £119.95" named
+no game and "Premium Booster Pack: UK prices" could have been any game's;
+they now read "One Piece EB-05 Heroines Edition Vol.2 Booster Box from
+£119.95" and "One Piece Premium Booster Pack: UK prices". Sports cards get
+none: their product lines (Topps, Panini) are in the names. As a title runs
+long its parts go in this order: "delivered", then "UK", then the site's
+name. The game, the name and the price are never dropped, so a long name's
+title runs past 70 characters and Bing may note it as long; that is a hint,
+not a penalty. A page every shop has sold out of says what it last cost and
+when (`meta.product.description_last_price`), as the page itself does under
+its heading, so thousands of sold-out pages no longer share one sentence.
 Product titles take the longest wording that fits in about 60
 characters, from "{product} from {price} delivered: UK price comparison"
 through "{product} UK from {price} delivered" and "{product} UK from
@@ -6352,7 +6389,8 @@ the AI search crawlers in by name were already in place. Added 31 Oct 2026
   and " | RipRaptor" went on after. The site's name now goes on only while the
   whole stays within 70 (`with_site_name`); search results show the site's
   name beside a title anyway. A product or set whose name alone is very long
-  can still run over.
+  can still run over, and since 17 Nov 2026 so can a long product name with
+  its game in front, which is never dropped.
 - **The facts as sentences.** Product details opens with a plain summary:
   "The cheapest Surging Sparks Booster Box we found right now is £87.00
   delivered at Harbour Games. 2 UK shops have it in stock. It holds 36 packs,

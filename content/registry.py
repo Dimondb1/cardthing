@@ -4317,8 +4317,8 @@ ENTRIES = [
     Entry(
         "meta.product.title", T, "Product page title",
         "{product}: UK prices",
-        "Browser tab title for product pages with no current price. {product} carries the set's code when the "
-        "name does not. The site name is added after it.",
+        "Browser tab title for product pages with no current price. {product} carries the game's name and the "
+        "set's code when the name does not. The site name is added after it.",
         placeholders=("product",),
     ),
     Entry(
@@ -4336,11 +4336,19 @@ ENTRIES = [
         placeholders=("product",),
     ),
     Entry(
+        "meta.product.description_last_price", T, "Product page description, sold out, with the last price",
+        "{product} is out of stock at the UK shops we check. Its cheapest price when last available was {price} "
+        "on {date}.",
+        "Search engine description for a product every shop has sold out of, when the page shows what it last "
+        "cost. {product} carries the game's name when the product's name does not.",
+        placeholders=("product", "price", "date"),
+    ),
+    Entry(
         "meta.product.title_priced", T, "Product page title with a price",
         "{product} from {price} delivered: UK price comparison",
-        "Browser tab title for product pages whose cheapest price is in stock. {product} carries the set's code "
-        "when the name does not. When it runs past about 60 characters the next shorter form is used. The site "
-        "name is added after it.",
+        "Browser tab title for product pages whose cheapest price is in stock. {product} carries the game's "
+        "name and the set's code when the name does not. When it runs past about 60 characters the next shorter "
+        "form is used. The site name is added after it.",
         placeholders=("product", "price", "retailer", "count"),
     ),
     Entry(

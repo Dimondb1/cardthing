@@ -262,6 +262,50 @@ def search_name(name):
     return " ".join(re.sub("\u2014", " ", name).split())
 
 
+ONE_PIECE = "one-piece"
+# One Piece's set codes as its publisher writes them: OP-13, EB-05, ST-21, PRB-01.
+ONE_PIECE_CODE = re.compile(r"(?<![A-Za-z0-9])(OP|EB|ST|PRB)[\s-]?0*(\d{1,2})(?![A-Za-z0-9])", re.I)
+
+
+def one_piece_codes(name):
+    """A One Piece name with its set codes written the publisher's way. For a product filed under no set (a
+    Japanese box, whose set the site has only in English), whose title read "EB 05 Heroines Edition Vol.2 Japanese
+    Booster Box" beside the English page's "EB05" and the set page's "EB-05" (the audit of 17 Nov 2026)."""
+    return ONE_PIECE_CODE.sub(lambda m: f"{m.group(1).upper()}-{int(m.group(2)):02d}", name)
+
+
+def unaccented(text):
+    """``text`` in small letters with its accents off, so "Pokémon" and "Pokemon" compare equal."""
+    import unicodedata
+
+    return "".join(c for c in unicodedata.normalize("NFKD", text or "") if not unicodedata.combining(c)).lower()
+
+
+def names_game(name, game):
+    """Whether ``name`` already says which game it is: the game's short name or full name, or a word shops use
+    for it ("MTG", "PTCG": classify.GAMES)."""
+    from catalogue.classify import find_game
+
+    flat = unaccented(name)
+    for said in (game.display_short, game.name):
+        if said and re.search(rf"(?<![a-z0-9]){re.escape(unaccented(said))}(?![a-z0-9])", flat):
+            return True
+    return find_game(name) == game.slug
+
+
+def game_word(product):
+    """The game's short name to put in front of a product's name in search titles and descriptions, or "" when
+    the name already says the game. Searchers type the game ("one piece eb05 booster box"), and a name such as
+    "Premium Booster Pack" could be any game's (the audit of 17 Nov 2026). Sports cards have no one game to name:
+    their product lines (Topps, Panini, Match Attax) are in the names already."""
+    from catalogue.sports import GAME as SPORTS_CARDS
+
+    game = product.game
+    if game.slug == SPORTS_CARDS or names_game(product.name, game):
+        return ""
+    return game.display_short
+
+
 def name_with_code(product):
     """The product's name (search_name) with its set's code put in when the name does not give it: after the
     set's name when the product's name contains it, else before the product type ("Heroines Edition Vol.2 Booster
@@ -270,10 +314,13 @@ def name_with_code(product):
 
     name = search_name(product.name)
     code = shown_code(product.product_set) if product.product_set_id else ""
-    if not code or has_code(name, code):
-        return name
-    # A name giving some other set's code is left alone rather than given two: the product may be filed wrongly.
     game = getattr(getattr(product, "game", None), "slug", "")
+    if code and has_code(name, code):
+        # Written the set's way, however the shop wrote it ("EB05", "EB 05" and "eb-5" all read "EB-05").
+        return code_pattern(code).sub(lambda _match: code, name)
+    if not code:
+        return one_piece_codes(name) if game == ONE_PIECE else name
+    # A name giving some other set's code is left alone rather than given two: the product may be filed wrongly.
     if set_codes(name, game):
         return name
     lowered = name.lower()
@@ -301,11 +348,30 @@ PRODUCT_TITLES = {
 }
 
 
-def product_title(words, name, price, preorder, **values):
+def with_game(name, game):
+    """``name`` with the game's short name (game_word) in front, or ``name`` when there is none to add."""
+    return f"{game} {name}" if game else name
+
+
+def product_title(words, name, price, preorder, game="", **values):
     """A product page's title quoting ``price``: the longest wording that fits, keeping "UK" (what searchers type)
     and then "delivered" as long as they fit, and "pre-order" when the price quoted is a pre-order. ``name`` keeps its set code even
-    when the title then runs long: the code is what searchers type, and the name is never cut."""
-    titles = [words(key, product=name, price=price, **values) for key in PRODUCT_TITLES[bool(preorder)]]
+    when the title then runs long: the code is what searchers type, and the name is never cut.
+
+    ``game`` (game_word) goes in front of the name. As the title runs long its parts go in this order:
+    "delivered", then "UK", then the site's name after it (with_site_name). The game, the name and the price are
+    never dropped, so a long name's title runs past TITLE_LIMIT: the owner approved that order on 17 Nov 2026
+    ("Approve all": the game in titles, the price kept)."""
+    titles = [words(key, product=with_game(name, game), price=price, **values) for key in PRODUCT_TITLES[bool(preorder)]]
+    return fitted(titles) or titles[-1]
+
+
+UNPRICED_TITLES = ("meta.product.title", "meta.product.title_short")
+
+
+def unpriced_title(words, name, game=""):
+    """A product page's title when there is no price to quote, with the game in front as product_title has it."""
+    titles = [words(key, product=with_game(name, game)) for key in UNPRICED_TITLES]
     return fitted(titles) or titles[-1]
 
 
@@ -326,11 +392,20 @@ def set_title(words, labels, keys, types=(), **values):
         extra = {"types": words.join(list(types)[:count])} if types else {}
         return words(key, set=label, **extra, **values)
 
+    from .templatetags.ripraptor import TITLE_MAX
+
     counts = range(len(types), 0, -1) if types else (0,)
-    for label in labels:
+    for index, label in enumerate(labels):
         title = fitted(built(label, key, count) for key in keys for count in counts)
         if title:
             return title
+        if not index and len(labels) > 1:
+            # The code is what searchers type ("eb05 booster box"): it stays while the title is within what
+            # search engines show, and the site's name gives way first (the audit of 17 Nov 2026: "One Piece
+            # Heroines Edition Vol.2 booster boxes: UK prices" had lost its EB-05).
+            title = fitted((built(label, key, counts[-1]) for key in keys), TITLE_MAX)
+            if title:
+                return title
     return min((built(labels[0], key, counts[-1]) for key in keys), key=len)
 
 

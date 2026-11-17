@@ -1987,11 +1987,14 @@ def product_detail(request, slug):
     words = hubs.Words(text, request)
     # Titles and descriptions name the set's code when the product's name does not, since searchers type it.
     search_name = hubs.name_with_code(product)
+    # And the game, when the name does not say it: "Premium Booster Pack" could be any game's.
+    game_word = hubs.game_word(product)
+    described_name = hubs.with_game(search_name, game_word)
     release = product.effective_release_date
     release_shown = short_date(release) if release and release > today else ""
     if cheapest and cheapest.delivery_known:
         meta_values = {
-            "product": search_name,
+            "product": described_name,
             "price": gbp(cheapest.delivered_price),
             "retailer": cheapest.retailer.name,
             "count": shop_count,
@@ -2002,7 +2005,7 @@ def product_detail(request, slug):
         # product already out would otherwise tell searchers it is not out yet.
         preorder = (cheapest.availability == Listing.Availability.PREORDER and not in_stock_count
                     and (release is None or release > today))
-        meta_title = hubs.product_title(words, search_name, meta_values["price"], preorder,
+        meta_title = hubs.product_title(words, search_name, meta_values["price"], preorder, game=game_word,
                                         retailer=meta_values["retailer"], count=shop_count)
         # "Cheapest today" only when the price quoted is in stock and nothing is cheaper. With a cheaper
         # pre-order under it, the description names both; when only pre-orders are left, it says so.
@@ -2019,16 +2022,20 @@ def product_detail(request, slug):
             key = "meta.product.description_preorder"
         meta_description = hubs.fit_description(hubs.tidy_stops(text(request, key, **meta_values)))
     else:
-        meta_title = hubs.fitted(text(request, key, product=search_name)
-                                 for key in ("meta.product.title", "meta.product.title_short"))
-        meta_title = meta_title or text(request, "meta.product.title_short", product=search_name)
+        meta_title = hubs.unpriced_title(words, search_name, game_word)
         if release_shown:
             # "Prices appear once shops list it" only when no shop lists it at all. A product listed but sold
             # out, or whose cheapest price has no known delivery cost, gets a dated line that does not deny it.
             key = "meta.product.description_dated_listed" if listings else "meta.product.description_dated"
-            meta_description = hubs.fit_description(text(request, key, product=search_name, date=release_shown))
+            meta_description = hubs.fit_description(text(request, key, product=described_name, date=release_shown))
+        elif last_known and listings:
+            # Sold out everywhere: what it last cost and when, as the page says under its heading. Thousands of
+            # sold-out pages otherwise share one sentence that differs only in the name (the audit of 17 Nov 2026).
+            meta_description = hubs.fit_description(text(
+                request, "meta.product.description_last_price", product=described_name,
+                price=gbp(last_known.price), date=short_date(last_known.date)))
         else:
-            meta_description = hubs.fit_description(text(request, "meta.product.description", product=search_name))
+            meta_description = hubs.fit_description(text(request, "meta.product.description", product=described_name))
     breadcrumbs = breadcrumbs_json(request, crumbs, page_url=page_url)
     list_slugs = shopping.read(request)
     # The page itself: a page about one item, whose main entity is the Product above (when there is one).

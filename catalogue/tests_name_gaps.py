@@ -387,3 +387,61 @@ class TidyTests(TestCase):
         small.refresh_from_db()
         self.assertEqual(deck.name, "Universes Beyond: Warhammer 40,000 Commander Deck - Tyranid Swarm")
         self.assertEqual(small.name, "Marvel Super Heroes Scene Box Heroes United")
+
+    def test_the_catalogue_tidy_gives_a_pokemon_center_edition_its_name_back(self):
+        """The audit of 17 Nov 2026: "Center Chaos Rising Elite Trainer Box". A read took the "Pokémon" of "Pokémon
+        Center" for the game's name."""
+        chaos = make_set(make_game(), name="Chaos Rising", slug="chaos-rising", code="")
+        etb = self.product("Center Chaos Rising Elite Trainer Box", kind=Product.Type.ELITE_TRAINER_BOX, shop=self.harbour,
+                           product_set=chaos)
+        call_command("tidy_catalogue", stdout=StringIO())
+        etb.refresh_from_db()
+        self.assertEqual(etb.name, "Pokémon Center Chaos Rising Elite Trainer Box")
+        self.assertEqual(etb.slug, "center-chaos-rising-elite-trainer-box")   # a rename never moves a page
+        # Another game's "Center" is its own word.
+        sports = make_set(make_game(name="Sports cards", slug="sports-cards"), name="Center Stage", slug="center-stage", code="")
+        stage = self.product("Center Stage Basketball Hobby Box", shop=self.harbour, product_set=sports)
+        call_command("tidy_catalogue", stdout=StringIO())
+        stage.refresh_from_db()
+        self.assertEqual(stage.name, "Center Stage Basketball Hobby Box")
+
+
+class RepeatedWordingTests(SimpleTestCase):
+    """Names that say the kind of product twice, or the game after the product: 114 live addresses repeated a phrase
+    on 17 Nov 2026. Titles and headings are built from these names."""
+
+    def test_the_kind_written_twice_is_written_once(self):
+        for name, tidy in (
+            ("Final Fantasy Play Booster Box Booster Box", "Final Fantasy Play Booster Box"),
+            ("Emperors in the New World Booster Box Booster Box", "Emperors in the New World Booster Box"),
+            ("Prismatic Evolutions Elite Trainer Box Pokémon TCG Elite Trainer Box", "Prismatic Evolutions Elite Trainer Box"),
+            ("Fates Collide Elite Trainer Box Pokemon TCG Elite Trainer Box", "Fates Collide Elite Trainer Box"),
+        ):
+            with self.subTest(name=name):
+                self.assertEqual(tidy_name(name), tidy)
+
+    def test_the_game_after_the_product_goes(self):
+        for name, tidy in (
+            ("Destined Rivals Booster Box Pokémon TCG", "Destined Rivals Booster Box"),
+            ("Hidden Potential Tin Giratina V Pokemon TCG", "Hidden Potential Tin Giratina V"),
+            ("30th Celebration Booster Box Simplified Chinese TCG", "30th Celebration Booster Box Simplified Chinese"),
+        ):
+            with self.subTest(name=name):
+                self.assertEqual(tidy_name(name), tidy)
+
+    def test_names_that_only_look_doubled_stay(self):
+        for name in ("Zacian V Box Zamazenta V Box", "Japanese Pokemon TCG", "Lorcana Trading Card Game",
+                     "Hunter x Hunter Vol.2 Booster Box 16 Packs Collectible Card Game",
+                     "Bang Dream Girls Band Party Title Premium Booster Box", "Pokemon TCG Classic"):
+            with self.subTest(name=name):
+                self.assertEqual(tidy_name(name), name)
+
+    def test_a_read_keeps_pokemon_in_front_of_center(self):
+        from .classify import clean_name
+
+        self.assertEqual(clean_name("Pokémon Center Chaos Rising Elite Trainer Box", "pokemon"),
+                         "Pokémon Center Chaos Rising Elite Trainer Box")
+        self.assertEqual(clean_name("Pokémon TCG: Chaos Rising Elite Trainer Box", "pokemon"), "Chaos Rising Elite Trainer Box")
+        # Both names are one product to the matcher, which never counted the game's name.
+        self.assertEqual(match_key("Center Chaos Rising Elite Trainer Box", "pokemon"),
+                         match_key("Pokémon Center Chaos Rising Elite Trainer Box", "pokemon"))

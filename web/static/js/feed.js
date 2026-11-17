@@ -91,8 +91,10 @@
   // The home page's last hint points up at Find with Rip in the header (the owner, 14 Nov 2026: "a little tiny text
   // box saying, need help with your shopping, or just want to ask a question, ask Rip, and it will just point towards
   // the button at the top"); it stays longer, having more to read (data-hint-hold).
+  // A game's page in the compact layout has its own pair (the owner, 17 Nov 2026): Pick a set under its heading as the
+  // sets light, then Or see all products under that link as it lights.
   var TARGETS = { games: ".feed-game__pill", types: ".feed-tile__well", sets: ".feed-sets .feed-filters__row > .chip",
-                  rip: ".masthead__find" };
+                  rip: ".masthead__find", "cx-sets": ".cx-sets .cx-set", "cx-all": ".cx-section__head .cx-section__all" };
   // What a hint sits beside on a wide screen: the last of those items, or for the sets the row's last thing, All sets.
   var BESIDE = { sets: ".feed-sets .feed-filters__row > *" };
   var targetOf = function (hint) {
@@ -138,17 +140,18 @@
     };
     var at = function (ms, fn) { timers.push(setTimeout(fn, ms)); };
     // The fairy's pass: as a hint shows, the items it points at light up one after another, left to right.
-    var pass = function (selector) {
+    // A hint may keep what it points at lit longer (data-hint-glow, in ms): a single link, so it is seen with its words.
+    var pass = function (selector, glow) {
       if (reduced || !selector) return;
       Array.prototype.forEach.call(document.querySelectorAll(selector), function (item, i) {
         at(i * 110, function () { item.classList.add("is-lit"); });
-        at(i * 110 + 520, function () { item.classList.remove("is-lit"); });
+        at(i * 110 + (glow || 520), function () { item.classList.remove("is-lit"); });
       });
     };
     var start = 700;
     Array.prototype.forEach.call(hints, function (hint) {
       var hold = parseInt(hint.getAttribute("data-hint-hold"), 10) || 2200;
-      at(start, function () { show(hint); pass(targetOf(hint)); });
+      at(start, function () { show(hint); pass(targetOf(hint), parseInt(hint.getAttribute("data-hint-glow"), 10)); });
       at(start + hold, function () { hide(hint); });
       start += hold + 400;
     });

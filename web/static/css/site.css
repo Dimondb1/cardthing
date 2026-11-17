@@ -2894,6 +2894,24 @@ li + li > .checker__option { border-top: var(--border-width) solid var(--color-l
 .feed-hint--side.is-on { transform: translate(0, -50%); }
 .feed-hint.feed-hint--side::after { left: calc(-1 * var(--space-1)); top: 50%; bottom: auto; transform: translateY(-50%) rotate(45deg); }
 @media (prefers-reduced-motion: reduce) { .feed-hint { transition: none; transform: translate(var(--hint-x), 0); } .feed-hint--side { transform: translate(0, -50%); } }
+/* A game's page in the compact layout (the owner, 17 Nov 2026: "very subtle, very light ... keeping with the theme"):
+   light hints, a soft orange label with an orange line and ink words, hanging under the sets heading and then under All
+   products, caret up. As each shows, what it points at lights: the sets one after another, then the link, with a soft
+   orange wash that fades in behind them and out again. Opacity only, under the words. */
+.feed-hint--soft { border: var(--border-width) solid var(--color-brand-line); background: var(--color-brand-soft); color: var(--color-ink); box-shadow: var(--shadow-card); }
+.feed-hint--soft::after { border: 0 solid var(--color-brand-line); border-width: var(--border-width) 0 0 var(--border-width); background: var(--color-brand-soft); }
+.cx-section__head { position: relative; }
+.feed-hint.feed-hint--cx-sets, .feed-hint.feed-hint--cx-all { --hint-x: 0; top: calc(100% + var(--space-1)); }
+.feed-hint.feed-hint--cx-sets { left: 0; }
+.feed-hint.feed-hint--cx-all { left: auto; right: 0; }
+.feed-hint--cx-sets::after, .feed-hint--cx-all::after { top: calc(-1 * var(--space-1)); }
+.feed-hint--cx-sets::after { left: var(--space-5); }
+.feed-hint--cx-all::after { left: auto; right: var(--space-5); }
+.cx-set, .cx-section__all { position: relative; isolation: isolate; }
+.cx-set::after, .cx-section__all::after { content: ""; position: absolute; z-index: -1; background: var(--color-brand-soft); opacity: 0; transition: opacity var(--motion-normal) var(--ease-standard); pointer-events: none; }
+.cx-set::after { inset: 0; border-radius: calc(var(--radius-card) - var(--border-width)); box-shadow: inset 0 0 0 var(--border-width) var(--color-brand-line); }
+.cx-section__all::after { inset: calc(-1 * var(--space-1)) calc(-1 * var(--space-2)); border-radius: var(--radius-pill); }
+.cx-set.is-lit::after, .cx-section__all.is-lit::after { opacity: 1; }
 /* The fairy's pass (feed.js): each pill, then each tile, lifts for a moment with a soft orange glow behind it and a spark at
    its corner, one after another. The glow is a layer whose opacity moves, the lift a transform; nothing else animates. */
 .feed-game__pill, .feed-tile__well { position: relative; }

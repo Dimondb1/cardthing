@@ -6389,10 +6389,18 @@ last, for about four seconds, a small box under the header's Find with Rip
 button ("Need help with your shopping, or just want to ask a question? Ask
 Rip") while the button lifts (the owner, 14 Nov 2026); on a game's page Pick a set by its row of sets and Or
 pick a type by the tiles; and once a set is picked, as its list comes in,
-Now pick a type by the tiles. Nothing is remembered between landings (the
+Now pick a type by the tiles. In the compact layout a game's page has its
+own pair, lighter than the rest (the owner, 17 Nov 2026: "very subtle, very
+light ... little highlights to say, select your product or pick all
+products"): a soft orange label, Pick a set, under the sets heading for two
+seconds while the sets light up one after another with a soft orange wash,
+then Or see all products under the All products link for two seconds while
+the link glows. Opacity only; with reduced motion the labels show without
+moving and nothing lights. Nothing is remembered between landings (the
 owner, 9 Nov 2026: "every time I land on the homepage, I need to see them.
 They can go ... I don't need to see them after that"). The wording is
-`feed.hint.*` in the registry. On a first visit the cookie card covers the
+`feed.hint.*` in the registry, and `compact.hint.sets` and
+`compact.hint.all` for the compact game page. On a first visit the cookie card covers the
 foot of the screen, where the game bar is, so the hints wait for its answer
 and the page's return to the top, then show; a tap elsewhere first skips
 them. Each step lands with a little movement: a

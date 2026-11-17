@@ -811,6 +811,11 @@ ENTRIES = [
           "Beside a game's list of sets: opens every product of the game.", placeholders=("game",)),
     Entry("compact.game.no_sets", T, "Compact layout: a game with no sets", "No sets listed for this game yet.",
           "On a game's compact page when none of its products is filed under a set."),
+    Entry("compact.hint.sets", T, "Compact layout: game page hint at the sets", "Pick a set",
+          "A small light label under a game's sets heading, on for a moment on each landing while the sets light up "
+          "one by one, then gone. Two or three words."),
+    Entry("compact.hint.all", T, "Compact layout: game page hint at the all products link", "Or see all products",
+          "The same under the All products link beside a game's sets, after the sets' hint. A few words."),
     Entry("compact.set.back", B, "Compact layout: back to a game's sets", "All {game} sets",
           "Above a set's name on its compact page: back to the game's list of sets.", placeholders=("game",)),
     Entry("compact.set.from_pack", T, "Compact layout: cheapest a pack", "From {each} a pack",

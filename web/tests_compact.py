@@ -130,7 +130,45 @@ class HomeTests(CompactCase):
         rip = html.index('<span class="feed-hint feed-hint--rip"')
         self.assertLess(html.index('class="masthead__find"'), rip)
         self.assertIn("Need help with your shopping, or just want to ask a question? Ask Rip", html[rip:])
-        self.assertNotIn("feed-hint", self.page(self.pokemon.get_absolute_url()))
+        game = self.page(self.pokemon.get_absolute_url())
+        self.assertNotIn("feed-hint--games", game)
+        self.assertNotIn("feed-hint--rip", game)
+
+    def test_each_landing_on_a_game_page_hints_at_the_sets_then_all_products(self):
+        # The owner, 17 Nov 2026: "very subtle, very light ... little highlights to say, select your product or pick
+        # all products. Make the animation pretty brief, but make it so you can read it."
+        html = self.page(self.pokemon.get_absolute_url())
+        head = html[html.index('<div class="cx-section__head">'):html.index('<ul class="cx-sets">')]
+        sets = head.index('<span class="feed-hint feed-hint--soft feed-hint--cx-sets" hidden aria-hidden="true" '
+                          'data-hint-hold="2000">Pick a set</span>')
+        everything = head.index('<span class="feed-hint feed-hint--soft feed-hint--cx-all" hidden aria-hidden="true" '
+                                'data-hint-hold="2000" data-hint-glow="1600">Or see all products</span>')
+        self.assertLess(head.index('class="cx-section__all"'), sets)
+        self.assertLess(sets, everything)
+        self.assertEqual(html.count('class="feed-hint '), 2)
+        # Hidden until feed.js shows them, so a page without script never has them in the way.
+        self.assertIn("js/feed.js", html)
+        # A set's own page has none.
+        self.assertNotIn("feed-hint", self.page(self.reign.get_absolute_url()))
+
+    def test_the_game_page_hints_are_light_and_move_by_opacity_alone(self):
+        from django.contrib.staticfiles import finders
+
+        css = open(finders.find("css/site.css"), encoding="utf-8").read()
+        block = css[css.index(".feed-hint--soft {"):css.index(".cx-set.is-lit::after")]
+        block += css[css.index(".cx-set.is-lit::after"):css.index("\n", css.index(".cx-set.is-lit::after"))]
+        # Tokens only, and the light look: a soft orange label with an orange line and ink words.
+        self.assertNotRegex(block, r"#[0-9a-fA-F]{3,8}\b|rgb\(|\d+(px|ms|s)\b")
+        self.assertIn(".feed-hint--soft { border: var(--border-width) solid var(--color-brand-line); "
+                      "background: var(--color-brand-soft); color: var(--color-ink);", block)
+        # What lights is a wash behind the words whose opacity alone changes.
+        self.assertEqual(re.findall(r"transition: ([^;]+);", block), ["opacity var(--motion-normal) var(--ease-standard)"])
+        self.assertIn(".cx-set.is-lit::after, .cx-section__all.is-lit::after { opacity: 1; }", block)
+        script = open(finders.find("js/feed.js"), encoding="utf-8").read()
+        self.assertIn('"cx-sets": ".cx-sets .cx-set", "cx-all": ".cx-section__head .cx-section__all"', script)
+        self.assertIn("at(i * 110 + (glow || 520)", script)
+        # Reduced motion: shown without moving, nothing lights.
+        self.assertIn("if (reduced || !selector) return;", script)
 
 
 class DeskTests(CompactCase):

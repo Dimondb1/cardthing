@@ -371,7 +371,8 @@ def game_page(request, game, extra, answer):
         "faq": faq,
         "structured_json": ld_json(structured),
         "all_url": f"{reverse('web:search')}?game={game.slug}",
-        "dock": dock(request, game),
+        # The light hints by the sets and the All products link on each landing (feed.js; the owner, 17 Nov 2026).
+        "dock": dock(request, game, hints="game"),
     })
 
 

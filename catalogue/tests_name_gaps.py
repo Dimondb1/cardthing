@@ -520,3 +520,43 @@ class SameItemTwiceTests(TestCase):
     def test_a_shop_whose_price_would_leave_the_site_still_holds_the_pair(self):
         Listing.objects.filter(pk=self.stale.pk).update(is_active=False)
         self.assertIn("a shop's price would leave the site", self.merge())
+
+
+class LorcanaSetNumberTests(TestCase):
+    """The owner's catalogue log of 17 Nov 2026 listed "Illumineer's Trove Set 7" and "Illumineer's Trove Set 6", one
+    shop's two pages at £49.99, as the same product: the keys leave Lorcana's set numbers out. The same-price rule
+    would have merged them."""
+
+    def setUp(self):
+        self.lorcana = make_game(name="Disney Lorcana", slug="lorcana")
+        self.loose = make_set(self.lorcana, name="Lorcana", slug="lorcana-misc", code="")
+        self.meeple = make_retailer("The Meeple Rooms")
+
+    def test_two_set_numbers_are_two_products_and_one_left_out_is_not_a_difference(self):
+        self.assertFalse(same_product("Illumineer's Trove Set 7", "Illumineer’s Trove Set 6", "lorcana"))
+        self.assertFalse(same_product("Lorcana Set 5 Booster Box", "Lorcana Set 6 Booster Box", "lorcana"))
+        self.assertFalse(same_product("Gift Set Set 3", "Gift Set Set 4", "lorcana"))
+        # A set number beside the set's name, written by one shop and not another, is still one product.
+        self.assertTrue(same_product("Fabled (Set 9) Booster Box", "Fabled Booster Box", "lorcana"))
+        self.assertTrue(same_product("Fabled Chapter 9 Booster Box", "Fabled Set 9 Booster Box", "lorcana"))
+
+    def test_the_hourly_merge_leaves_two_troves_one_shop_sells_at_one_price(self):
+        seven = make_product(self.loose, name="Illumineer's Trove Set 7", product_type=Product.Type.COLLECTION_BOX)
+        six = make_product(self.loose, name="Illumineer’s Trove Set 6", product_type=Product.Type.COLLECTION_BOX)
+        make_listing(seven, self.meeple, price="49.99")
+        make_listing(six, self.meeple, price="49.99")
+        out = StringIO()
+        call_command("merge_duplicates", stdout=out)
+        self.assertEqual(Product.objects.filter(pk__in=[seven.pk, six.pk], is_active=True).count(), 2)
+        self.assertEqual(certainty(seven, six), "different")
+
+    def test_the_same_price_rule_never_joins_two_products_filed_under_two_sets(self):
+        fabled = make_set(self.lorcana, name="Fabled", slug="fabled", code="")
+        island = make_set(self.lorcana, name="Archazia's Island", slug="archazias-island", code="")
+        first = make_product(fabled, name="Gateway Starter Game", slug="gateway-fabled", product_type=Product.Type.DECK)
+        second = make_product(island, name="Gateway Starter Game", slug="gateway-island", product_type=Product.Type.DECK)
+        make_listing(first, self.meeple, price="19.99")
+        make_listing(second, self.meeple, price="19.99")
+        out = StringIO()
+        call_command("merge_duplicates", stdout=out)
+        self.assertEqual(Product.objects.filter(pk__in=[first.pk, second.pk], is_active=True).count(), 2)

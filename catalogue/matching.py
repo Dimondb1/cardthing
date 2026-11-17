@@ -173,6 +173,19 @@ BOOSTER_PACK = re.compile(r"\bbooster\b.*\bpacks?\b|\bpacks?\b.*\bbooster\b", re
 NOT_A_PACK = re.compile(r"\b(?:tins?|box|display|decks?|bundle|collection|case|blisters?)\b", re.I)
 # Lorcana's sets have numbers, which shops add or leave out: "Fabled (Set 9)", "Fabled (Chapter 9)".
 LORCANA_NUMBER = re.compile(r"\b(?:set|chapter)\s*\d{1,2}\b", re.I)
+LORCANA_NUMBER_OF = re.compile(r"\b(?:set|chapter)\s*(\d{1,2})\b", re.I)
+
+
+def lorcana_set_numbers_differ(a, b, game=""):
+    """Whether two Lorcana names each give a set number and the numbers differ. The keys leave the number out,
+    since shops add it or leave it out beside the set's name ("Fabled (Set 9)"), so a name with no set's name
+    ("Illumineer's Trove Set 7", "Illumineer's Trove Set 6", one shop's two prices on the owner's catalogue log of
+    17 Nov 2026) is told from another only by its number."""
+    if game != "lorcana":
+        return False
+    ours = {int(n) for n in LORCANA_NUMBER_OF.findall(a or "")}
+    theirs = {int(n) for n in LORCANA_NUMBER_OF.findall(b or "")}
+    return bool(ours and theirs and ours != theirs)
 
 
 def without_notes(text, game=""):
@@ -684,6 +697,7 @@ def same_product(a, b, game=""):
     product ("Collector's Edition Commander Deck" is left for a person, and the hourly tidy would take the
     listings it brought off "Collector Commander Deck")."""
     return (identity_numbers(a, game) == identity_numbers(b, game) and not codes_differ(a, b, game)
+            and not lorcana_set_numbers_differ(a, b, game)
             and booster_kinds(a) == booster_kinds(b) and marked_different(a) == marked_different(b))
 
 

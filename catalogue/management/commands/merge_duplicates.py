@@ -39,8 +39,8 @@ from django.utils import timezone
 from catalogue.languages import CHINESE, SIMPLIFIED, name as language_name, plain, product_language
 from catalogue.matching import (
     BOX_SIZES, KIND_MARKS, KIND_WORDS, VARIANT_WORDS, booster_kinds, chinese_code, code_key, codes_differ, contradiction,
-    identity_numbers, key_text, key_words, marked_different, match_key, naming_words, same_letters, same_product, set_codes,
-    squash_key,
+    identity_numbers, key_text, key_words, lorcana_set_numbers_differ, marked_different, match_key, naming_words, same_letters,
+    same_product, set_codes, squash_key,
 )
 from catalogue.models import (
     DailyLowestPrice, Listing, OutboundClick, PreorderOpen, Product, ProductAlias, Restock, ShopProduct, StockAlert,
@@ -622,6 +622,9 @@ def why_not_merge(keep, other, apart=frozenset()):
     ``apart`` holds the pairs the owner said are not the same (checks.kept_apart)."""
     if frozenset((keep.pk, other.pk)) in apart:
         return "you said they are not the same"
+    if lorcana_set_numbers_differ(keep.name, other.name, game_slug_of(keep)):
+        # Before the letters: they leave Lorcana's set numbers out as the keys do.
+        return "their set numbers differ"
     if same_letters(keep.name, other.name, game_slug_of(keep)):
         # One name with the spaces in other places: nothing below can differ but how it reads a split word
         # ("Jumpstart Booster" and "Jump Start Booster").
@@ -683,7 +686,8 @@ class Command(BaseCommand):
                         # same price: one item it lists on two pages, merged while the kept page holds the shop's
                         # listing still being checked.
                         why = shops_in_the_way(taken, theirs)
-                        if why and same_item_twice(taken, theirs, taken_prices, prices.get(other.pk, {})):
+                        filed_apart = keep.product_set_id and other.product_set_id and keep.product_set_id != other.product_set_id
+                        if why and not filed_apart and same_item_twice(taken, theirs, taken_prices, prices.get(other.pk, {})):
                             from catalogue.checks import shown_at
 
                             both = shown_at(taken) & shown_at(theirs)

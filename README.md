@@ -5939,9 +5939,14 @@ same box under "Booster Box" and "Booster Display Box" at one price, one
 listing checked days before the other. The page kept is the one holding
 that shop's listing still being checked, since a merge leaves a shop's
 second listing on the page switched off; when that cannot be arranged (a
-group of three or more) the pair waits. A penny's difference, or names
-only nearly the same (Scarlet ex and Violet ex packs), still waits. No
-shop's listing is ever deleted. `tidy_catalogue`
+group of three or more) the pair waits. A penny's difference, names only
+nearly the same (Scarlet ex and Violet ex packs), or two products filed
+under two different sets, still waits. No shop's listing is ever deleted.
+Lorcana's set numbers: the keys leave them out, since shops add "(Set 9)"
+beside a set's name or leave it off, so two names that each give a set
+number and give different ones are two products ("Illumineer's Trove Set
+7" and "Set 6", one shop's two pages at one price on the owner's log of
+17 Nov 2026), for the hourly merge, Things to check and a shop's read. `tidy_catalogue`
 merges the same undoable way when it tidies a name onto another product's
 ("The hourly tidy merged them: with the shop's wording taken off, the two
 names are the same"), and never a pair the owner kept apart or whose merge

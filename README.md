@@ -5716,6 +5716,41 @@ Entries link to the product page. Feeds are built with Django's own
 syndication module and cached like the home lists, so a restock recorded
 by a check appears on the next request.
 
+## Merge two products by their addresses
+
+**Admin, Merge two products** (`/admin/merge/`, `web/merge_box.py`, also
+linked under Possible duplicates on Things to check) is for a duplicate
+the site's own rules never pair, and for an old address that shows
+nothing. An audit on 17 Nov 2026 found "One Piece Heroines Edition Vol.2
+Booster Box Extra Booster" beside "EB05 Heroines Edition Vol.2 Booster
+Box", one titled from £204.99 and the other from £119.95 for the same
+box, and an address Google had shown answering not found while the same
+product was live at another; the owner: "Approve, add merge box".
+
+Paste the page to keep and the page to fold into it (a whole link, a path
+or the last part of the address). The page shows both side by side: game,
+set, kind, language, how many shops list it and have a price now, and the
+cheapest delivered price. Nothing changes until the button under them is
+tapped.
+
+- Both on the site: merged as Things to check merges
+  (`merge_with_undo`), so the shops, prices, price history, alerts and
+  clicks move, the old address redirects for good, and it is listed under
+  Sorted for you with Undo ("You merged them by address").
+- The second page is switched off, or its address is no product at all:
+  only the address moves (an old product address to the kept page). A
+  switched-off page's shops and prices are left where they are, since a
+  page is often switched off because its items are not sealed products.
+  Take it back by deleting it under Old product addresses.
+- Never: two games, or two languages (an English box is not the Japanese
+  one), or keeping a page that is switched off.
+- The owner must tick "They are the same product" first when the kinds
+  differ, when the site's rules would not merge them (a number, a set code,
+  a Collector's Edition), when nothing in the two names points at one
+  product, or when a shop lists both.
+
+Staff only, never for editors, never indexed or cached.
+
 ## Merged products keep their addresses
 
 `merge_duplicates` (run hourly by `tidy_all`) records every merged
@@ -5870,10 +5905,18 @@ from 9 Nov 2026):
   address, IPv4 or IPv6. A plain Google Cloud address
   (`.googleusercontent.com`) can be rented by anyone, so it proves only
   Google's site verification and its page speed tests, never Googlebot.
-  The answer is kept for a day. A lookup with no answer in 2 seconds
-  counts as no and is asked again ten minutes later, so no page waits on
-  DNS. Calling itself Googlebot from a home connection gets the check like
-  anyone else.
+  The answer is kept for a day. A lookup with no answer in 2 seconds, or
+  one the name server fails, is asked again ten minutes later, so no page
+  waits on DNS. Until then a visitor naming one of these search engines is
+  neither let in nor shown the check: it is asked to come back (**503**
+  with `Retry-After`, plain text, never marked noindex), which a search
+  engine treats as a blip. Before 17 Nov 2026 it was shown the check page,
+  which is marked noindex, and a noindex page shown to Google on a real
+  address can drop that page from its index; an audit found no sign this
+  had happened (2 pages excluded by noindex in Search Console) and the
+  owner approved closing the gap. An address with no name at all is an
+  answer, not a failure: calling itself Googlebot from a home connection
+  gets the check like anyone else.
 - AI assistants and their search (GPTBot, ChatGPT-User, ClaudeBot,
   PerplexityBot and others), the smaller search engines and the link
   previews chat and social apps make (Facebook, WhatsApp, Discord, Slack,
@@ -6062,6 +6105,19 @@ of a merged product still redirects. `tidy_all` forgets these addresses
 after a year, when they go back to a plain 404. Changing a product's
 address in Django Admin keeps the old one as an old address, so it
 redirects.
+
+A page that is **switched off** (Show on site unticked, by the owner or by
+Claude's check of a new page deciding it is not a sealed product) answers
+the same 410 page, with its set and game, from its own record
+(`views.switched_off`); before 17 Nov 2026 it was a bare 404, which is how
+an address Google had shown went dead. Two cases stay 404: a new page
+whose first check is still open (waiting for Claude, or for the owner),
+which may yet go up, and a page whose game is switched off. In Django
+Admin the product form has **Send its address to**: when unticking Show
+on site, paste the address of the live page for the same product and the
+switched-off page's address redirects there for good (an old product
+address); "Its address now" on the form says what a visit gets. Ticking
+Show on site again gives the page its own address back.
 
 ## Being found by search engines and AI answers
 

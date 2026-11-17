@@ -122,17 +122,55 @@ class ListingInline(admin.TabularInline):
     autocomplete_fields = ("retailer",)
 
 
+class ProductForm(forms.ModelForm):
+    """The product form, with where a switched-off page's address should lead (the audit of 17 Nov 2026: an address
+    Google had shown answered not found while the same product was live at another)."""
+
+    send_to = forms.CharField(
+        label="Send its address to", required=False,
+        widget=forms.TextInput(attrs={"size": 70, "autocapitalize": "off", "spellcheck": "false"}),
+        help_text="Only when you untick Show on site. Paste the address of the live page for the same product, and "
+                  "anyone who opens this page's address lands there. Left empty, this page's address says the page "
+                  "has gone, with links to its game and set.",
+    )
+
+    class Meta:
+        model = Product
+        fields = "__all__"
+
+    def clean(self):
+        from .addresses import find
+
+        cleaned = super().clean()
+        self.send_to_product = None
+        text = (cleaned.get("send_to") or "").strip()
+        if not text:
+            return cleaned
+        target = find(text)["product"]
+        if cleaned.get("is_active"):
+            self.add_error("send_to", "Untick Show on site first, or leave this empty. A page on the site keeps its own address.")
+        elif target is None or not target.is_active:
+            self.add_error("send_to", "No page on the site has that address. Paste the address of the live page.")
+        elif target.pk == self.instance.pk:
+            self.add_error("send_to", "That is this page's own address.")
+        else:
+            self.send_to_product = target
+        return cleaned
+
+
 @admin.register(Product)
 class ProductAdmin(admin.ModelAdmin):
+    form = ProductForm
     list_display = ("name", "game", "product_set", "product_type", "ean", "has_image", "cheapest", "listing_count", "is_active")
     list_filter = ("game", "product_type", "is_active", BarcodeFilter, ImageFilter)
     list_editable = ("ean",)
     search_fields = ("name", "ean", "product_set__name", "product_set__code")
     autocomplete_fields = ("product_set",)
     prepopulated_fields = {"slug": ("name",)}
-    readonly_fields = ("image_preview", "created_at", "updated_at", "shops_rrp", "claudes_rrp", "shops_contents")
+    readonly_fields = ("image_preview", "created_at", "updated_at", "shops_rrp", "claudes_rrp", "shops_contents",
+                       "address_now")
     fieldsets = (
-        (None, {"fields": ("name", "slug", "game", "product_set", "product_type", "is_active")}),
+        (None, {"fields": ("name", "slug", "game", "product_set", "product_type", "is_active", "address_now", "send_to")}),
         ("Details", {"fields": ("image", "image_url", "image_preview", "ean", "amazon_asin", "release_date")}),
         ("RRP", {"fields": ("rrp", "shops_rrp", "claudes_rrp")}),
         ("What is inside", {"fields": ("packs", "cards_per_pack", "shops_contents")}),
@@ -182,6 +220,19 @@ class ProductAdmin(admin.ModelAdmin):
             parts.append(f"{obj.cards_found} cards a pack")
         return ", ".join(parts) or "Nothing yet: the shops' descriptions do not agree on it, or do not say."
 
+    @admin.display(description="Its address now")
+    def address_now(self, obj):
+        """What a visit to the page's address gets: the page, the page it was sent to, or the page saying it has
+        gone."""
+        if obj.pk is None:
+            return "Not saved yet."
+        if obj.is_active:
+            return f"On the site at {obj.get_absolute_url()}"
+        alias = ProductAlias.objects.filter(slug=obj.slug, product__is_active=True).select_related("product").first()
+        if alias is not None:
+            return f"Switched off. Its address leads to {alias.product.name} ({alias.product.get_absolute_url()})."
+        return "Switched off. Its address says the page has gone, or not found while a new page waits for its check."
+
     @admin.display(description="Current image")
     def image_preview(self, obj):
         if not obj.image_src:
@@ -196,6 +247,15 @@ class ProductAdmin(admin.ModelAdmin):
             # A new address: the old one keeps working, as after a merge, so links and search results follow.
             ProductAlias.objects.update_or_create(slug=old_slug, defaults={"product": obj})
             ProductAlias.objects.filter(slug=obj.slug, product=obj).delete()
+        target = getattr(form, "send_to_product", None)
+        if target is not None and not obj.is_active:
+            # Switched off and sent on: its address leads to the live page of the same product from now on.
+            from .addresses import send_to
+
+            send_to(obj.slug, target)
+        elif obj.is_active and "is_active" in form.changed_data:
+            # Back on the site: its address is its own again, wherever it was sent while it was off.
+            ProductAlias.objects.filter(slug=obj.slug).delete()
 
     def save_formset(self, request, form, formset, change):
         if formset.model is Listing:

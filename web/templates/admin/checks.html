@@ -218,6 +218,7 @@
     <h2>Possible duplicates ({{ duplicates|length }})</h2>
     {% if sure_pairs %}<form method="post">{% csrf_token %}<input type="hidden" name="action" value="merge_sure">{% for keep, other, ask in sure_pairs %}<input type="hidden" name="pair" value="{{ keep.pk }}:{{ other.pk }}">{% endfor %}<input type="submit" value="Merge the {{ sure_pairs|length }} pair{{ sure_pairs|pluralize }} Claude is sure are the same"></form>{% endif %}
     <p class="note">Merge only when they are the same product. Tap Not the same if not.</p>
+    <p class="note">Spotted a duplicate that is not listed here? <a href="{% url 'merge_products' %}">Merge two products by their addresses</a>.</p>
     {% if duplicate_sections %}<form method="post" id="ticked-pairs" class="ticked">{% csrf_token %}<input type="hidden" name="action" value="ticked">
       <label class="pick" hidden><input type="checkbox" data-all="ticked-pairs"> Tick all</label>
       <button type="submit" class="act" name="do" value="merge">Merge ticked</button>

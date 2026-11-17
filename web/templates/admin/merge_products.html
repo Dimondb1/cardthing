@@ -1,0 +1,99 @@
+{% extends "admin/base_site.html" %}
+{% load ripraptor %}
+{% block title %}Merge two products | {{ site_title }}{% endblock %}
+{% block extrahead %}{{ block.super }}<meta name="robots" content="noindex, nofollow">{% endblock %}
+{% block extrastyle %}{{ block.super }}<style>
+  .mp { display: grid; gap: 20px; max-width: 60rem; }
+  .mp h2 { margin: 0 0 4px; }
+  .mp p { margin: 0 0 8px; }
+  .mp .note { color: var(--body-quiet-color); }
+  .mp form.ask { display: grid; gap: 12px; }
+  .mp label { display: block; font-weight: 600; margin-bottom: 4px; }
+  .mp input[type=text] { width: 100%; min-height: 44px; box-sizing: border-box; }
+  .mp input[type=submit] { min-height: 44px; padding: 0 16px; }
+  .mp .sides { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr)); }
+  .mp .side { padding: 12px 14px; border: 1px solid var(--hairline-color); border-radius: 6px; overflow-wrap: anywhere; }
+  .mp .side h3 { margin: 0 0 6px; font-size: 0.85rem; text-transform: none; color: var(--body-quiet-color); }
+  .mp .side b.name { display: block; font-size: 1.1rem; margin-bottom: 6px; }
+  .mp .side dl { display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; margin: 0; }
+  .mp .side dt { color: var(--body-quiet-color); }
+  .mp .side dd { margin: 0; }
+  .mp .verdict { padding: 12px 16px; border: 1px solid var(--hairline-color); border-radius: 6px; }
+  .mp .verdict.no b { display: block; color: var(--error-fg); }
+  .mp ul.cautions { margin: 0 0 8px; padding-left: 20px; }
+  .mp ul.cautions li { margin-bottom: 4px; }
+  .mp label.tick { font-weight: 400; display: flex; gap: 8px; align-items: flex-start; margin: 8px 0; }
+</style>{% endblock %}
+{% block content %}
+<div class="mp">
+  <section>
+    <p>For a duplicate page the site did not spot itself, or an old address that shows nothing. Paste the two product addresses. Nothing changes until you tap the button under the two pages.</p>
+    <form class="ask" method="get">
+      <div><label for="mp-keep">Page to keep</label><input id="mp-keep" type="text" name="keep" value="{{ keep_text }}" placeholder="https://ripraptor.com/products/..." autocapitalize="off" autocomplete="off" spellcheck="false"></div>
+      <div><label for="mp-other">Page to fold into it</label><input id="mp-other" type="text" name="other" value="{{ other_text }}" placeholder="https://ripraptor.com/products/..." autocapitalize="off" autocomplete="off" spellcheck="false"></div>
+      <div><input type="submit" value="Show both pages"></div>
+    </form>
+    <p class="note">Keep the page with the most shops. A whole link, or only the last part of the address, both work.</p>
+  </section>
+
+  {% if problem %}<div class="verdict no"><b>Cannot be done</b>{{ problem }}</div>{% endif %}
+
+  {% if keep and what %}
+  <section>
+    <div class="sides">
+      <div class="side">
+        <h3>Kept</h3>
+        <b class="name">{{ keep.product.name }}</b>
+        <dl>
+          <dt>Address</dt><dd><a href="{{ keep.product.get_absolute_url }}" target="_blank" rel="noopener">{{ keep.product.get_absolute_url }}</a></dd>
+          <dt>Game</dt><dd>{{ keep.product.game.name }}</dd>
+          <dt>Set</dt><dd>{{ keep.product.product_set.name|default:"None" }}</dd>
+          <dt>Kind</dt><dd>{{ keep.kind }}</dd>
+          <dt>Language</dt><dd>{{ keep.language }}</dd>
+          <dt>Shops</dt><dd>{{ keep.priced }} with a price now, {{ keep.shops }} listing it</dd>
+          <dt>Cheapest</dt><dd>{% if keep.cheapest %}{{ keep.cheapest|gbp }} delivered{% else %}No price now{% endif %}</dd>
+        </dl>
+      </div>
+      <div class="side">
+        <h3>Folded into it</h3>
+        {% if other %}
+        <b class="name">{{ other.product.name }}</b>
+        <dl>
+          <dt>Address</dt><dd>{% if other.product.is_active %}<a href="{{ other.product.get_absolute_url }}" target="_blank" rel="noopener">{{ other.product.get_absolute_url }}</a>{% else %}/products/{{ other_slug }}/{% endif %}</dd>
+          {% if other_old %}<dt>Note</dt><dd>/products/{{ other_slug }}/ is an old address that leads to this page.</dd>{% endif %}
+          <dt>On the site</dt><dd>{% if other.product.is_active %}Yes{% else %}No, switched off{% endif %}</dd>
+          <dt>Game</dt><dd>{{ other.product.game.name }}</dd>
+          <dt>Set</dt><dd>{{ other.product.product_set.name|default:"None" }}</dd>
+          <dt>Kind</dt><dd>{{ other.kind }}</dd>
+          <dt>Language</dt><dd>{{ other.language }}</dd>
+          <dt>Shops</dt><dd>{{ other.priced }} with a price now, {{ other.shops }} listing it</dd>
+          <dt>Cheapest</dt><dd>{% if other.cheapest %}{{ other.cheapest|gbp }} delivered{% else %}No price now{% endif %}</dd>
+        </dl>
+        {% else %}
+        <b class="name">/products/{{ other_slug }}/</b>
+        <p>No product is at this address now.</p>
+        {% endif %}
+      </div>
+    </div>
+  </section>
+
+  <section class="verdict">
+    <form method="post">{% csrf_token %}
+      <input type="hidden" name="keep" value="{{ keep_text }}"><input type="hidden" name="other" value="{{ other_text }}">
+      {% if what == "merge" %}
+      <p><b>What happens:</b> the shops, prices, price history, alerts and clicks of the second page move to the kept page. The second address then leads to the kept page for good. It is listed under Sorted for you on Things to check, with Undo.</p>
+      {% if cautions %}
+      <p><b>Look at these first:</b></p>
+      <ul class="cautions">{% for caution in cautions %}<li>{{ caution }}</li>{% endfor %}</ul>
+      <label class="tick"><input type="checkbox" name="same" value="yes"> I have looked at both pages. They are the same product.</label>
+      {% endif %}
+      <input type="submit" value="Merge into {{ keep.product.name }}">
+      {% else %}
+      <p><b>What happens:</b> only the address moves. /products/{{ other_slug }}/ will lead to the kept page for good, so visitors and search engines land on a live page. {% if other %}The second page is switched off, so its shops and prices stay where they are.{% endif %} To take it back, delete it under Old product addresses.</p>
+      <input type="submit" value="Send this address to {{ keep.product.name }}">
+      {% endif %}
+    </form>
+  </section>
+  {% endif %}
+</div>
+{% endblock %}

@@ -8,6 +8,7 @@ from web import amazon_admin as web_amazon
 from web import botcheck as web_botcheck
 from web import delivery as web_delivery
 from web import ebay_health as web_ebay_health
+from web import merge_box as web_merge_box
 from web import email_admin as web_email
 from web import media as web_media
 from web import online as web_online
@@ -32,6 +33,7 @@ urlpatterns = [
     path("admin/online/", web_online.online_page, name="online"),
     path("admin/rip-wants/", web_rip_wants.rip_wants_page, name="rip_wants"),
     path("admin/ebay/", web_ebay_health.ebay_health_page, name="ebay_health"),
+    path("admin/merge/", web_merge_box.merge_page, name="merge_products"),
     path("admin/add-shops/", web_add_shops.add_shops_page, name="add_shops"),
     path("admin/shop-delivery/", web_delivery.delivery_page, name="shop_delivery"),
     path("admin/amazon/", web_amazon.amazon_page, name="amazon_keys"),

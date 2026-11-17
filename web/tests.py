@@ -200,9 +200,13 @@ class PageTests(PageTestCase):
         self.assertContains(response, "We don&#x27;t have prices for this product yet.")
         self.assertNotContains(response, "Price history")
 
-    def test_hidden_product_is_not_found(self):
+    def test_hidden_product_says_it_has_gone(self):
+        # Once not found; since the audit of 17 Nov 2026 a page switched off answers as a removed one does (410, with
+        # its set and game), so a visitor is not stranded and search engines drop it sooner (views.switched_off).
         Product.objects.filter(pk=self.etb.pk).update(is_active=False)
-        self.assertEqual(self.client.get(self.etb.get_absolute_url()).status_code, 404)
+        response = self.client.get(self.etb.get_absolute_url())
+        self.assertEqual(response.status_code, 410)
+        self.assertContains(response, "is no longer listed", status_code=410)
 
     def test_custom_not_found_page(self):
         response = self.client.get("/no-such-page/")

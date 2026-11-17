@@ -14,6 +14,10 @@ Anubis does against AI scrapers:
   that does not run scripts never gets a page.
 * Search engines and AI assistants are never checked: Google and Bing proven by their addresses' own names (reverse
   then forward DNS, remembered a day), the others by name, with the link previews of chat and social apps.
+  A visitor that says it is one of those search engines while its address cannot be looked up (the name server is
+  slow or failing) is neither let in nor shown the check, which is marked not to be indexed: it is asked to come back
+  (503 with Retry-After), which a search engine treats as a blip. The audit of 17 Nov 2026: shown to Google on a real
+  address, the check page could drop that page from its index.
 * The site's own data feeds (/api/) answer a visitor from abroad with no pass with 403, never a check page.
 * Staff, the admin, the files the pages load, robots.txt, the sitemaps and the feeds are never checked, nor a
   visitor whose country cannot be told (no country database), so the check fails open.
@@ -43,7 +47,7 @@ from urllib.parse import urlencode, urlsplit
 from django.conf import settings
 from django.core import signing
 from django.core.cache import cache
-from django.http import HttpResponseRedirect, JsonResponse
+from django.http import HttpResponse, HttpResponseRedirect, JsonResponse
 from django.shortcuts import render
 from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
@@ -64,6 +68,11 @@ VERIFIED_KEY = "visitor-check:crawler:"
 VERIFIED_SECONDS = 24 * 3600
 LOOKUP_SECONDS = 2          # a name lookup that takes longer counts as not proven, so a page never waits on DNS
 UNANSWERED_SECONDS = 600    # and is tried again ten minutes later
+LATER = "later"             # what is remembered for an address whose lookup gave no answer
+# A lookup that ends in one of these is an answer: the address has no name, so it is not a search engine's. Any other
+# failure (the name server did not reply, or failed) is no answer at all.
+NO_NAME = {1, 4}            # HOST_NOT_FOUND and NO_DATA, as socket.herror gives them
+NO_ADDRESS = {code for code in (getattr(socket, "EAI_NONAME", None), getattr(socket, "EAI_NODATA", None)) if code is not None}
 PATH = "/check/"            # where an answer is sent (ripraptor/urls.py)
 TAP, WORK, AWAY = "tap", "work", "away"     # VisitorCheck.Mode
 COUNT_KEY = "visitor-check:count:"
@@ -174,28 +183,56 @@ def same_address(one, other):
 
 
 def resolves(ip, suffixes, lookup, forward):
+    """Whether ``ip``'s own name ends in one of ``suffixes`` and leads back to ``ip``: True, False, or None when the
+    lookup gave no answer (the name server failed or did not reply), which proves nothing either way."""
     try:
         host = lookup(ip)[0].lower().rstrip(".")
         return host.endswith(tuple(suffixes)) and any(same_address(ip, found) for found in forward(host))
-    except (OSError, UnicodeError, IndexError):
+    except socket.herror as error:
+        return False if error.args and error.args[0] in NO_NAME else None
+    except socket.gaierror as error:
+        return False if error.args and error.args[0] in NO_ADDRESS else None
+    except (UnicodeError, IndexError):
         return False
+    except OSError:
+        return None
 
 
 def verified(ip, suffixes, lookup=None, forward=None):
-    """Whether ``ip``'s own name ends in one of ``suffixes`` and that name leads back to ``ip``. Remembered a day;
-    a lookup with no answer inside LOOKUP_SECONDS counts as no and is asked again ten minutes later."""
+    """Whether ``ip``'s own name ends in one of ``suffixes`` and that name leads back to ``ip``: True or False,
+    remembered a day, or None when the lookup gave no answer inside LOOKUP_SECONDS, asked again ten minutes
+    later."""
     key = VERIFIED_KEY + hashlib.sha256(f"{ip}|{'|'.join(suffixes)}".encode()).hexdigest()[:24]
     found = cache.get(key)
     if found is not None:
-        return found
+        return None if found == LATER else found
     job = lookups().submit(resolves, ip, suffixes, lookup or socket.gethostbyaddr, forward or addresses_of)
     try:
         result = job.result(timeout=LOOKUP_SECONDS)
     except LookupTimeout:
-        cache.set(key, False, UNANSWERED_SECONDS)
-        return False
+        result = None
+    if result is None:
+        cache.set(key, LATER, UNANSWERED_SECONDS)
+        return None
     cache.set(key, result, VERIFIED_SECONDS)
     return result
+
+
+def unanswered_crawler(request):
+    """Whether this request says it is a search engine proven by its address while that address could not be looked
+    up. It may be the search engine, so it is not shown the check; it may not be, so it is not let in."""
+    name = crawler_name(request.headers.get("User-Agent", ""))
+    return bool(name) and verified(client_ip(request), VERIFIED_CRAWLERS[name]) is None
+
+
+def come_back():
+    """Ask a search engine whose address could not be looked up to come back: 503 with Retry-After, which it treats
+    as a blip. Never marked not to be indexed, and never kept."""
+    response = HttpResponse("Temporarily unavailable. Please try again shortly.\n", status=503,
+                            content_type="text/plain; charset=utf-8")
+    response["Retry-After"] = str(UNANSWERED_SECONDS)
+    response["Cache-Control"] = "no-store"
+    return response
 
 
 def let_through(request, ip):
@@ -204,7 +241,7 @@ def let_through(request, ip):
     agent = request.headers.get("User-Agent", "")
     name = crawler_name(agent)
     if name:
-        return verified(ip, VERIFIED_CRAWLERS[name])
+        return bool(verified(ip, VERIFIED_CRAWLERS[name]))
     lowered = agent.lower()
     if any(crawler in lowered for crawler in NAMED_CRAWLERS):
         return True
@@ -294,6 +331,8 @@ class VisitorCheckMiddleware:
 
     def __call__(self, request):
         if needs_check(request):
+            if unanswered_crawler(request):
+                return come_back()
             if request.path.startswith("/api/"):
                 response = JsonResponse({"error": "check"}, status=403)
                 response["Cache-Control"] = "no-store"

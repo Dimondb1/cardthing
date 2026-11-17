@@ -1847,6 +1847,20 @@ def lead_shop(slug):
     return found[0].retailer_id if found else None
 
 
+def switched_off(slug):
+    """The product at ``slug`` when its page was switched off for good, to answer as a removed page does (410 Gone,
+    with its set and game), or None. The audit of 17 Nov 2026: an address Google had shown answered a bare not found.
+    A page whose first check is still open (new_pages: waiting for Claude, or for the owner) may yet go up, and a
+    page on the site whose game is switched off is not gone, so both stay not found."""
+    from catalogue.models import NewPage
+
+    product = Product.objects.filter(slug=slug, is_active=False).select_related("game", "product_set__game").first()
+    if product is None:
+        return None
+    waiting = NewPage.objects.filter(product=product, status__in=(NewPage.Status.WAITING, NewPage.Status.UNSURE)).exists()
+    return None if waiting else product
+
+
 @require_GET
 def product_detail(request, slug):
     product = Product.objects.active().select_related("game", "product_set").filter(slug=slug).first()
@@ -1854,7 +1868,8 @@ def product_detail(request, slug):
         alias = ProductAlias.objects.filter(slug=slug, product__is_active=True).select_related("product").first()
         if alias is not None:
             return HttpResponsePermanentRedirect(alias.product.get_absolute_url())
-        gone = RemovedProduct.objects.filter(slug=slug).select_related("game", "product_set__game").first()
+        gone = RemovedProduct.objects.filter(slug=slug).select_related("game", "product_set__game").first() \
+            or switched_off(slug)
         if gone is None:
             raise Http404("No product with that address.")
         return product_gone(request, gone)

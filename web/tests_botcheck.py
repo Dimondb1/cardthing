@@ -262,6 +262,62 @@ class CheckTests(TestCase):
             self.assertLess(time.monotonic() - started, 0.4)
         self.assertEqual(kept.call_args.args[2], botcheck.UNANSWERED_SECONDS)
 
+    def test_a_search_engine_whose_address_cannot_be_looked_up_is_asked_to_come_back(self):
+        # The audit of 17 Nov 2026: the check page is marked not to be indexed, so shown to Google on a real address
+        # it could drop that page from the index. A lookup that hangs or fails proves nothing either way.
+        import socket
+
+        agent = "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)"
+
+        def slow(ip):
+            time.sleep(0.5)
+            return ("crawl-66-249-66-1.googlebot.com", [], [ip])
+
+        with mock.patch.object(botcheck, "LOOKUP_SECONDS", 0.05), mock.patch("socket.gethostbyaddr", side_effect=slow):
+            response = self.visit("/games/pokemon/", ip="66.249.66.1", agent=agent)
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response["Retry-After"], str(botcheck.UNANSWERED_SECONDS))
+        self.assertEqual(response["Cache-Control"], "no-store")
+        self.assertNotIn("X-Robots-Tag", response)
+        self.assertNotIn(b"noindex", response.content)
+        self.assertNotIn(b"data-check", response.content)
+        # Remembered for ten minutes: the next visit from that address is asked to come back without a lookup.
+        with mock.patch("socket.gethostbyaddr") as lookup:
+            self.assertEqual(self.visit(ip="66.249.66.1", agent=agent).status_code, 503)
+            lookup.assert_not_called()
+        # A name server that fails is no answer either.
+        cache.clear()
+        with mock.patch("socket.gethostbyaddr", side_effect=socket.herror(2, "Host name lookup failure")):
+            self.assertEqual(self.visit(ip="66.249.66.1", agent=agent).status_code, 503)
+        # An address with no name at all is an answer: it is not Google's, and gets the check as anyone would.
+        cache.clear()
+        with mock.patch("socket.gethostbyaddr", side_effect=socket.herror(1, "Unknown host")):
+            self.assertTrue(self.checked(self.visit(ip=US, agent=agent)))
+        # A person abroad is never asked to come back, whatever the name server does.
+        cache.clear()
+        with mock.patch("socket.gethostbyaddr", side_effect=socket.herror(2, "Host name lookup failure")) as lookup:
+            self.assertTrue(self.checked(self.visit(ip=OTHER_US)))
+            lookup.assert_not_called()
+        # And the UK is never checked or held up.
+        self.assertEqual(self.visit(ip="81.2.69.160", agent=agent).status_code, 200)
+
+    def test_what_a_failed_lookup_means(self):
+        import socket
+
+        google = (".googlebot.com",)
+        self.assertIs(botcheck.resolves("203.0.113.9", google, mock.Mock(side_effect=socket.herror(1, "Unknown host")), None), False)
+        self.assertIs(botcheck.resolves("203.0.113.9", google, mock.Mock(side_effect=socket.herror(4, "No address")), None), False)
+        self.assertIsNone(botcheck.resolves("203.0.113.9", google, mock.Mock(side_effect=socket.herror(2, "Try again")), None))
+        self.assertIsNone(botcheck.resolves("203.0.113.9", google, mock.Mock(side_effect=OSError("network down")), None))
+        # The name is theirs but does not lead back, and the forward lookup failing for good is an answer too.
+        named = lambda ip: ("crawl.googlebot.com", [], [ip])   # noqa: E731
+        self.assertIs(botcheck.resolves("203.0.113.9", google, named, lambda host: ["66.249.66.9"]), False)
+        self.assertIs(botcheck.resolves("203.0.113.9", google, named,
+                                        mock.Mock(side_effect=socket.gaierror(socket.EAI_NONAME, "no such name"))), False)
+        self.assertIsNone(botcheck.resolves("203.0.113.9", google, named,
+                                            mock.Mock(side_effect=socket.gaierror(socket.EAI_AGAIN, "try again"))))
+        self.assertIs(botcheck.resolves("203.0.113.9", google, named, lambda host: ["203.0.113.9"]), True)
+
     def test_ai_assistants_and_link_previews_pass_by_name(self):
         for agent in ("Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; GPTBot/1.2; "
                       "+https://openai.com/gptbot",

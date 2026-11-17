@@ -1166,9 +1166,11 @@ switch it on in the **Claude** box at the top of Things to check.
 
 **Claude's jobs and spending** (Admin, **Claude**, `/admin/claude/`;
 `web/views.py claude_page`, `catalogue.ClaudeJob`, `judge.JOBS`): Claude has
-nine jobs: new pages, doubtful prices and wrong matches, possible
+ten jobs: new pages, doubtful prices and wrong matches, possible
 duplicates, found at another shop, announced sets, sets sold only at events,
-Cardmarket matches, RRPs and Ask Rip (shoppers' questions, below). The page shows what each asked and spent this
+Cardmarket matches, RRPs, not a product (pages on the site that may be
+something else, below; it starts with a limit of $3 a month of its own) and
+Ask Rip (shoppers' questions, below). The page shows what each asked and spent this
 month and today, and lets you switch each off or give it a monthly limit of
 its own within the shared one (empty means none of its own). Every run asks
 the same gate before each question (`judge.job_room`): a job switched off is
@@ -1643,6 +1645,45 @@ shop's title or description names: shops often show a stock photo of another
 language's box, so a photo alone never holds a page, it is only noted under
 Sorted for you. Each question uses Sonnet at low effort, about a cent with the
 photo, within the same monthly limit.
+
+**Pages that are not products.** The audit of 17 Nov 2026 found about ninety
+pages among the 6,847 in the sitemap that were no sealed product: places at
+shops' events, subscriptions, multi-buy offers, a deposit, Star Wars toys,
+caps, tin signs, consoles and single cards. They are handled three ways, as
+the owner chose ("Approve, remove sure ones", and "Claude api should be able
+to remove these for me as long as it doesn't cost too much"):
+
+- **What the rules are sure of** (`classify.NOT_PRODUCT_PATTERN`, part of
+  `NOT_SEALED`): a shop's read refuses one, and the hourly tidy takes a page
+  already made down, its address answering 410 Gone. Each rule was run over
+  every live product address before it shipped and matched 92 pages, all of
+  those kinds. An Entry Deck, a tin's "New Entries", a Draft Night box and
+  "Buy One Piece ... Booster Box" (a shop's wording, cleaned off the name)
+  are products and stay.
+- **What only you decide**: traded-in stock and mystery packs. The site
+  lists new sealed products, and whether it lists these is your call, so
+  Claude is never asked. Magic's Mystery Booster is a set and is left alone.
+- **Suspects** (`catalogue/not_products.py`): a page whose name has no word
+  for a kind of product ("One Piece Heroines Battle Vol.2" was a place at an
+  event) or a word merchandise uses (a coin, a badge, a magazine). Claude is
+  shown the page and each shop's title, address and description, without
+  the photo, and is asked once (twice at most, if the page's words change).
+  Only an answer nothing could change takes a live page off the site: it is
+  listed under Sorted for you with Undo, and Undo is you saying it is a
+  product, for good. Sure or fairly sure it is a product clears it. Anything
+  else waits for you.
+
+What waits is under **May not be products** on Things to check, on the site
+until you choose, with **It is a product** (never asked about again) and
+**Take it off the site** (its address then says the page has gone). The job
+"Not a product" has its own switch and monthly limit on the Claude page, $3
+until you save another, inside the shared limit; at Sonnet and low effort a
+question costs well under a cent. `check_new_pages` runs it every 10
+minutes after the new pages, with the time that run has left. While the job
+is off, at its limit, or Claude cannot act, the suspects simply wait for you.
+Claude never renames a product. The new-page check's instructions name the
+same kinds (prompt version 3), so such a page is kept off before it goes
+live.
 
 **RRPs.** A product page shows the RRP under the cheapest price, with how far
 the price is under it (green) or over it (red; left off beside a shop that pays

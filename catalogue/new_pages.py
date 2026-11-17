@@ -63,7 +63,7 @@ SHOPS_SENT = 3             # the shops whose words are sent, cheapest first
 DESCRIPTION_SENT = 1200
 PICTURE_WIDTH = 640        # the shop's photo, at a size that reads the box without costing much
 PICTURE_CHARACTERS = 3 * 1600   # a picture's tokens, written as characters for judge.worst_from_characters
-PROMPT_VERSION = 2
+PROMPT_VERSION = 3         # 3: events, subscriptions, deposits, offers and merchandise named (17 Nov 2026 audit)
 # How a page held for its language under PROMPT_VERSION 1 begins its reason: asked again once (recheck_language_holds).
 OLD_LANGUAGE_HOLD = "Claude reads the cards as "
 CAN_ACT = ("acting", "sort_all")
@@ -88,7 +88,7 @@ A shop's catalogue has just made a new page. The message may hold the shop's pho
 
 Say whether the item is one sealed product the publisher made:
 - "sealed": a factory sealed product, such as a booster box, a pack, an elite trainer box, a collection box or a tin.
-- "not_sealed": anything else, such as single cards, a lot or bundle of single cards a shop put together, graded or slabbed cards, opened or used items, accessories (sleeves, binders, playmats, deck boxes), toys, figures, clothing or a mystery box a shop made up.
+- "not_sealed": anything else, such as single cards, a lot or bundle of single cards a shop put together, graded or slabbed cards, opened or used items, accessories (sleeves, binders, playmats, deck boxes), toys, figures, clothing, video games, merchandise with no cards in it, a mystery box a shop made up, a place at an event or tournament, a subscription, a deposit, or an offer on several items.
 - "unsure": the words and the photo do not say which.
 
 Rules:

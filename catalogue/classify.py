@@ -83,6 +83,42 @@ LIVE_RIP_PATTERN = (
 )
 LIVE_RIP = re.compile(LIVE_RIP_PATTERN, re.I)
 
+# Things a shop sells beside its sealed products that are no product of ours at all. The audit of 17 Nov 2026 found
+# about ninety such pages among the 6,847 the sitemap offered, and the owner chose that the ones the rules are sure
+# of come down by themselves ("Approve, remove sure ones"). Part of NOT_SEALED, so a shop's read refuses one and the
+# hourly tidy takes its page down (410 Gone). Each rule was run over every live product address first, and takes
+# down nothing but what its comment names. A traded-in box and a mystery pack are the owner's to decide, never
+# these rules' (catalogue/not_products.py).
+NOT_PRODUCT_PATTERN = (
+    # A subscription ("Pack Club Monthly Subscription", "Anime Club Subscription Monthly Booster Packs").
+    r"\bsubscriptions?\b|"
+    # A multi-buy offer ("Buy 12 Booster Packs Get 5 Off", "Buy 2 ... Play Booster Boxes Save 10", "Buy Both ...
+    # Scene Boxes for 45"). "Buy One Piece OP-13 Booster Box" is a shop's wording for a product (tidy_name).
+    r"^\s*buy\s+(?:\d+|both|any|two|three)\b.*\b(?:get|save|for|off)\b|"
+    # A place at an event ("Hertfordshire Pokemon Club December 2026 Entry (No Pack)", "Star Trek Draft Night (Per
+    # Player)", "Locals August OP13 Booster Prizing Monday 3rd August", "... One Piece Store Treasure Cup December
+    # 2026"). An Entry Deck or Entry Set is a product, and so are a tin's "New Entries" and a Draft Night box.
+    r"\bentry\b(?!\s+(?:decks?|sets?|packs?|box|kit)\b)|\bper player\b|\blocals\b|\bprizing\b|"
+    r"\bstore (?:treasure cup|championship)\b|"
+    # A deposit towards a product ("... Ultra Premium Collection 20 Deposit, 600 Invoiced Before Dispatch"): its
+    # price is not the product's.
+    r"\bdeposit\b|"
+    # Merchandise, toys and video games filed beside the cards: Star Wars action figures (The Vintage Collection,
+    # The Black Series), De Agostini figurines, tin signs, caps, bags, cushions, football club calendar diaries,
+    # pin badges, consoles and their games, and Squaroes deck boxes.
+    r"\bstar wars\b.*\b(?:vintage collection|black series)\b|\bfigurines?\b|\bstatues?\b|\bdie[- ]?cast\b|"
+    r"\btin signs?\b|\bbaseball caps?\b|\b(?:crossbody|carry|tote|shoulder) bags?\b|\bcushions?\b|"
+    r"\bcalendar diary\b|\bpin badges?\b|\bbobble[- ]?heads?\b|\bbitty pop\b|\bamiibo\b|\bnintendo switch\b|"
+    r"\bps[45]\b|\bvideo games?\b|\bgame cartridges?\b|\bsquaroes?\b|"
+    # A single card a shop lists with its language, condition and finish ("... Ultimate Rare English Excellent
+    # Normal", "... French Excellent 1st Edition", "... English Light Played Normal"), a Yu-Gi-Oh! card's own number
+    # ("RA02-EN023", "CBLZ-EN065"), and a lot of cards ("Chinese Shiny 6 Card Lot").
+    r"\b(?:english|french|german|spanish|italian|portuguese|japanese|korean|chinese)\s+(?:near mint|mint|excellent|"
+    r"good|light(?:ly)? played|played|poor)\s+(?:normal|foil|holo|1st edition|first edition|unlimited)\s*$|"
+    r"\b(?:ultimate|ghost|starlight|platinum|starfoil) rare\b|\b[a-z0-9]{3,4}-(?:en|fr|de|it|sp|pt|jp|kr)\d{3}\b|"
+    r"\bcard lot\b"
+)
+
 # A title with any of these is not a sealed product we list. A card number leads a single's title ("OP01-001",
 # "BT22-045", "LOB-001"); "Set 01", "OP 18" and "SV 151" lead a set's name, and a title that goes on to name a
 # box, pack or deck is the sealed product.
@@ -125,7 +161,7 @@ NOT_SEALED = re.compile(
     r"^\s*(?:\d{4}\s+)?(?:adidas|nike|new balance|puma|a bathing ape|bape|reebok|asics|mizuno|under armour|skechers|"
     r"converse)\b(?!.*\b(?:booster|box|tins?|decks?|collection|display|bundle)\b)|\blaceless\b|\bfootball boots?\b|"
     r"\b(?:kids\s+)?uk\s*\d{1,2}(?:\.5)?k?\s*(?:[-/|]\s*)?(?:us\s*\d{1,2}(?:\.5)?\s*(?:[-/|]\s*)?)?eu\s*\d{2}\b|"
-    + LIVE_RIP_PATTERN + "|" +
+    + LIVE_RIP_PATTERN + "|" + NOT_PRODUCT_PATTERN + "|" +
     # A frame to show a card in ("Center Japan Pikachu Face Card Display Frame", Japan2UK) is an accessory, which
     # the owner saw on a Booster boxes tile on 4 Nov 2026. A sealed box that comes with one ("Umbreon Display Frame
     # Collection Box", "Display Frame Gift Box") says box, set or collection after the frame, so it stays.
@@ -466,8 +502,9 @@ TCG_NOTE = re.compile(r"\s*[(\[]\s*tcg\s*[)\]]|^\s*tcg\s*[:\-–|]\s*", re.I)
 # of its own (the audit of 17 Nov 2026: "Buy Lorcana Reign of Jafar Booster Box 2026" beside "Reign of Jafar Booster
 # Box", "Card Game SV Destined Rivals Booster Box Official Factory" beside the Destined Rivals box).
 # "Buy" in front, and the year a shop that writes "Buy" ends its titles with. Never an offer ("Buy 2 ... Save 10",
-# "Buy Both"), which is no product, nor a year without "Buy": "Holiday Calendar 2025" is not 2024's.
-BUY_HEAD = re.compile(r"^buy\s+(?!(?:both|one|two|three|any|all|more|now)\b)(?=[a-z])", re.I)
+# "Buy Both", "Buy One Get One"), which is no product, nor a year without "Buy": "Holiday Calendar 2025" is not
+# 2024's. "Buy One Piece OP-13 Booster Box ... 2026" names the game, not a count.
+BUY_HEAD = re.compile(r"^buy\s+(?!(?:both|one(?!\s+piece\b)|two|three|any|all|more|now)\b)(?=[a-z])", re.I)
 BUY_YEAR = re.compile(r"\s+20\d\d$")
 # "Card Game" left in front once the game's own name has gone ("Pokemon Card Game SV Destined Rivals").
 CARD_GAME_HEAD = re.compile(r"^(?:trading )?card game\b\s*[:\-–|]*\s*(?=\S)", re.I)

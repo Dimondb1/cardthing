@@ -4353,6 +4353,9 @@ CLAUDE_JOBS = {
     "rrps": ("", "RRPs",
              "Looks for the RRP of products that have none on the publisher's site and the UK shops' pages. It keeps "
              "one only when a quoted page calls it the RRP of that product."),
+    "notprod": ("#not-products", "Not a product",
+                "Checks pages already on the site whose names suggest an event entry, an offer or merchandise. "
+                "Sure ones come off the site, the rest wait for you. Traded-in and mystery items are always yours."),
 }
 # Claude's jobs for shoppers rather than the list: on the Claude page with the rest, not in What Claude sorts.
 SHOPPER_JOBS = {
@@ -4368,7 +4371,7 @@ def claude_jobs(counts, set_counts, doubtful_count, wrong, duplicates, found_cou
     left on the list, and of those how many need the owner and how many wait for Claude, with the share done.
     ``counts`` and ``set_counts`` are what judge.attach_answers and attach_set_answers returned for the rows the
     page shows, so a long list's "needs you" counts the rows shown. A few queries."""
-    from catalogue import cardmarket_match, judge, new_pages, rrp_finder, set_judge, set_retail
+    from catalogue import cardmarket_match, judge, new_pages, not_products, rrp_finder, set_judge, set_retail
     from catalogue.models import ClaudeAsk
 
     Kind = ClaudeAsk.Kind
@@ -4376,6 +4379,7 @@ def claude_jobs(counts, set_counts, doubtful_count, wrong, duplicates, found_cou
     market = cardmarket_match.progress()
     pages = new_pages.progress()
     rrps = rrp_finder.progress()
+    suspects = not_products.progress()
 
     def yours(*sections):
         return sum(counts.get(section, {}).get("needs_you", 0) for section in sections)
@@ -4391,6 +4395,7 @@ def claude_jobs(counts, set_counts, doubtful_count, wrong, duplicates, found_cou
         "retail": (done.get(Kind.RETAIL, 0), len(set_retail.candidates()), 0),
         "market": (market["sorted"], market["waiting"] + market["needs_you"], market["needs_you"]),
         "rrps": (done.get(Kind.RRP, 0), rrps["waiting"], 0),
+        "notprod": (done.get(Kind.NOT_PRODUCT, 0), suspects["waiting"] + suspects["needs_you"], suspects["needs_you"]),
     }
     jobs = []
     for name, (link, title, does) in CLAUDE_JOBS.items():
@@ -4583,7 +4588,7 @@ def checks_page(request):
     from django.contrib import messages
     from django.db import transaction
 
-    from catalogue import autopilot, checks, judge, new_pages
+    from catalogue import autopilot, checks, judge, new_pages, not_products
     from catalogue.management.commands.merge_duplicates import merge_with_undo
     from catalogue.models import CheckAnswer
     from catalogue.signals import clear_list_caches
@@ -4665,6 +4670,17 @@ def checks_page(request):
                 new_pages.owner_answer(page, sealed=action == "page_up")
                 messages.success(request, f"{page.product.name} is on the site." if action == "page_up" else
                                  f"{page.product.name} stays off the site.")
+        elif action in ("notprod_keep", "notprod_off"):
+            # Only a page the list still offers is answered: one taken down or settled since is left.
+            pk = request.POST.get("product", "")
+            product = Product.objects.filter(pk=pk, is_active=True).first() if pk.isdigit() else None
+            if product is None or product.pk not in not_products.suspects():
+                messages.warning(request, CHANGED.format("page"))
+            else:
+                not_products.owner_answer(product, is_product=action == "notprod_keep")
+                messages.success(request, f"{product.name} stays on the site, and is not asked about again."
+                                 if action == "notprod_keep" else
+                                 f"{product.name} is off the site. Its address answers that the page has gone.")
         elif action == "merge_sure":
             merge_sure(request)
         elif action.startswith("claude_"):
@@ -4714,6 +4730,7 @@ def checks_page(request):
         "claude_jobs": claude_jobs(claude_counts, set_counts, doubtful_count, wrong, duplicates, found_count,
                                    release_rows),
         "new_pages": new_pages.for_owner(),
+        "not_products": not_products.for_owner(),
         "releases": release_rows, "disagreements": checks.release_disagreements(now),
         "stale_sources": checks.stale_release_sources(now),
     }

@@ -421,12 +421,15 @@ JOBS = {
     "retail": ("Sets sold only at events", (Ask.Kind.RETAIL,)),
     "market": ("Cardmarket matches", (Ask.Kind.MARKET,)),
     "rrps": ("RRPs", (Ask.Kind.RRP,)),
+    "notprod": ("Not a product", (Ask.Kind.NOT_PRODUCT,)),
     "ask": ("Ask Rip", (Ask.Kind.ASK,)),
 }
 # A job's own monthly limit until the owner saves one on the Claude page. Ask Rip (web/askrip.py) starts at $30: the
 # owner, 11 Nov 2026, "I don't want it to spend anymore than £25 at the start". $30 is under £25 while a pound buys
 # more than $1.20.
-JOB_DEFAULT_LIMITS = {"ask": Decimal("30.00")}
+# Not a product (catalogue/not_products.py) starts at $3: the owner, 17 Nov 2026, "Claude api should be able to remove
+# these for me as long as it doesn't cost too much".
+JOB_DEFAULT_LIMITS = {"ask": Decimal("30.00"), "notprod": Decimal("3.00")}
 JOB_OF_KIND = {kind: name for name, (_title, kinds) in JOBS.items() for kind in kinds}
 
 

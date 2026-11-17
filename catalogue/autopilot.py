@@ -538,6 +538,7 @@ def undo(answer, now=None):
 
                 opposite = "look" if answer.kind in SAFE_KINDS else "undone" if answer.kind in (
                     *CLAUDE_SET_KINDS, Kind.FOUND_RRP) else (
+                    "product" if answer.ask.verdict == "not_product" else
                     ("not_sealed" if answer.ask.verdict == "sealed" else "sealed")
                     if answer.kind in (Kind.PUBLISH, Kind.NOT_SEALED) else
                     "different" if answer.ask.verdict == "same" else "same")

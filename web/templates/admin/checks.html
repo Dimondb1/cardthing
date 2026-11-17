@@ -154,6 +154,21 @@
     </ul>{% else %}<p class="none">Nothing waits for you.</p>{% endif %}
   </section>
 
+  <section id="not-products">
+    <h2>May not be products ({{ not_products.count }})</h2>
+    <p class="note">Pages on the site that may be something other than a sealed product: an event entry, an offer, merchandise, traded-in stock or a mystery pack. Each stays on the site until you choose. Open the shop's page: if it is a product you want listed, say so and it is not asked about again; if not, take it off.{% if not_products.count > not_products.rows|length %} The first {{ not_products.rows|length }} are shown.{% endif %}</p>
+    {% if not_products.rows %}<ul>{% for product in not_products.rows %}
+      <li class="item"><b><a href="{{ product.get_absolute_url }}" target="_blank" rel="noopener">{{ product.name }}</a></b>
+        {% if product.listing %}<span class="why">{{ product.listing.retailer.name }}{% if product.listing.title %}: "{{ product.listing.title }}"{% endif %}, £{{ product.listing.price }}. <a href="{{ product.listing.url }}" target="_blank" rel="noopener noreferrer">The shop's page</a></span>{% endif %}
+        <span class="why">{{ product.why }}.{% if product.claude %} Claude: {{ product.claude.reason }}{% endif %}</span>
+        <div class="row">
+          <form method="post">{% csrf_token %}<input type="hidden" name="action" value="notprod_keep"><input type="hidden" name="product" value="{{ product.pk }}"><input type="submit" value="It is a product"></form>
+          <form method="post">{% csrf_token %}<input type="hidden" name="action" value="notprod_off"><input type="hidden" name="product" value="{{ product.pk }}"><input type="submit" value="Take it off the site"></form>
+        </div>
+      </li>{% endfor %}
+    </ul>{% else %}<p class="none">Nothing waits for you.</p>{% endif %}
+  </section>
+
   <section id="doubtful-prices">
     <h2>Doubtful prices ({{ doubtful_count }})</h2>
     <p class="note">Cheapest prices far from the other shops. Open the link: if the price is right, tap This price is right; if it is another product, hide it. To answer several at once, tick them and tap a button at the top.{% if checked_count %} {{ checked_count }} more {{ checked_count|pluralize:"is,are" }} checked as the right product.{% endif %}</p>

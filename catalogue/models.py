@@ -2348,6 +2348,7 @@ class ClaudeAsk(models.Model):
         PAGE = "page", "New page"
         RRP = "rrp", "RRP"
         ASK = "ask", "Ask Rip question"
+        NOT_PRODUCT = "notpro", "Not a product"
 
     class Outcome(models.TextChoices):
         SENT = "sent", "Sent"

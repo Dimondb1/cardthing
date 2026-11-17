@@ -39,9 +39,10 @@ class JobTests(Base):
     def test_a_job_is_on_with_no_limit_of_its_own_until_set_and_reading_never_writes(self):
         jobs = judge.job_settings()
         self.assertTrue(all(job.on for job in jobs.values()))
-        # Only Ask Rip starts with a limit of its own: the owner's £25, as $30.
+        # Two start with a limit of their own: Ask Rip, the owner's £25 as $30, and Not a product, which he asked
+        # to be cheap.
         self.assertEqual({name: job.monthly_budget_usd for name, job in jobs.items() if job.monthly_budget_usd is not None},
-                         {"ask": Decimal("30.00")})
+                         {"ask": Decimal("30.00"), "notprod": Decimal("3.00")})
         self.assertFalse(ClaudeJob.objects.exists())
         self.assertEqual(judge.job_room(Kind.PAIR, 5_000_000), "")
 

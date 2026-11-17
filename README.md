@@ -1685,6 +1685,29 @@ Claude never renames a product. The new-page check's instructions name the
 same kinds (prompt version 3), so such a page is kept off before it goes
 live.
 
+**Catalogue quality** (Admin, **Catalogue quality**, `/admin/quality/`;
+`web/quality.py`). One page that counts what is wrong with the catalogue,
+so it is seen in days, not found by reading the live site from outside as
+the audit of 17 Nov 2026 had to: how many products are a real comparison
+(in stock at two shops or more, at exactly one, with no price); what the
+sitemap offers search engines and how many pages it leaves out; the
+possible duplicate pairs, why each still waits (a shop sells both, a
+shop's price would leave the site, the two are filed under different
+kinds, you kept them apart, a merge was undone, or the names differ) and
+the merges of the last 30 days; names that need tidying (waiting for the
+hourly tidy, carrying a shop's name, with "TCG" or "English" in them, over
+80 characters, with no word for a kind of product, with damaged text);
+products with no set (and how many of those carry a set code and could be
+filed) or no picture, and the products by language; the pages that may be
+no product; and the old addresses. Each count has a few examples, and the
+whole page is in a **Log to copy** box as plain text, counts and product
+names only. It only reads. It reads every product once and pairs the
+duplicates as Things to check does, so it takes a few seconds: about a
+dozen queries however many products there are. Staff only, never indexed
+or cached. The dashboard report's "Pages the sitemap offers Google" now
+counts product pages as the sitemap does, with the pages left out beside
+it; it had counted every product on the site.
+
 **Language versions and relatives** (`web/versions.py`, since 17 Nov 2026).
 The site keeps languages apart on purpose, so the Japanese EB-05 box and
 pack, with three to five shops each, had almost no links pointing at them:

@@ -108,7 +108,9 @@ class ContentTests(ReportCase):
         self.assertIn("Products on the site: 1", text)
         self.assertIn("In stock at two shops or more (a real comparison): 1", text)
         self.assertIn("Offers on sale now: 2", text)
+        # As the sitemap counts them: every product here has a price, so none is left out.
         self.assertIn("Product pages: 1", text)
+        self.assertIn("Product pages on the site but left out (no price for 30 days): 0", text)
         self.assertIn("Back in stock alerts confirmed: 1", text)
         # The 28 day day table has a row per day, with the week's people beside it.
         self.assertEqual(len(re.findall(r"^(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun) \d\d \w\w\w ", text, re.M)), 28)

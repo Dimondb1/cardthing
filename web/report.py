@@ -326,7 +326,14 @@ def catalogue(out, month, prices, checks):
     out.fact("Shops", month["shop_count"])
     out.fact("Offers on sale now", Listing.objects.buyable().filter(product__is_active=True).count())
     out.sub("Pages the sitemap offers Google")
-    out.fact("Product pages", Product.objects.active().count())
+    # As the sitemap counts them (web/sitemaps.py), not every product on the site: on 17 Nov 2026 this line said
+    # 14,851 while the sitemap offered 6,847, the ones a shop had priced in the last 30 days.
+    from .sitemaps import RECENT_DAYS, indexable_products
+
+    offered = indexable_products().count()
+    out.fact("Product pages", offered)
+    out.fact(f"Product pages on the site but left out (no price for {RECENT_DAYS} days)",
+             Product.objects.active().count() - offered)
     out.fact("Set pages", ProductSet.objects.filter(game__is_active=True).count())
     out.fact("Game pages", Game.objects.filter(is_active=True).count())
     out.fact("Guides published", published_guides())

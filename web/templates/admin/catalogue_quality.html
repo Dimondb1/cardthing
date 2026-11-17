@@ -1,0 +1,88 @@
+{% extends "admin/base_site.html" %}
+{% load static %}
+{% block title %}Catalogue quality | {{ site_title }}{% endblock %}
+{% block extrahead %}{{ block.super }}<meta name="robots" content="noindex, nofollow"><script nonce="{{ csp_nonce }}" src="{% static 'js/copy-log.js' %}" defer></script>{% endblock %}
+{% block extrastyle %}{{ block.super }}<style>
+  .cq { display: grid; gap: 24px; max-width: 72rem; }
+  .cq h2 { margin: 0 0 4px; }
+  .cq p { margin: 0 0 8px; }
+  .cq .note { color: var(--body-quiet-color); }
+  .cq .facts { margin: 0; padding: 0; list-style: none; }
+  .cq .facts li { list-style-type: none; display: flex; gap: 12px; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--hairline-color); }
+  .cq .facts b { font-weight: 600; white-space: nowrap; }
+  .cq .rows { margin: 0; padding: 0; list-style: none; }
+  .cq .rows > li { list-style-type: none; padding: 8px 0; border-bottom: 1px solid var(--hairline-color); overflow-wrap: anywhere; }
+  .cq .rows .head { display: flex; gap: 12px; justify-content: space-between; }
+  .cq .rows .head b { font-weight: 600; white-space: nowrap; }
+  .cq .some { margin: 4px 0 0; color: var(--body-quiet-color); font-size: 0.9em; }
+  .cq .why { color: var(--body-quiet-color); display: block; }
+  .cq textarea.log { display: block; width: 100%; height: 22rem; max-height: none; box-sizing: border-box; margin: 0; padding: 8px; font: 12px/1.45 ui-monospace, Menlo, Consolas, monospace; white-space: pre; overflow: auto; }
+</style>{% endblock %}
+{% block breadcrumbs %}<div class="breadcrumbs"><a href="{% url 'admin:index' %}">Home</a> &rsaquo; Catalogue quality</div>{% endblock %}
+{% block content %}
+<div class="cq">
+  <p class="note">What is wrong with the catalogue, counted now. This page only reads: nothing here changes a product, a price or an address. <a href="#log">Log to copy</a>: the whole page as text, at the bottom.</p>
+
+  <section>
+    <h2>A real comparison</h2>
+    <p class="note">The site is for comparing shops. A product in stock at one shop is a price, not a comparison, and is often a duplicate of a page where the other shops are.</p>
+    <ul class="facts">{% for label, count in data.comparison %}<li><span>{{ label }}</span><b>{{ count }}</b></li>{% endfor %}</ul>
+  </section>
+
+  <section>
+    <h2>What search engines are offered</h2>
+    <p class="note">Counted as the sitemap counts it.</p>
+    <ul class="facts">{% for label, count in data.offered %}<li><span>{{ label }}</span><b>{{ count }}</b></li>{% endfor %}</ul>
+  </section>
+
+  <section>
+    <h2>Possible duplicates</h2>
+    <p class="note">Pairs of pages that may be one product. Pairs the rules are sure of merge by themselves each hour, with Undo. The rest wait on <a href="{% url 'checks' %}#duplicates">Things to check</a>, or for <a href="{% url 'merge_products' %}">Merge two products</a>.</p>
+    <ul class="facts">
+      <li><span>Pairs waiting</span><b>{{ data.duplicates.pairs }}</b></li>
+      {% for label, count in data.duplicates.merges %}<li><span>{{ label }}</span><b>{{ count }}</b></li>{% endfor %}
+    </ul>
+    {% if data.duplicates.reasons %}<h3>Why each pair waits</h3>
+    <ul class="facts">{% for why, count in data.duplicates.reasons %}<li><span>{{ why }}</span><b>{{ count }}</b></li>{% endfor %}</ul>{% endif %}
+    {% if data.duplicates.listed %}<h3>The first {{ data.duplicates.listed|length }} pairs</h3>
+    <ul class="rows">{% for pair in data.duplicates.listed %}
+      <li><a href="{{ pair.keep.get_absolute_url }}" target="_blank" rel="noopener">{{ pair.keep.name }}</a> and <a href="{{ pair.other.get_absolute_url }}" target="_blank" rel="noopener">{{ pair.other.name }}</a><span class="why">{{ pair.why }}</span></li>{% endfor %}
+    </ul>{% endif %}
+  </section>
+
+  <section>
+    <h2>Names</h2>
+    <p class="note">Names that carry a shop's wording. The hourly tidy rewrites what its rules cover; the rest show where a new rule is needed.</p>
+    <ul class="rows">{% for label, count, some in data.names %}
+      <li><div class="head"><span>{{ label }}</span><b>{{ count }}</b></div>{% if some %}<p class="some">{{ some|join:" · " }}</p>{% endif %}</li>{% endfor %}
+    </ul>
+  </section>
+
+  <section>
+    <h2>Filing</h2>
+    <ul class="rows">{% for label, count, some in data.filing %}
+      <li><div class="head"><span>{{ label }}</span><b>{{ count }}</b></div>{% if some %}<p class="some">{{ some|join:" · " }}</p>{% endif %}</li>{% endfor %}
+    </ul>
+    <h3>By language</h3>
+    <ul class="facts">{% for language, count in data.languages %}<li><span>{{ language }}</span><b>{{ count }}</b></li>{% endfor %}</ul>
+  </section>
+
+  <section>
+    <h2>Not products</h2>
+    <p class="note">Pages that may be something other than a sealed product. They wait under May not be products on <a href="{% url 'checks' %}#not-products">Things to check</a>.</p>
+    <ul class="facts">{% for label, count in data.not_products %}<li><span>{{ label }}</span><b>{{ count }}</b></li>{% endfor %}</ul>
+  </section>
+
+  <section>
+    <h2>Addresses</h2>
+    <ul class="facts">{% for label, count in data.addresses %}<li><span>{{ label }}</span><b>{{ count }}</b></li>{% endfor %}</ul>
+  </section>
+
+  <section id="log">
+    <h2>Log to copy</h2>
+    <p class="note">This whole page as plain text: counts and product names only, no key or password. Copy it and paste it into a message.</p>
+    <p><button type="button" class="button" data-copy-from="quality-log" data-label="Copy the log" data-done="Copied" data-failed="Selected: now copy it" hidden>Copy the log</button></p>
+    <textarea id="quality-log" class="log" rows="14" readonly spellcheck="false" aria-label="Log to copy">{{ log }}</textarea>
+  </section>
+</div>
+{% endblock %}

@@ -2914,6 +2914,22 @@ li + li > .checker__option { border-top: var(--border-width) solid var(--color-l
 .cx-set::after { inset: 0; border-radius: calc(var(--radius-card) - var(--border-width)); box-shadow: inset 0 0 0 var(--border-width) var(--color-brand-line); }
 .cx-section__all::after { inset: calc(-1 * var(--space-1)) calc(-1 * var(--space-2)); border-radius: var(--radius-pill); }
 .cx-set.is-lit::after, .cx-section__all.is-lit::after { opacity: 1; }
+/* A list nobody has narrowed yet (the owner, 17 Nov 2026, on All products): the same light labels, Pick a type under the
+   type tiles as they light (the feed's own pass), then the switches' line under the switches as each takes the soft
+   orange wash. On a phone the switches' label starts at the left under the first; wider, they sit at the right, and so
+   does it. */
+.feed-hint.feed-hint--cx-types { top: calc(100% - var(--space-1)); }
+.feed-hint--cx-types::after { top: calc(-1 * var(--space-1)); }
+.cx-tools { position: relative; }
+.feed-hint.feed-hint--cx-tools { --hint-x: 0; left: 0; top: calc(100% + var(--space-1)); }
+.feed-hint--cx-tools::after { top: calc(-1 * var(--space-1)); left: var(--space-5); }
+.cx-tools .toggle { isolation: isolate; }
+.cx-tools .toggle::after { content: ""; position: absolute; inset: 0; z-index: -1; border-radius: inherit; background: var(--color-brand-soft); opacity: 0; transition: opacity var(--motion-normal) var(--ease-standard); pointer-events: none; }
+.cx-tools .toggle.is-lit::after { opacity: 1; }
+@media (min-width: 48rem) {
+  .feed-hint.feed-hint--cx-tools { left: auto; right: 0; }
+  .feed-hint--cx-tools::after { left: auto; right: var(--space-5); }
+}
 /* The fairy's pass (feed.js): each pill, then each tile, lifts for a moment with a soft orange glow behind it and a spark at
    its corner, one after another. The glow is a layer whose opacity moves, the lift a transform; nothing else animates. */
 .feed-game__pill, .feed-tile__well { position: relative; }

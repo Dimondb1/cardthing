@@ -151,6 +151,35 @@ class HomeTests(CompactCase):
         # A set's own page has none.
         self.assertNotIn("feed-hint", self.page(self.reign.get_absolute_url()))
 
+    def test_a_list_nobody_has_narrowed_hints_at_the_types_then_the_switches(self):
+        # The owner, 17 Nov 2026, on All products: "highlight the different types of products line, and then ... say
+        # use one of these switches to tailor your search ... short and readable for everyone".
+        html = self.page(reverse("web:search") + f"?game={self.pokemon.slug}")
+        types = html.index('<span class="feed-hint feed-hint--soft feed-hint--cx-types" hidden aria-hidden="true" '
+                           'data-hint-hold="2000">Pick a type</span>')
+        switches = html.index('<span class="feed-hint feed-hint--soft feed-hint--cx-tools" hidden aria-hidden="true" '
+                              'data-hint-hold="2200" data-hint-glow="900">Use a switch to narrow the list</span>')
+        # Each sits with what it points at: the first in the row of types, the second in the row of switches.
+        self.assertLess(html.index('class="feed__row feed__tiles"'), types)
+        self.assertLess(html.index('class="cx-tools"'), switches)
+        self.assertLess(types, switches)
+        self.assertEqual(html.count('class="feed-hint '), 2)
+        self.assertIn("js/feed.js", html)
+        self.assertEqual(self.page(reverse("web:search")).count('class="feed-hint '), 2)
+        # A list already narrowed has none: a type, a switch, a search, a set or a sort chosen.
+        for asked in ("type=booster_box", "in_stock=on", "rip=on", "great=on", "q=reign", "sort=price"):
+            with self.subTest(asked=asked):
+                self.assertNotIn("feed-hint", self.page(reverse("web:search") + f"?game={self.pokemon.slug}&{asked}"))
+
+    def test_the_list_hints_are_light_and_light_the_switches_by_opacity_alone(self):
+        css = static_text("css/site.css")
+        block = css[css.index(".feed-hint.feed-hint--cx-types {"):css.index(".cx-tools .toggle.is-lit::after")]
+        self.assertNotRegex(block, r"#[0-9a-fA-F]{3,8}\b|rgb\(|\d+(px|ms|s)\b")
+        self.assertEqual(re.findall(r"transition: ([^;]+);", block), ["opacity var(--motion-normal) var(--ease-standard)"])
+        self.assertIn(".cx-tools .toggle.is-lit::after { opacity: 1; }", css)
+        script = static_text("js/feed.js")
+        self.assertIn('"cx-types": ".cx-tiles .feed-tile__well", "cx-tools": ".cx-tools .toggle"', script)
+
     def test_the_game_page_hints_are_light_and_move_by_opacity_alone(self):
         from django.contrib.staticfiles import finders
 

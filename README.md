@@ -6646,12 +6646,21 @@ light ... little highlights to say, select your product or pick all
 products"): a soft orange label, Pick a set, under the sets heading for two
 seconds while the sets light up one after another with a soft orange wash,
 then Or see all products under the All products link for two seconds while
-the link glows. Opacity only; with reduced motion the labels show without
-moving and nothing lights. Nothing is remembered between landings (the
+the link glows. A list nobody has narrowed yet (All products, or a game's:
+no type, switch, search, set or sort chosen) has a pair in the same light
+style (the owner, 17 Nov 2026: "highlight the different types of products
+line, and then ... say use one of these switches to tailor your search"):
+Pick a type under the row of types while they light up one after another,
+then Use a switch to narrow the list under Best for ripping, In stock and
+Great value while each takes the soft orange wash. On a wide screen Pick a
+type goes beside the last type when the whole label fits there, else under
+the row at the left. Opacity only; with reduced motion the labels show
+without moving and nothing lights. Nothing is remembered between landings (the
 owner, 9 Nov 2026: "every time I land on the homepage, I need to see them.
 They can go ... I don't need to see them after that"). The wording is
-`feed.hint.*` in the registry, and `compact.hint.sets` and
-`compact.hint.all` for the compact game page. On a first visit the cookie card covers the
+`feed.hint.*` in the registry, `compact.hint.sets` and
+`compact.hint.all` for the compact game page, and `compact.hint.types` and
+`compact.hint.switches` for a compact list. On a first visit the cookie card covers the
 foot of the screen, where the game bar is, so the hints wait for its answer
 and the page's return to the top, then show; a tap elsewhere first skips
 them. Each step lands with a little movement: a

@@ -496,6 +496,12 @@ def _browse(request, template_context, *, base_queryset, fixed_game=None, defaul
         context["stock_switch"] = not tabs
         context["in_stock_on"] = bool(form.value("in_stock")) and not tabs
         context["value_on"] = bool(form.value("great"))
+        # On landing on a list nobody has narrowed yet (all products, or a game's), light labels under the types and
+        # then the switches while they light up (feed.js). The owner, 17 Nov 2026, on All products: "highlight the
+        # different types of products line, and then ... say use one of these switches to tailor your search".
+        context["list_hints"] = not (query or product_type or band or rip or asked or request.GET.get("set")
+                                     or request.GET.get("sort") or form.value("in_stock") or form.value("great")
+                                     or form.value("compared") or form.value("lang"))
         # What the switches' form carries on: every other choice in force.
         context["compact_keep"] = [
             ("q", query), ("game", game.slug if game is not None and fixed_game is None else ""),

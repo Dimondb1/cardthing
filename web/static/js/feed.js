@@ -92,14 +92,21 @@
   // box saying, need help with your shopping, or just want to ask a question, ask Rip, and it will just point towards
   // the button at the top"); it stays longer, having more to read (data-hint-hold).
   // A game's page in the compact layout has its own pair (the owner, 17 Nov 2026): Pick a set under its heading as the
-  // sets light, then Or see all products under that link as it lights.
+  // sets light, then Or see all products under that link as it lights. So has a list nobody has narrowed yet (All
+  // products, the same day): Pick a type under the types as they light, then the switches' line as each lights.
   var TARGETS = { games: ".feed-game__pill", types: ".feed-tile__well", sets: ".feed-sets .feed-filters__row > .chip",
-                  rip: ".masthead__find", "cx-sets": ".cx-sets .cx-set", "cx-all": ".cx-section__head .cx-section__all" };
-  // What a hint sits beside on a wide screen: the last of those items, or for the sets the row's last thing, All sets.
-  var BESIDE = { sets: ".feed-sets .feed-filters__row > *" };
+                  rip: ".masthead__find", "cx-sets": ".cx-sets .cx-set", "cx-all": ".cx-section__head .cx-section__all",
+                  "cx-types": ".cx-tiles .feed-tile__well", "cx-tools": ".cx-tools .toggle" };
+  // What a hint sits beside on a wide screen: the last of those items, or for the sets the row's last thing, All sets,
+  // and for a list's types the whole last tile, whose name sits beside its picture.
+  var BESIDE = { sets: ".feed-sets .feed-filters__row > *", "cx-types": ".cx-tiles .feed-tile__link" };
   var targetOf = function (hint) {
     for (var name in TARGETS) { if (hint.classList.contains("feed-hint--" + name)) return TARGETS[name]; }
     return "";
+  };
+  var besideOf = function (hint) {
+    for (var name in BESIDE) { if (hint.classList.contains("feed-hint--" + name)) return BESIDE[name]; }
+    return targetOf(hint);
   };
   var hintsOver = false;
   var afterHints = [];   // waiting for the hints to be over: the dock's arrow shares their spot
@@ -114,14 +121,19 @@
       Array.prototype.forEach.call(hints, function (hint) {
         if (hint.classList.contains("feed-hint--rip")) return;   // always under its button
         var within = hint.closest(".feed-dock, .feed-sets, .feed__scroller");
-        var beside = hint.classList.contains("feed-hint--sets") ? BESIDE.sets : targetOf(hint);
+        var beside = besideOf(hint);
         var items = within ? within.querySelectorAll(beside) : [];
         var last = items[items.length - 1];
         if (!last) return;
         var box = within.getBoundingClientRect();
         var edge = last.getBoundingClientRect();
-        // A row that runs on past the screen's edge keeps its hint under it, where it can be seen.
-        if (edge.right + 12 > Math.min(box.right, window.innerWidth)) return;
+        // A row that runs on past the screen's edge, or leaves no room for the whole label beside it, keeps its hint
+        // under it, where it can be seen. The label is measured while still see-through (it shows by opacity).
+        var hidden = hint.hidden;
+        hint.hidden = false;
+        var width = hint.getBoundingClientRect().width;
+        hint.hidden = hidden;
+        if (edge.right + 12 + width > Math.min(box.right, window.innerWidth)) return;
         hint.classList.add("feed-hint--side");
         hint.style.left = Math.round(edge.right - box.left + 12) + "px";
         hint.style.top = Math.round(edge.top - box.top + edge.height / 2) + "px";

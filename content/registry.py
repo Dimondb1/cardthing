@@ -811,6 +811,13 @@ ENTRIES = [
           "Beside a game's list of sets: opens every product of the game.", placeholders=("game",)),
     Entry("compact.game.no_sets", T, "Compact layout: a game with no sets", "No sets listed for this game yet.",
           "On a game's compact page when none of its products is filed under a set."),
+    Entry("compact.hint.types", T, "Compact layout: list hint at the type tiles", "Pick a type",
+          "A light label under the row of product types on a list nobody has narrowed yet (All products, or a game's), "
+          "shown for two seconds on each landing while the types light up one after another. Two or three words."),
+    Entry("compact.hint.switches", T, "Compact layout: list hint at the switches", "Use a switch to narrow the list",
+          "A light label under the switches (Best for ripping, In stock, Great value), shown for two seconds after the "
+          "types' hint while the switches light up one after another. It stands alone: a list whose types are too "
+          "few to show has only this hint. Short: it sits on one line on a phone."),
     Entry("compact.hint.sets", T, "Compact layout: game page hint at the sets", "Pick a set",
           "A small light label under a game's sets heading, on for a moment on each landing while the sets light up "
           "one by one, then gone. Two or three words."),

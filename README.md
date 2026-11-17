@@ -5929,7 +5929,19 @@ with an Undo that brings it back with its listings, history and address. A
 pair whose merge anyone undid is never merged by the hourly run again, and
 nor is a pair a shop shows both of (two products, to that shop), or whose
 merge would take a shop's shown price off the site; those are left for
-Things to check. No shop's listing is ever deleted. `tidy_catalogue`
+Things to check. One exception, since 17 Nov 2026 (the owner: "Merge
+same-price pairs"): when the names are the same product and every shop
+that lists both has them at the same price to the penny, it is one item a
+shop lists on two pages, an old address and a new one, and the pair merges
+("the shop that lists both has them at the same price"). The owner's
+catalogue log showed 65 such pairs, most of them Magic Madhouse with the
+same box under "Booster Box" and "Booster Display Box" at one price, one
+listing checked days before the other. The page kept is the one holding
+that shop's listing still being checked, since a merge leaves a shop's
+second listing on the page switched off; when that cannot be arranged (a
+group of three or more) the pair waits. A penny's difference, or names
+only nearly the same (Scarlet ex and Violet ex packs), still waits. No
+shop's listing is ever deleted. `tidy_catalogue`
 merges the same undoable way when it tidies a name onto another product's
 ("The hourly tidy merged them: with the shop's wording taken off, the two
 names are the same"), and never a pair the owner kept apart or whose merge

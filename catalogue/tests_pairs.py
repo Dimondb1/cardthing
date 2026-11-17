@@ -361,7 +361,8 @@ class UndoableMergeTests(PairBase):
         keep, other = self.pair()
         both = make_retailer("Both")
         shown = make_listing(keep, both)
-        theirs = make_listing(other, both, url=f"{both.website}p/other")
+        # At two prices: two items to that shop. At one price it would be one item on two pages (same_item_twice).
+        theirs = make_listing(other, both, price="55.00", url=f"{both.website}p/other")
         listings = Listing.objects.count()
         self.assertIn("a shop sells both", self.hourly())
         self.assertEqual(Product.objects.filter(pk__in=[keep.pk, other.pk], is_active=True).count(), 2)
@@ -395,7 +396,7 @@ class UndoableMergeTests(PairBase):
             self.shop(50, product=product, title=product.name)
         both = make_retailer("Both")
         make_listing(first, both)
-        make_listing(second, both, url=f"{both.website}p/second")
+        make_listing(second, both, price="52.00", url=f"{both.website}p/second")   # two prices: two items
         self.assertIn("a shop sells both", self.hourly())
         self.assertEqual(CheckAnswer.objects.filter(kind=CheckAnswer.Kind.MERGE).count(), 1)
         self.assertEqual(Product.objects.filter(pk__in=[first.pk, second.pk], is_active=True).count(), 1)

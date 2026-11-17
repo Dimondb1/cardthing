@@ -134,6 +134,52 @@ def merge(keep, others):
 
 # Why the hourly merge joined two products, as Sorted for you on Things to check says it.
 HOURLY_WHY = "The hourly tidy merged them: their names say the same product in other words"
+TWICE_WHY = ("The hourly tidy merged them: the names say the same product, and the shop that lists both has them at "
+             "the same price")
+
+
+def shop_prices():
+    """{product id: {shop id: (price, last checked)}} for the shown listings of products on the site at shops, not
+    marketplaces. One query."""
+    from catalogue.pricing import MARKETPLACES
+
+    found = {}
+    rows = (Listing.objects.filter(product__is_active=True, is_active=True).exclude(retailer__source_type__in=MARKETPLACES)
+            .values_list("product_id", "retailer_id", "price", "last_checked").order_by())
+    for product_id, retailer_id, price, checked in rows:
+        found.setdefault(product_id, {})[retailer_id] = (price, checked)
+    return found
+
+
+def same_item_twice(taken, theirs, taken_prices, their_prices):
+    """Whether every shop that shows both products, from their shop_listings, has them at the same price to the
+    penny: one item a shop lists on two pages, an old address and a new one (the owner's catalogue log of 17 Nov
+    2026: Magic Madhouse had "Cyber Eden Booster Box" and "Cyber Eden Booster Display Box" both at £99.95, one
+    checked nine days before the other). The owner chose that these merge ("Merge same-price pairs"). A shop that
+    would lose its shown price, or two prices that differ by a penny, is still two products to the hourly merge."""
+    from catalogue.checks import shown_at
+
+    both = shown_at(taken) & shown_at(theirs)
+    if not both:
+        return False
+    if {shop for shop, shown in taken.items() if not shown} & shown_at(theirs):
+        return False
+    return all(shop in taken_prices and shop in their_prices and taken_prices[shop][0] == their_prices[shop][0]
+               for shop in both)
+
+
+def fresher_shown(taken_prices, their_prices, shops):
+    """Whether the kept page's listing at each of ``shops`` was checked no earlier than the other page's. A merge
+    leaves a shop's second listing on the page switched off, so the kept page must hold the one still being checked:
+    a shop that moved an item to a new address leaves the old one unchecked."""
+    return all(taken_prices[shop][1] >= their_prices[shop][1] for shop in shops)
+
+
+def shared_shops(keep, other, shops):
+    """The shops that show both products, from their shop_listings."""
+    from catalogue.checks import shown_at
+
+    return shown_at(shops.get(keep.pk, {})) & shown_at(shops.get(other.pk, {}))
 
 
 def merge_with_undo(keep, other, why, by_owner=False, **refs):
@@ -611,31 +657,58 @@ class Command(BaseCommand):
         # such a pair is never merged here.
         apart = kept_apart() | undone_merges()
         shops = shop_listings()
+        prices = shop_prices()
         # Each merge is its own short transaction, so one that fails leaves the earlier ones merged and
         # nothing else waits for the whole walk. A dry run wraps them all and rolls back.
         with transaction.atomic() if dry_run else nullcontext():
             for keep, group in duplicate_groups(loose):
+                if len(group) == 1 and shared_shops(keep, group[0], shops):
+                    # One item a shop lists on two pages: the page kept is the one holding that shop's listing
+                    # still being checked, so its price goes on updating.
+                    other = group[0]
+                    both = shared_shops(keep, other, shops)
+                    ours, theirs_prices = prices.get(keep.pk, {}), prices.get(other.pk, {})
+                    if same_item_twice(shops.get(keep.pk, {}), shops.get(other.pk, {}), ours, theirs_prices) \
+                            and same_item_twice(shops.get(other.pk, {}), shops.get(keep.pk, {}), theirs_prices, ours) \
+                            and not fresher_shown(ours, theirs_prices, both) and fresher_shown(theirs_prices, ours, both):
+                        keep, group = other, [keep]
                 others, taken = [], dict(shops.get(keep.pk, {}))
+                taken_prices = dict(prices.get(keep.pk, {}))
                 for other in group:
                     theirs = shops.get(other.pk, {})
-                    # A shop showing both, or two of the others, sells two products.
-                    why = why_not_merge(keep, other, apart) or shops_in_the_way(taken, theirs)
+                    why = why_not_merge(keep, other, apart)
+                    twice = False
+                    if not why:
+                        # A shop showing both, or two of the others, sells two products, unless it has them at the
+                        # same price: one item it lists on two pages, merged while the kept page holds the shop's
+                        # listing still being checked.
+                        why = shops_in_the_way(taken, theirs)
+                        if why and same_item_twice(taken, theirs, taken_prices, prices.get(other.pk, {})):
+                            from catalogue.checks import shown_at
+
+                            both = shown_at(taken) & shown_at(theirs)
+                            if fresher_shown(taken_prices, prices.get(other.pk, {}), both):
+                                why, twice = "", True
+                            else:
+                                why = "a shop lists both at one price, and its newer listing is on the other page"
                     if why:
                         self.stdout.write(f"left: {other.name} and {keep.name}, {why}")
                         continue
                     taken.update({shop: shown or taken.get(shop, False) for shop, shown in theirs.items()})
-                    others.append(other)
+                    for shop, row in prices.get(other.pk, {}).items():
+                        taken_prices.setdefault(shop, row)
+                    others.append((other, twice))
                 if not others:
                     continue
                 self.stdout.write(f"{'would keep' if dry_run else 'kept'}: {keep.name}")
-                for other in others:
-                    self.stdout.write(f"    merged: {other.name}")
+                for other, twice in others:
+                    self.stdout.write(f"    merged: {other.name}{' (one shop lists both, at one price)' if twice else ''}")
                 merged += len(others)
                 if dry_run:
                     continue
-                for other in others:
+                for other, twice in others:
                     with transaction.atomic():
-                        answer = merge_with_undo(keep, other, HOURLY_WHY)
+                        answer = merge_with_undo(keep, other, TWICE_WHY if twice else HOURLY_WHY)
                     moved += sum(len(entry["listings"]) for entry in answer.undo_note["others"])
             if dry_run:
                 transaction.set_rollback(True)

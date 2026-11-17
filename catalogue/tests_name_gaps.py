@@ -3,6 +3,7 @@ a name written joined or split ("Superheroes", "Super Heroes"), a shop's own nam
 sales wording ("Buy ... 2026", "Official Factory"), One Piece's "Extra Booster", text damaged in a shop's feed
 ("â??") and a name written all in small letters. Each example is a page the audit found live."""
 
+from datetime import timedelta
 from decimal import Decimal
 from io import StringIO
 
@@ -448,3 +449,74 @@ class RepeatedWordingTests(SimpleTestCase):
         # Both names are one product to the matcher, which never counted the game's name.
         self.assertEqual(match_key("Center Chaos Rising Elite Trainer Box", "pokemon"),
                          match_key("Pokémon Center Chaos Rising Elite Trainer Box", "pokemon"))
+
+
+class SameItemTwiceTests(TestCase):
+    """One item a shop lists on two pages, an old address and a new one, at the same price (the owner's catalogue log
+    of 17 Nov 2026: Magic Madhouse had "Cyber Eden Booster Box" and "Cyber Eden Booster Display Box" both at £99.95,
+    one checked nine days before the other). The owner: "Merge same-price pairs"."""
+
+    def setUp(self):
+        digimon = make_game(name="Digimon Card Game", slug="digimon")
+        self.eden = make_set(digimon, name="Cyber Eden", slug="cyber-eden", code="BT17")
+        self.madhouse, self.harbour = make_retailer("Magic Madhouse"), make_retailer("Harbour Games")
+        self.keep = make_product(self.eden, name="Cyber Eden Booster Box", product_type=BOX)
+        self.stale = make_listing(self.keep, self.madhouse, price="99.95", hours_ago=9 * 24)
+        make_listing(self.keep, self.harbour, price="94.00")
+        self.other = make_product(self.eden, name="Cyber Eden Booster Display Box", product_type=BOX)
+        self.fresh = make_listing(self.other, self.madhouse, price="99.95")
+
+    def merge(self):
+        out = StringIO()
+        call_command("merge_duplicates", stdout=out)
+        return out.getvalue()
+
+    def test_one_item_a_shop_lists_twice_at_one_price_is_merged_with_the_fresh_listing_shown(self):
+        from . import autopilot
+        from .management.commands.merge_duplicates import TWICE_WHY
+
+        # The page kept is the one holding the shop's listing still being checked (here the Display Box page), and
+        # the other shops' listings move onto it.
+        self.assertIn("merged: Cyber Eden Booster Box (one shop lists both, at one price)", self.merge())
+        self.keep.refresh_from_db()
+        self.assertFalse(self.keep.is_active)
+        self.assertEqual(Listing.objects.get(pk=self.fresh.pk).product, self.other)
+        self.assertEqual(Listing.objects.get(pk=self.stale.pk).product, self.keep)
+        self.assertEqual(set(Listing.objects.filter(product=self.other).values_list("retailer__name", flat=True)),
+                         {"Magic Madhouse", "Harbour Games"})
+        answer = CheckAnswer.objects.get(kind=CheckAnswer.Kind.MERGE, product=self.other, other=self.keep)
+        self.assertEqual(answer.why, TWICE_WHY)
+        self.assertEqual(self.client.get(f"/products/{self.keep.slug}/").status_code, 301)
+        # Undo puts each page back as it was.
+        self.assertTrue(autopilot.undo(answer))
+        self.keep.refresh_from_db()
+        self.assertTrue(self.keep.is_active)
+        self.assertEqual(set(Listing.objects.filter(product=self.keep).values_list("retailer__name", flat=True)),
+                         {"Magic Madhouse", "Harbour Games"})
+        # And the hourly merge leaves the pair alone from then on.
+        self.assertIn("left: Cyber Eden Booster", self.merge())
+        self.assertEqual(Product.objects.filter(pk__in=[self.keep.pk, self.other.pk], is_active=True).count(), 2)
+
+    def test_with_the_newer_listing_already_on_the_kept_page_it_stays_kept(self):
+        Listing.objects.filter(pk=self.stale.pk).update(last_checked=self.fresh.last_checked)
+        Listing.objects.filter(pk=self.fresh.pk).update(last_checked=self.fresh.last_checked - timedelta(days=3))
+        self.assertIn("merged: Cyber Eden Booster Display Box (one shop lists both, at one price)", self.merge())
+        self.assertTrue(Product.objects.get(pk=self.keep.pk).is_active)
+
+    def test_a_penny_apart_is_two_items(self):
+        Listing.objects.filter(pk=self.fresh.pk).update(price="99.96")
+        self.assertIn("left: Cyber Eden Booster Display Box and Cyber Eden Booster Box, a shop sells both", self.merge())
+        self.other.refresh_from_db()
+        self.assertTrue(self.other.is_active)
+
+    def test_names_that_are_not_the_same_product_are_never_merged_however_alike_the_prices(self):
+        violet = make_product(self.eden, name="Violet ex Booster Pack", product_type=PACK)
+        scarlet = make_product(self.eden, name="Scarlet ex Booster Pack", product_type=PACK)
+        make_listing(violet, self.harbour, price="2.99")
+        make_listing(scarlet, self.harbour, price="2.99")
+        self.merge()
+        self.assertEqual(Product.objects.filter(pk__in=[violet.pk, scarlet.pk], is_active=True).count(), 2)
+
+    def test_a_shop_whose_price_would_leave_the_site_still_holds_the_pair(self):
+        Listing.objects.filter(pk=self.stale.pk).update(is_active=False)
+        self.assertIn("a shop's price would leave the site", self.merge())

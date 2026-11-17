@@ -15,6 +15,7 @@
   <div class="product-intro">
     <h1 class="product-title">{{ product.name }}</h1>
     <p class="product-facts">{{ product.type_name }}{% info "type" product.product_type product.type_name %}{% if product.packs_inside and product.packs_inside > 1 and not per_pack %} · {% copy "product.facts.packs" packs=product.packs_inside %}{% endif %} · {{ product.language_name|default:"English" }}{% if product.language %}{% info "lang" product.language product.language_name game=product.game.slug %}{% endif %}</p>
+    {% if other_languages %}<p class="product-versions">{% copy "product.versions.label" %} {% for version in other_languages %}<a href="{{ version.url }}">{{ version.language }}<span class="visually-hidden">: {{ version.name }}</span></a>{% if not forloop.last %}, {% endif %}{% endfor %}</p>{% endif %}
     {% if ask.open and ask.left %}{% include "web/includes/ask_strip.html" %}{% endif %}
   </div>
 
@@ -200,7 +201,7 @@
 
 {% if related %}
 <section class="block related" aria-labelledby="related-title">
-  <h2 id="related-title" class="section-title">{% copy "product.related.title" set=product.product_set.name %}</h2>
+  <h2 id="related-title" class="section-title">{% if product.product_set %}{% copy "product.related.title" set=product.product_set.name %}{% else %}{% copy "product.related.title_game" game=product.game.display_short %}{% endif %}</h2>
   <ul class="results results--compact">
     {% for product in related %}
       {% include "web/includes/product_row.html" with heading_tag="h3" image_size="compact" %}

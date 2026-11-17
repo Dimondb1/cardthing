@@ -2685,6 +2685,19 @@ ENTRIES = [
         placeholders=("set",),
     ),
     Entry(
+        "product.related.title_game", H, "Related products heading, no set",
+        "Related {game} products",
+        "Heading above the nearest relatives of a product that is filed under no set, such as a Japanese box "
+        "whose set the site has only in English.",
+        placeholders=("game",),
+    ),
+    Entry(
+        "product.versions.label", T, "Other languages label",
+        "Also in",
+        "Shown under a product's name before links to the same product in other languages, such as Japanese. "
+        "Only when the set code and the kind of product match exactly.",
+    ),
+    Entry(
         "product.details.title", H, "Product details heading",
         "Product details",
         "Heading above the game, set and product type.",

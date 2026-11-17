@@ -1235,6 +1235,8 @@ a, button, summary, select, input, label { touch-action: manipulation; }
 .product-title { font-size: var(--text-product-title); line-height: var(--leading-tight); color: var(--color-ink); overflow-wrap: anywhere; }
 .product-head--long .product-title { font-size: var(--text-product-title-long); line-height: var(--leading-snug); }
 .product-facts { font-size: var(--text-sm); color: var(--color-ink-muted); }
+/* The same product in another language: a quiet line under the facts, its links the site's usual orange. */
+.product-versions { font-size: var(--text-sm); color: var(--color-ink-muted); }
 .product-media { grid-area: media; position: relative; display: grid; place-items: center; border-radius: var(--radius-card); background: var(--color-shelf); overflow: hidden; }
 @media (max-width: 59.99rem) {
   /* The picture's well gives up the room a long name, the delivery note and Ask Rip's questions take, so the price

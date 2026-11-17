@@ -45,6 +45,7 @@ from guides.access import not_for_editors
 from ripraptor import csp
 
 from . import answers, askrip, compact, feed, hubs, listcache, look, pagecache, partners, refresh, rip_list, share, shopping
+from . import versions
 from . import find as find_steps
 from .pagecache import cached_page
 from .charts import price_chart
@@ -1943,6 +1944,12 @@ def product_detail(request, slug):
             .exclude(pk=product.pk)
             .order_by("name")[:6]
         )
+    else:
+        # Filed under no set (a Japanese box whose set the site has only in English): its nearest relatives, so the
+        # page is not a dead end and other pages link to it (web/versions.py).
+        related = versions.relatives(product)
+    # The same product in another language, when their set codes and kinds match exactly.
+    other_languages = versions.language_versions(product)
 
     page_url = request.build_absolute_uri(product.get_absolute_url())
     structured = {
@@ -2124,6 +2131,7 @@ def product_detail(request, slug):
             "amazon_rip": search_link(product, "amazon", amazon_link, "amazon_rip"),
             "ebay_search": search_link(product, "ebay", ebay_search_url(product, listings)),
             "related": related,
+            "other_languages": other_languages,
             "instead": instead,
             "meta_title": meta_title,
             "meta_description": meta_description,

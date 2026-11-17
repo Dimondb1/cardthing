@@ -1685,6 +1685,25 @@ Claude never renames a product. The new-page check's instructions name the
 same kinds (prompt version 3), so such a page is kept off before it goes
 live.
 
+**Language versions and relatives** (`web/versions.py`, since 17 Nov 2026).
+The site keeps languages apart on purpose, so the Japanese EB-05 box and
+pack, with three to five shops each, had almost no links pointing at them:
+filed under no set, their only breadcrumb was the game and they had no
+"More from this set". Two links fix that, both approved by the owner:
+
+- **Also in Japanese / Also in English**, a line under a product's name
+  linking the same product in each other language. Only when the two pages
+  give the same one set code (in the name, or the code of the set a page is
+  filed under), are the same product type, and agree on size and wrapping,
+  so a box never links a pack, a half box or a case. Pokémon's Japanese
+  sets have codes of their own, so its English and Japanese boxes are never
+  linked: they are different sets. One query, and none for a product with
+  no set code.
+- **Related {game} products**, in place of "More from {set}" on a product
+  filed under no set: up to six products of its game that share its set
+  code or the words that name it, its own language and kind first. Two
+  queries.
+
 **Names that repeat themselves.** `classify.tidy_name` writes the kind of
 product once when a shop wrote it twice, with or without the game between
 ("Final Fantasy Play Booster Box Booster Box", "Prismatic Evolutions Elite

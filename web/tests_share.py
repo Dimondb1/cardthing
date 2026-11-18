@@ -313,12 +313,14 @@ class PostTests(TestCase):
 class StoryTests(TestCase):
     """Share to story (web/share.py): a tall picture of the product and its price for an Instagram story, handed to
     the phone's share sheet with the product's link copied for a link sticker. The owner, 18 Nov 2026: "someones
-    website had a insta stories share button one Tap created the insta story in its drafting state"."""
+    website had a insta stories share button one Tap created the insta story in its drafting state", then, with the
+    marketing team's template: "Could it be a bit more exciting like" it."""
 
     setUp = PostTests.setUp
+    GROUND = (246, 246, 248)   # --color-shelf, round the card and in the photo's well
 
-    def story(self, photo=None):
-        """The picture as served, with the shop's photo coming (a red block) or not."""
+    def story(self, photo=None, product=None):
+        """The picture as served, with the shop's photo coming or not."""
         from io import BytesIO
         from unittest import mock
 
@@ -329,7 +331,7 @@ class StoryTests(TestCase):
         self.addCleanup(cache.clear)
         found = {"return_value": photo} if photo else {"side_effect": OSError("down")}
         with mock.patch("catalogue.importers.fetch", **found):
-            response = self.client.get(f"/products/{self.product.slug}/story.png")
+            response = self.client.get(f"/products/{(product or self.product).slug}/story.png")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response["Content-Type"], "image/png")
         self.assertEqual(response["X-Robots-Tag"], "noindex")
@@ -337,76 +339,149 @@ class StoryTests(TestCase):
         picture.load()
         return picture.convert("RGB")
 
-    def red_block(self):
+    def photo(self, size=(300, 300), ground="#ff0000", box=None):
+        """A shop's photo: a block of ``ground``, with a blue ``box`` on it when given."""
         from io import BytesIO
 
-        from PIL import Image
+        from PIL import Image, ImageDraw
 
-        photo = BytesIO()
-        Image.new("RGB", (300, 300), "#ff0000").save(photo, "PNG")
-        return photo.getvalue()
+        picture = Image.new("RGB", size, ground)
+        if box:
+            ImageDraw.Draw(picture).rectangle(box, fill="#0000ff")
+        out = BytesIO()
+        picture.save(out, "PNG")
+        return out.getvalue()
 
-    def card_rows(self, picture):
-        """How many rows of the card are white down its left edge, between the logo and the code's row."""
-        from web import share
+    def colours(self, picture):
+        return {colour for _n, colour in picture.getcolors(picture.width * picture.height)}
 
-        return sum(picture.getpixel((share.STORY_MARGIN + 10, y)) == (255, 255, 255)
-                   for y in range(share.STORY_TOP + share.STORY_LOGO, share.STORY_TILE_Y))
-
-    def test_the_picture_is_a_tall_png_with_the_photo_made_bigger_on_the_white_card(self):
+    def test_the_picture_is_a_tall_png_with_the_photo_made_bigger_in_the_grey_well(self):
         from unittest import mock
 
-        from web import share
-
-        picture = self.story(self.red_block())
+        picture = self.story(self.photo())
         self.assertEqual(picture.size, (1080, 1920))
-        self.assertEqual(picture.getpixel((5, 5)), (255, 241, 234))   # the site's soft orange
+        self.assertEqual(picture.getpixel((5, 5)), self.GROUND)
         red = [y for y in range(picture.height) if picture.getpixel((540, y)) == (255, 0, 0)]
-        self.assertEqual(len(red), 440)   # a 300 pixel photo made up to the photo's full height, not its own
-        self.assertIn((16, 122, 50), {colour for _n, colour in picture.getcolors(1080 * 1920)})   # the price's green
+        # Made bigger to fill most of the well (a 300 pixel photo), never more than twice its size.
+        self.assertGreater(len(red), 450)
+        self.assertLessEqual(len(red), 600)
+        self.assertIn((16, 122, 50), self.colours(picture))   # the price's green
         # Kept for the next tap at the same price: the shop's photo is not fetched again.
         with mock.patch("catalogue.importers.fetch") as fetched:
             self.client.get(f"/products/{self.product.slug}/story.png")
         fetched.assert_not_called()
-        self.assertTrue(share.STORY_FOOT <= 1920 - 250 and share.STORY_TOP >= 250)
 
-    def test_without_a_photo_the_card_closes_up_rather_than_show_an_empty_box(self):
-        with_photo, without = self.story(self.red_block()), self.story()
-        self.assertNotIn((255, 0, 0), {colour for _n, colour in without.getcolors(1080 * 1920)})
-        self.assertNotIn((246, 246, 248), {colour for _n, colour in without.getcolors(1080 * 1920)})   # no grey well
-        self.assertGreater(self.card_rows(with_photo) - self.card_rows(without), 400)
-
-    def test_nothing_is_drawn_where_instagram_lays_its_own_bars(self):
+    def test_a_white_background_is_cut_away_so_the_product_stands_on_the_well(self):
         from web import share
 
-        picture = self.story(self.red_block())
-        for box in ((0, 0, 1080, share.STORY_TOP), (0, share.STORY_FOOT, 1080, 1920)):
-            self.assertEqual(picture.crop(box).getcolors(), [(1080 * (box[3] - box[1]), (255, 241, 234))], box)
+        picture = self.story(self.photo((400, 300), "#ffffff", box=(100, 60, 300, 240)))
+        blue = [x for x in range(picture.width) if picture.getpixel((x, 700)) == (0, 0, 255)]
+        self.assertTrue(blue)
+        # Just beside the product, where the shop's white was: the well's grey now.
+        self.assertEqual(picture.getpixel((blue[0] - 30, 700)), self.GROUND)
+        self.assertEqual(picture.getpixel((blue[-1] + 30, 700)), self.GROUND)
+        # White on the product itself stays: only white that reaches the photo's edges goes.
+        from io import BytesIO
 
-    def test_the_code_opens_the_product_page_as_a_visit_from_instagram(self):
-        from web import share
+        from PIL import Image
 
+        framed = Image.open(BytesIO(self.photo((400, 300), "#ffffff", box=(100, 60, 300, 240))))
+        framed = framed.convert("RGB")
+        framed.paste((255, 255, 255), (150, 110, 250, 190))   # a white label inside the blue box
+        cut = share.knock_out_white(framed)
+        self.assertEqual(cut.getpixel((200, 150))[3], 255)    # the label is kept
+        self.assertEqual(cut.getpixel((10, 10))[3], 0)        # the background is gone
+        # A photo whose corners are not white is left as it is.
+        self.assertEqual(share.knock_out_white(Image.new("RGB", (50, 50), "#336699")).getpixel((0, 0))[3], 255)
+
+    def test_without_a_photo_the_well_shows_rips_head_in_grey(self):
         picture = self.story()
-        matrix = share.code_matrix(share.post_url(self.product))
-        cell, left, top = share.code_cells(matrix, share.STORY_CODE, share.STORY_CODE_X, share.STORY_CODE_Y)
-        self.assertGreaterEqual(cell, 5)
-        ink = (0x1f, 0x24, 0x30)
-        for row, modules in enumerate(matrix):
-            for column, dark in enumerate(modules):
-                pixel = picture.getpixel((left + column * cell + cell // 2, top + row * cell + cell // 2))
-                self.assertEqual(pixel == ink, dark, (row, column))
-        # Its quiet zone, white on every side, at least four modules wide.
-        quiet, span = 4 * cell, cell * len(matrix)
-        for x, y in ((left - quiet, top + 50), (left + 50, top - quiet), (left + span + quiet - 1, top + 50),
-                     (left + 50, top + span + quiet - 1)):
-            self.assertEqual(picture.getpixel((x, y)), (255, 255, 255), (x, y))
+        found = self.colours(picture)
+        self.assertNotIn((255, 0, 0), found)
+        self.assertIn((230, 232, 236), found)   # --color-line, the head's grey
 
-    def test_it_says_when_the_price_was_checked(self):
+    def test_nothing_but_the_ground_where_instagram_lays_its_own_bars(self):
+        from web import share
+
+        picture = self.story(self.photo())
+        for box in ((0, 0, 1080, share.STORY_TOP), (0, share.STORY_FOOT, 1080, 1920)):
+            for _n, colour in picture.crop(box).getcolors(1080 * 400):
+                # The ground, or the faint edge of the card's shadow.
+                self.assertLessEqual(max(abs(a - b) for a, b in zip(colour, self.GROUND)), 6, (box, colour))
+
+    def test_the_price_checks_chip_shows_for_a_lowest_or_good_price_only(self):
+        from catalogue.models import Product
+
+        lowest_pink = (255, 241, 234)   # --color-brand-soft behind "Lowest yet"
+        good_green = (231, 247, 236)    # --color-price-soft behind "Good price"
+        for band, expect in ((5, lowest_pink), (4, good_green), (3, None)):
+            with self.subTest(band=band):
+                Product.objects.filter(pk=self.product.pk).update(price_band=band)
+                found = self.colours(self.story(self.photo()))
+                self.assertEqual(lowest_pink in found, expect == lowest_pink)
+                self.assertEqual(good_green in found, expect == good_green)
+
+    def test_a_saving_only_when_the_delivered_price_is_under_the_rrp(self):
+        from decimal import Decimal
+
         from web import share, views
 
         product, summary = views.post_product(self.product.slug)
-        lines = share.picture_lines(product, share.post_lead(product, summary))
-        self.assertEqual(lines, ["Cheapest of 2 UK shops compared", f"Checked {when_words(self.listing.last_checked)}."])
+        best = share.post_lead(product, summary)
+        self.assertIsNone(share.story_saving(product, best))            # no RRP: nothing said
+        product.rrp = Decimal("99.99")
+        self.assertEqual(share.story_saving(product, best), Decimal("12.99"))
+        product.rrp = Decimal("80.00")
+        self.assertIsNone(share.story_saving(product, best))            # over it: nothing said
+        product.rrp = Decimal("99.99")
+        best.delivery_known = False
+        self.assertIsNone(share.story_saving(product, best))            # a price without delivery: nothing said
+
+    def test_it_says_the_shops_and_when_the_price_was_checked_never_a_shop(self):
+        from web import share, views
+
+        product, summary = views.post_product(self.product.slug)
+        facts = share.story_facts(product, share.post_lead(product, summary))
+        self.assertEqual(facts, [("rr-deals", "Cheapest of 2 UK shops compared", False),
+                                 ("rr-drops", f"Checked {when_words(self.listing.last_checked)}", True)])
+
+    def test_the_search_bar_names_a_word_that_finds_the_product_on_the_site(self):
+        # No QR code: someone watching a story on their phone cannot scan that phone. The bar says what to type.
+        from unittest import mock
+
+        from web import share
+
+        op = make_product(make_set(self.game, name="A Fist of Divine Speed", slug="fist", code="OP11"),
+                          name="A Fist of Divine Speed Booster Box (OP-11)", slug="op-11-box", product_type="booster_box")
+        make_listing(op, self.harbour, price="87.00", delivery="0.00")
+        self.assertTrue(share.search_finds("OP-11", op))
+        self.assertEqual(next(share.story_search_terms(op)), "OP-11")
+        # The set's name before its code (plainer), the product's own name last.
+        self.assertEqual(list(share.story_search_terms(self.product)),
+                         ["Prismatic Evolutions", "PRE", "Surging Sparks Booster Box"])
+        # A word that does not find the product is passed over.
+        with mock.patch("web.share.search_finds", side_effect=lambda term, product: term != "OP-11"):
+            self.assertEqual(next(share.story_search_terms(op)), "A Fist of Divine Speed")
+        self.assertFalse(share.search_finds("Nothing Like It", op))
+
+    def test_a_long_word_for_the_bar_steps_down_then_is_cut(self):
+        from PIL import Image, ImageDraw
+
+        from web import share
+
+        draw = ImageDraw.Draw(Image.new("RGB", (10, 10)))
+        room = share.STORY_SEARCH_WORDS
+        self.assertEqual(room, 673)
+        term, plain, _bold, widths = share.fit_search(draw, "Search ", " on ripraptor.com", iter(["OP-11"]), room)
+        self.assertEqual((term, plain.size), ("OP-11", 38))
+        term, plain, _bold, widths = share.fit_search(draw, "Search ", " on ripraptor.com",
+                                                      iter(["Prismatic Evolutions", "PRE"]), room)
+        self.assertEqual(term, "Prismatic Evolutions")
+        self.assertLessEqual(sum(widths), room)
+        term, plain, _bold, widths = share.fit_search(draw, "Search ", " on ripraptor.com",
+                                                      iter(["A very long product name " * 4]), room)
+        self.assertTrue(term.endswith("…"))
+        self.assertLessEqual(sum(widths), room)
 
     def test_the_share_panel_offers_story_which_saves_the_picture_without_script(self):
         html = self.client.get(self.product.get_absolute_url()).content.decode()
@@ -443,4 +518,29 @@ class StoryTests(TestCase):
         with mock.patch("catalogue.importers.fetch", side_effect=OSError("down")), \
                 CaptureQueriesContext(connection) as queries:
             self.client.get(f"/products/{self.product.slug}/story.png")
-        self.assertLessEqual(len(queries), 8)
+        self.assertLessEqual(len(queries), 10)
+
+
+class GlyphTests(TestCase):
+    """The site's icons drawn by Pillow for the story picture (web/glyphs.py), from the sprite itself."""
+
+    def test_every_game_has_an_icon_and_each_draws(self):
+        from web import feed, glyphs
+
+        for slug in list(feed.ICONS) + ["a-game-with-no-motif"]:
+            name = f"rr-game-{feed.icon_for(slug)}"
+            with self.subTest(slug=slug):
+                self.assertIn(name, glyphs.symbols())
+                self.assertGreater(glyphs.mask(name, 46).getextrema()[1], 200)
+        for name in ("rr-search", "rr-deals", "rr-drops", "rr-arrow-right"):
+            self.assertGreater(glyphs.mask(name, 46).getextrema()[1], 200)
+
+    def test_the_search_icon_is_a_ring_and_a_handle(self):
+        from web import glyphs
+
+        shape = glyphs.mask("rr-search", 96)   # circle at (10.5, 10.5) r 6.5, handle to (20.5, 20.5), 24 units
+        unit = 96 / 24
+        self.assertEqual(shape.getpixel((round(10.5 * unit), round(10.5 * unit))), 0)        # the middle is empty
+        self.assertGreater(shape.getpixel((round(10.5 * unit), round(4 * unit))), 200)      # the ring's top
+        self.assertGreater(shape.getpixel((round(18 * unit), round(18 * unit))), 200)       # the handle
+        self.assertEqual(shape.getpixel((round(22 * unit), round(4 * unit))), 0)            # nothing elsewhere

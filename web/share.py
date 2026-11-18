@@ -1,5 +1,8 @@
 """The words a share fills in for the visitor: the text under a Reddit post's title (product page and cards)."""
 
+import re
+from decimal import Decimal
+
 from catalogue.discord import when_words
 from catalogue.models import Listing
 from content import service as copy
@@ -295,22 +298,26 @@ def paste_centred(card, picture, box):
     card.paste(picture, (x, y), picture)
 
 
-def paste_logo(card, height, at, centred=False):
-    """The logo, ``height`` tall, at ``at`` (across the middle of the card at ``at``'s height when ``centred``): its
-    width, or 0 without the file."""
+def paste_logo(card, height, at):
+    """The logo, ``height`` tall, at ``at``: its width, or 0 without the file."""
+    logo = logo_image(height)
+    if logo is None:
+        return 0
+    card.paste(logo, at, logo)
+    return logo.width
+
+
+def logo_image(height, name=LOGO):
+    """A picture from the site's static files (the logo by default), ``height`` tall, RGBA, or None without it."""
     from django.contrib.staticfiles import finders
     from PIL import Image
 
-    logo_path = finders.find(LOGO)
-    if not logo_path:
-        return 0
-    with Image.open(logo_path) as logo:
-        logo = logo.convert("RGBA")
-        logo = logo.resize((round(logo.width * height / logo.height), height))
-        if centred:
-            at = ((card.width - logo.width) // 2, at[1])
-        card.paste(logo, at, logo)
-        return logo.width
+    path = finders.find(name)
+    if not path:
+        return None
+    with Image.open(path) as found:
+        found = found.convert("RGBA")
+        return found.resize((round(found.width * height / found.height), height), Image.LANCZOS)
 
 
 def picture_lines(product, best, store=None):
@@ -334,30 +341,43 @@ def picture_lines(product, best, store=None):
 # editor itself: that takes an app registered with Meta. So the phone's share sheet takes the picture, where Instagram
 # offers Stories, and the product's link goes on the clipboard for the story's link sticker (share.js). The owner, 18
 # Nov 2026: "someones website had a insta stories share button one Tap created the insta story in its drafting
-# state". Everything sits between STORY_TOP and STORY_FOOT: Instagram lays its name and progress bar over the top of
-# a story and its reply box over the foot. The product is a white card on the site's soft orange, as on its pages.
+# state", and then, with a template from the marketing team, "Could it be a bit more exciting like" it.
+#
+# The template's look, drawn with the site's tokens: a white card on the shelf grey, as a product card on the site.
+# Its head row has the game's icon and name and the logo; then the photo in a big grey well with the Price check's
+# chip, the name, the delivered price very large in green, what it is under the RRP when it is, the shops compared and
+# when it was checked, and a copy of the site's search bar naming a word that finds the product there. No QR code:
+# someone watching a story on their phone cannot scan that phone. Everything sits between STORY_TOP and STORY_FOOT,
+# clear of Instagram's name bar over the top of a story and its reply box over the foot.
 
 STORY_WIDTH, STORY_HEIGHT = 1080, 1920
-STORY_TOP, STORY_FOOT = 260, 1660
-STORY_MARGIN = 80
-STORY_LOGO = 76                    # the logo's height, centred at the top
-STORY_PAD = 48                     # inside the card
-STORY_GAP = 40                     # between the logo, the card and the code's row
-STORY_PHOTO = 440                  # the photo's height at most
-STORY_NAME_LINE, STORY_PRICE, STORY_LINE = 66, 144, 48
-STORY_TILE = 264                   # the white square the code sits on, at the foot left
-STORY_CODE = 216                   # the code in it; the tile's edge round it is the code's quiet zone
-STORY_TILE_X, STORY_TILE_Y = STORY_MARGIN, STORY_FOOT - STORY_TILE
-STORY_CODE_X = STORY_TILE_X + (STORY_TILE - STORY_CODE) // 2
-STORY_CODE_Y = STORY_TILE_Y + (STORY_TILE - STORY_CODE) // 2
-BRAND_SOFT = "#fff1ea"             # --color-brand-soft
+STORY_TOP, STORY_FOOT = 250, 1670
+STORY_CARD_WIDTH = 984
+STORY_PAD_TOP, STORY_PAD = 44, 48               # inside the card: top, and sides and foot
+STORY_HEAD = 64                                 # the game and the logo
+STORY_WELL, STORY_WELL_LEAST = 600, 420         # the photo's well, and how far it shrinks for a long name
+STORY_TITLE_SIZES = (64, 58, 52, 48)            # the name steps down to fit two lines
+STORY_PRICE_SIZES = (164, 148, 132, 118)        # the price steps down to fit one line with "delivered"
+STORY_ICON = 46
+STORY_SEARCH = 108                              # the search bar's height
+STORY_GO = 82                                   # its orange button
+# The room for the bar's words: the bar less its left inset, the search icon and the gaps beside it, and the button
+# with its inset.
+STORY_SEARCH_WORDS = STORY_CARD_WIDTH - 2 * STORY_PAD - 1 - 34 - STORY_ICON - 20 - 20 - STORY_GO - 12
+STORY_PHOTO_GROW = 2                            # a small photo is made at most this much bigger
+# The site's colours (web/static/css/tokens.css).
+LINE, LINE_STRONG, BRAND_TEXT, BRAND_SOFT, PRICE_SOFT = "#e6e8ec", "#cfd4dc", "#cc4410", "#fff1ea", "#e7f7ec"
+# The Price check's chip on the photo: its words and colours, as the site's own chip.
+STORY_CHIPS = {"lowest": ("product.fair.verdict_lowest", BRAND_SOFT, BRAND_TEXT),
+               "good": ("product.fair.verdict_good", PRICE_SOFT, PRICE)}
+SET_CODE = re.compile(r"\(([A-Za-z]{1,4}-?\d{1,3}[A-Za-z]?)\)")   # "(OP-11)" in a name
 
 
 def story_image(product, summary, store=None):
     """The story's picture as PNG bytes, kept POST_SECONDS for the same price, as the post's is."""
     from django.core.cache import cache
 
-    key = post_image_key(product, summary, kind="story-image:v1")
+    key = post_image_key(product, summary, kind="story-image:v2")
     found = cache.get(key)
     if found is not None:
         return found
@@ -366,62 +386,263 @@ def story_image(product, summary, store=None):
     return png
 
 
+def search_finds(term, product):
+    """Whether searching the site for ``term`` shows ``product`` on the first page, in the order the search box
+    lists them (views.search_api). One query."""
+    from django.conf import settings
+    from django.db.models import F
+
+    from catalogue.models import Product
+    from catalogue.search import apply_search
+
+    products, terms = apply_search(Product.objects.for_lists(), term)
+    if not terms:
+        return False
+    first = products.order_by("name_rank", F("lowest_price").asc(nulls_last=True), "name")
+    return product.pk in set(first.values_list("pk", flat=True)[:settings.RIPRAPTOR_PAGE_SIZE])
+
+
+def story_search_terms(product):
+    """Words that find ``product`` on the site, best first, as the story's search bar may name them: the set code in
+    the name's brackets ("OP-11", what collectors type), the set's name ("Prismatic Evolutions", plainer than its
+    code), the set's code; then the product's own name, unchecked, as the last word. Lazy: a search a word at a
+    time, so the first that fits the bar costs one query."""
+    named = SET_CODE.search(product.name)
+    found_set = product.product_set
+    candidates = [named.group(1) if named else "", found_set.name if found_set else "",
+                  found_set.code if found_set else ""]
+    for term in dict.fromkeys(term.strip() for term in candidates if term and term.strip()):
+        if search_finds(term, product):
+            yield term
+    yield product.name
+
+
+def fit_search(draw, before, behind, terms, room):
+    """(term, plain font, bold font, [widths]) for the search bar's words: the first term that fits ``room`` at one
+    of its sizes, largest first; when none does, the first term at the smallest size, cut."""
+    first = None
+    for term in terms:
+        for size in (38, 34, 30):
+            plain, bold = post_font(size, 600, 24), post_font(size, 800, 24)
+            widths = [draw.textlength(before, font=plain), draw.textlength(term, font=bold),
+                      draw.textlength(behind, font=plain)]
+            if sum(widths) <= room:
+                return term, plain, bold, widths
+        first = first or (term, plain, bold, widths)
+    term, plain, bold, widths = first
+    term = fit_lines(draw, term, bold, room - widths[0] - widths[2], lines=1)[0]
+    return term, plain, bold, [widths[0], draw.textlength(term, font=bold), widths[2]]
+
+
+def story_saving(product, best):
+    """What the delivered price is under the product's RRP, or None. Only under, and only from an RRP the site
+    trusts (Product.rrp_now): never a saving the data cannot back. Measured from the delivered price shown beside it,
+    so it can only ever say less than the product page's item price would."""
+    if best is None or not best.delivery_known or product.rrp_now is None:
+        return None
+    gap = (product.rrp_now[0] - best.shown_price).quantize(Decimal("0.01"))
+    return gap if gap > 0 else None
+
+
+def knock_out_white(picture):
+    """A shop's photo on a plain white background, with that background made clear, so the product stands on the
+    grey well as a cut-out does. Only the white that reaches the photo's edges goes (found on a quarter-size copy,
+    where filling is quick, then followed at full size), so white on the box itself stays. A photo that is already
+    cut out, or whose corners are not white, is left as it is."""
+    from PIL import Image, ImageChops, ImageDraw, ImageFilter
+
+    picture = picture.convert("RGBA")
+    if picture.getchannel("A").getextrema()[0] < 250:
+        return picture
+    rgb = picture.convert("RGB")
+    width, height = rgb.size
+    if not all(min(rgb.getpixel(corner)) >= 240 for corner in ((0, 0), (width - 1, 0), (0, height - 1),
+                                                               (width - 1, height - 1))):
+        return picture
+    step = max(1, max(width, height) // 256)
+    small = rgb.resize((max(1, width // step), max(1, height // step)), Image.BILINEAR)
+    key = (255, 0, 255)
+    for corner in ((0, 0), (small.width - 1, 0), (0, small.height - 1), (small.width - 1, small.height - 1)):
+        if small.getpixel(corner) != key:
+            ImageDraw.floodfill(small, corner, key, thresh=36)
+    apart = ImageChops.difference(small, Image.new("RGB", small.size, key)).split()
+    reached = ImageChops.lighter(ImageChops.lighter(apart[0], apart[1]), apart[2]).point(lambda v: 255 if v < 8 else 0)
+    reached = reached.resize((width, height), Image.BILINEAR).point(lambda v: 255 if v > 64 else 0)
+    reached = reached.filter(ImageFilter.MaxFilter(5))
+    channels = rgb.split()
+    white = ImageChops.darker(ImageChops.darker(channels[0], channels[1]), channels[2]).point(lambda v: 255 if v >= 232 else 0)
+    keep = ImageChops.invert(ImageChops.multiply(reached, white)).filter(ImageFilter.GaussianBlur(0.8))
+    picture.putalpha(ImageChops.darker(picture.getchannel("A"), keep))
+    return picture
+
+
+def tracked_text(draw, at, text, font, fill, tracking, anchor="ls"):
+    """``text`` drawn letter by letter ``tracking`` pixels apart (negative is tighter), from ``at`` on its baseline.
+    Returns its width."""
+    x, y = at
+    for i, letter in enumerate(text):
+        draw.text((x, y), letter, font=font, fill=fill, anchor=anchor)
+        x += draw.textlength(letter, font=font) + (tracking if i < len(text) - 1 else 0)
+    return x - at[0]
+
+
+def tracked_length(draw, text, font, tracking):
+    return sum(draw.textlength(letter, font=font) for letter in text) + tracking * max(0, len(text) - 1)
+
+
+def shadow(story, box, radius, offset, blur, alpha):
+    """A soft shadow under the rounded ``box``, as the site's cards cast."""
+    from PIL import Image, ImageDraw, ImageFilter
+
+    layer = Image.new("RGBA", story.size, (0, 0, 0, 0))
+    ImageDraw.Draw(layer).rounded_rectangle((box[0], box[1] + offset, box[2], box[3] + offset), radius=radius,
+                                            fill=(31, 36, 48, alpha))
+    story.alpha_composite(layer.filter(ImageFilter.GaussianBlur(blur)))
+
+
+def story_facts(product, best, store=None):
+    """The lines beside the icons: [(icon, words, quiet)]. The shops (or pre-order, or none in stock) and when it was
+    checked, never a shop's name."""
+    lines = picture_lines(product, best, store)
+    facts = [("rr-deals", lines[0], False)]
+    if best is not None:
+        facts.append(("rr-drops", copy.get("product.share.story_checked", store=store,
+                                           when=when_words(best.last_checked)), True))
+    return facts
+
+
 def draw_story(product, summary, photo, store=None):
-    """The picture: the logo at the top and, at the foot, the code that opens the page beside a line saying what it
-    does and the site; between them the product's card, as tall as what it holds, centred: the photo when there is one
-    (on the white card, so a shop's white background melts into it), the name (two lines at most), the price in the
-    site's green and the lines about the shops and when it was checked."""
+    """The picture, as the marketing team's template (story_mock.png): see the notes above."""
     from io import BytesIO
 
     from PIL import Image, ImageDraw
 
-    width, margin = STORY_WIDTH, STORY_MARGIN
-    story = Image.new("RGB", (width, STORY_HEIGHT), BRAND_SOFT)
+    from . import feed, glyphs
+
+    story = Image.new("RGBA", (STORY_WIDTH, STORY_HEIGHT), SHELF)
     draw = ImageDraw.Draw(story)
-    paste_logo(story, STORY_LOGO, (0, STORY_TOP), centred=True)
-    inner = width - 2 * margin - 2 * STORY_PAD
-    picture = fitted_photo(photo, inner, STORY_PHOTO, grow=2)
-    name_font = post_font(54, 700, 24)
-    names = fit_lines(draw, product.name, name_font, inner)
+    inner = STORY_CARD_WIDTH - 2 * STORY_PAD
     best = post_lead(product, summary)
-    lines = picture_lines(product, best, store)
-    height = (STORY_PAD + (STORY_PHOTO + 36 if picture is not None else 0) + len(names) * STORY_NAME_LINE + 20
-              + (STORY_PRICE if best is not None else 0) + len(lines) * STORY_LINE + STORY_GAP)
-    space_top, space_foot = STORY_TOP + STORY_LOGO + STORY_GAP, STORY_TILE_Y - STORY_GAP
-    top = space_top + max(0, (space_foot - space_top - height) // 2)
-    draw.rounded_rectangle((margin, top, width - margin, top + height), radius=48, fill=PAPER)
-    x, y = margin + STORY_PAD, top + STORY_PAD
-    if picture is not None:
-        paste_centred(story, picture, (x, y, x + inner, y + STORY_PHOTO))
-        y += STORY_PHOTO + 36
-    for line in names:
-        draw.text((x, y), line, font=name_font, fill=INK)
-        y += STORY_NAME_LINE
-    y += 20
-    small = post_font(34, 500, 14)
+    check = product.price_check if best is not None and best is summary.best else None
+    chip = STORY_CHIPS.get(check.key) if check is not None else None
+    saving = story_saving(product, best)
+    facts = story_facts(product, best, store)
+
+    # The name: the largest size that fits two lines, else the smallest, cut.
+    for size in STORY_TITLE_SIZES:
+        title_font = post_font(size, 800, 40)
+        names = fit_lines(draw, product.name, title_font, inner, lines=99)
+        if len(names) <= 2:
+            break
+    names = fit_lines(draw, product.name, title_font, inner, lines=2)
+    title_line = round(title_font.size * 1.12)
+    # The price: the largest size that fits one line with "delivered" beside it.
+    price_words = after = ""
     if best is not None:
-        price_font = post_font(108, 700, 32)
-        price = f"£{best.shown_price:.2f}"
-        draw.text((x, y), price, font=price_font, fill=PRICE)
-        after = post_price(best, store).replace(price, "").strip()
-        taken = draw.textlength(price, font=price_font) + 24
-        draw.text((x + taken, y + 60), fit_lines(draw, after, small, inner - taken, lines=1)[0], font=small,
-                  fill=INK_MUTED)
-        y += STORY_PRICE
-    for line in lines:
-        draw.text((x, y), fit_lines(draw, line, small, inner, lines=1)[0], font=small, fill=INK_MUTED)
-        y += STORY_LINE
-    tile = (STORY_TILE_X, STORY_TILE_Y, STORY_TILE_X + STORY_TILE - 1, STORY_TILE_Y + STORY_TILE - 1)   # ends inclusive
-    draw.rounded_rectangle(tile, radius=32, fill=PAPER)
-    draw_code(draw, post_url(product), STORY_CODE, STORY_CODE_X, STORY_CODE_Y)
-    words_x = STORY_TILE_X + STORY_TILE + STORY_GAP
-    words = width - margin - words_x
-    scan = post_font(44, 700, 24)
-    draw.text((words_x, STORY_TILE_Y + 72), fit_lines(draw, copy.get("product.share.story_scan", store=store), scan,
-                                                     words, lines=1)[0], font=scan, fill=INK)
-    draw.text((words_x, STORY_TILE_Y + 140), "ripraptor.com", font=post_font(36, 600, 14), fill=INK_MUTED)
+        price_words = f"£{best.shown_price:,.2f}"
+        after = post_price(best, store).replace(f"£{best.shown_price:.2f}", "").strip()
+        after_font = post_font(46, 600, 24)
+        for size in STORY_PRICE_SIZES:
+            price_font = post_font(size, 800, 40)
+            tracking = -round(size / 55)
+            if tracked_length(draw, price_words, price_font, tracking) + 22 + draw.textlength(after, font=after_font) <= inner:
+                break
+
+    # Heights, top to bottom, and the well takes up what a long name or a saving needs.
+    rest = (STORY_PAD_TOP + STORY_HEAD + 28 + 38 + len(names) * title_line
+            + (26 + price_font.size if best is not None else 0) + (14 + 50 if saving else 0)
+            + 30 + len(facts) * STORY_ICON + (len(facts) - 1) * 18 + 40 + STORY_SEARCH + STORY_PAD)
+    room = STORY_FOOT - STORY_TOP
+    well_height = max(STORY_WELL_LEAST, min(STORY_WELL, room - rest))
+    card_height = rest + well_height
+    left = (STORY_WIDTH - STORY_CARD_WIDTH) // 2
+    top = STORY_TOP + max(0, (room - card_height) // 2)
+    card = (left, top, left + STORY_CARD_WIDTH - 1, top + card_height - 1)
+    shadow(story, card, 44, 8, 18, 20)
+    draw = ImageDraw.Draw(story)
+    draw.rounded_rectangle(card, radius=44, fill=PAPER, outline=LINE, width=2)
+    x, y = left + STORY_PAD, top + STORY_PAD_TOP
+
+    # The head row: the game's icon and name, and the logo.
+    icon = f"rr-game-{feed.icon_for(product.game.slug)}"
+    glyphs.paste(story, icon if icon in glyphs.symbols() else "rr-game-all", STORY_ICON,
+                 (x, y + (STORY_HEAD - STORY_ICON) // 2), INK)
+    draw.text((x + STORY_ICON + 14, y + STORY_HEAD // 2), product.game.display_short, font=post_font(36, 700, 24),
+              fill=INK_MUTED, anchor="lm")
+    logo = logo_image(60)
+    if logo is not None:
+        story.alpha_composite(logo, (x + inner - logo.width, y + (STORY_HEAD - logo.height) // 2))
+    y += STORY_HEAD + 28
+
+    # The well, with the photo (or Rip's head in grey) and the Price check's chip.
+    well = (x, y, x + inner - 1, y + well_height - 1)
+    draw.rounded_rectangle(well, radius=61, fill=SHELF)
+    picture = fitted_photo(photo, round(inner * 0.84), round(well_height * 0.88), grow=STORY_PHOTO_GROW)
+    if picture is not None:
+        paste_centred(story, knock_out_white(picture), well)
+    else:
+        head = logo_image(round(well_height * 0.5), "img/raptor-lg.png")
+        if head is not None:
+            grey = Image.new("RGBA", head.size, LINE)
+            grey.putalpha(head.getchannel("A"))
+            paste_centred(story, grey, well)
+    if chip is not None:
+        key, ground, ink = chip
+        words = copy.get(key, store=store)
+        chip_font = post_font(34, 800, 24)
+        chip_width = draw.textlength(words, font=chip_font) + 52
+        box = (x + 30, y + 30, x + 30 + chip_width, y + 30 + 58)
+        draw.rounded_rectangle(box, radius=29, fill=ground)
+        draw.text(((box[0] + box[2]) / 2, (box[1] + box[3]) / 2), words, font=chip_font, fill=ink, anchor="mm")
+    y += well_height + 38
+
+    # The name, the price and the saving.
+    for line in names:
+        draw.text((x, y), line, font=title_font, fill=INK)
+        y += title_line
+    if best is not None:
+        y += 26
+        baseline = y + round(price_font.size * 0.78)
+        taken = tracked_text(draw, (x, baseline), price_words, price_font, PRICE, tracking)
+        draw.text((x + taken + 22, baseline), after, font=after_font, fill=INK_MUTED, anchor="ls")
+        y += price_font.size
+    if saving:
+        y += 14
+        draw.text((x, y), copy.get("product.share.story_saving", store=store, saving=f"£{saving:,.2f}"),
+                  font=post_font(42, 700, 24), fill=PRICE)
+        y += 50
+
+    # The facts, each beside its icon.
+    y += 30
+    for i, (name, words, quiet) in enumerate(facts):
+        glyphs.paste(story, name, STORY_ICON, (x, y), BRAND_TEXT)
+        font = post_font(36, 500, 24) if quiet else post_font(38, 600, 24)
+        text_x = x + STORY_ICON + 18
+        draw.text((text_x, y + STORY_ICON // 2), fit_lines(draw, words, font, inner - (text_x - x), lines=1)[0],
+                  font=font, fill=INK_MUTED if quiet else INK, anchor="lm")
+        y += STORY_ICON + (18 if i < len(facts) - 1 else 0)
+
+    # The search bar, as the site's, naming a word that finds the product.
+    y += 40
+    bar = (x, y, x + inner - 1, y + STORY_SEARCH - 1)
+    shadow(story, bar, STORY_SEARCH // 2, 6, 14, 20)
+    draw = ImageDraw.Draw(story)
+    draw.rounded_rectangle(bar, radius=STORY_SEARCH // 2, fill=PAPER, outline=LINE_STRONG, width=3)
+    middle = y + STORY_SEARCH // 2
+    glyphs.paste(story, "rr-search", STORY_ICON, (x + 34, middle - STORY_ICON // 2), INK_MUTED)
+    go = (bar[2] - 12 - STORY_GO, middle - STORY_GO // 2, bar[2] - 12, middle + STORY_GO // 2)
+    draw.ellipse(go, fill=BRAND)
+    glyphs.paste(story, "rr-arrow-right", 44, (go[0] + (STORY_GO - 44) // 2, middle - 22), PAPER)
+    words_x = x + 34 + STORY_ICON + 20
+    before, _, behind = copy.get("product.share.story_search", store=store, term="\x00").partition("\x00")
+    term, plain, bold, widths = fit_search(draw, before, behind, story_search_terms(product), STORY_SEARCH_WORDS)
+    at = words_x
+    for words, font, width in ((before, plain, widths[0]), (term, bold, widths[1]), (behind, plain, widths[2])):
+        draw.text((at, middle), words, font=font, fill=INK, anchor="lm")
+        at += width
+
     out = BytesIO()
-    story.save(out, "PNG", optimize=True)
+    story.convert("RGB").save(out, "PNG", optimize=True)
     return out.getvalue()
 
 

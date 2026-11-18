@@ -7329,24 +7329,47 @@ saves the picture instead. The picture is kept an hour for the same price.
 `/products/<slug>/post.png` the picture; both are noindex.
 
 **Share to story** (`web/share.py` `draw_story`, `share.js`; the owner, 18
-Nov 2026: a site's "insta stories share button"): the Story icon beside Post
-makes an Instagram story. A web page cannot open Instagram's story editor
-itself (that takes an app registered with Meta), so the server draws a tall
-picture (1080 by 1920) and the phone's share sheet takes it, where Instagram
-offers Stories and opens the editor with it as a draft. The product's link,
-tagged `utm_source=instagram_story`, goes on the clipboard for a link
-sticker, since a story takes no link from a web page. The picture is the
-logo at the top, the product as a white card on the site's soft orange (the
-shop's photo made up to twice its size when small, with no grey well behind
-it so a white background melts into the card; without a photo the card
-closes up), its name, the delivered price in green, the shops and when it
-was checked, and at the foot the same QR code as the post's beside "Scan
-for today's price". Everything sits between 260 and 1660 pixels down,
-clear of Instagram's name bar and reply box. The icon is a link to
-`/products/<slug>/story.png` that saves the picture, so it works without
-script and on a computer (where the link is copied too); a browser that
-loses the tap while the picture comes saves it instead. The picture is kept
-an hour for the same price, noindex.
+Nov 2026: a site's "insta stories share button", then the marketing team's
+template with "Could it be a bit more exciting like"): the Story icon beside
+Post makes an Instagram story. A web page cannot open Instagram's story
+editor itself (that takes an app registered with Meta), so the server draws
+a tall picture (1080 by 1920) and the phone's share sheet takes it, where
+Instagram offers Stories and opens the editor with it as a draft. The
+product's link, tagged `utm_source=instagram_story`, goes on the clipboard
+for a link sticker, since a story takes no link from a web page.
+
+The picture follows the template, in the site's tokens: a white card with a
+soft shadow on the shelf grey, like a product card on the site. Its head row
+has the game's icon and name and the logo. Below that, a big grey well holds
+the shop's photo, enlarged up to twice its size, with a plain white
+background cut away so the box stands on the grey (`knock_out_white`). Only
+white that reaches the photo's edges goes, so white on the box stays. With
+no photo, the well shows Rip's head in grey. The Price check's chip ("Lowest
+yet" or "Good price") sits on the photo. Then come the name (64px, stepping
+down to 48 to fit two lines), the delivered price very large in green, what
+it is under the RRP (only when the delivered price is under an RRP the site
+trusts, measured from that delivered price), the UK shops compared and when
+the price was checked beside the site's tag and calendar icons. At the foot
+is a copy of the site's search bar: "Search **OP-11** on ripraptor.com". Its
+word is the set code in the name's brackets, else the set's name, else the
+set's code, the first that the site's own search shows the product for on its
+first page (`story_search_terms`), else the product's name. It is shrunk,
+then cut, to fit. There is no QR code: someone watching a story on their
+phone cannot scan that phone. The well gives up height for a long name or a
+saving, so nothing is cut off, and everything sits between 250 and 1670
+pixels down, clear of Instagram's name bar and reply box. Unlike the
+marketing team's deal posts, a Story is a visitor's own share, so any
+product can be shared, under its RRP or not.
+
+The icons are the site's own sprite (`feed_sprite.svg`), drawn by Pillow in
+`web/glyphs.py`, because the server has no browser and Pillow reads no SVG.
+It reads the sprite's paths, circles and rectangles, draws them eight times
+over size and scales them down, so an icon changed in the sprite changes in
+the picture too. The Story icon is a link to `/products/<slug>/story.png`
+that saves the picture, so it works without script and on a computer (where
+the link is copied too). A browser that loses the tap while the picture
+comes saves it instead. The picture is kept an hour for the same price,
+noindex. Drawing one takes under a second.
 
 **Download a report** (`/dashboard/report.txt`, `web/report.py`; linked at
 the top of the dashboard and on the admin home): the dashboard's figures,

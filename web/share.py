@@ -100,9 +100,9 @@ def post_caption(product, summary, store=None):
     return "\n\n".join(lines)
 
 
-def post_image_key(product, summary):
+def post_image_key(product, summary, kind="post-image:v2"):
     best = post_lead(product, summary)
-    return f"web:post-image:v2:{product.pk}:{best.pk if best else 0}:{best.shown_price if best else ''}"
+    return f"web:{kind}:{product.pk}:{best.pk if best else 0}:{best.shown_price if best else ''}"
 
 
 def post_url(product):
@@ -132,9 +132,9 @@ def code_cells(matrix, box=CODE_BOX, x=CODE_X, y=CODE_Y):
     return cell, x + (box - span) // 2, y + (box - span) // 2
 
 
-def draw_code(draw, text):
+def draw_code(draw, text, box=CODE_BOX, x=CODE_X, y=CODE_Y):
     matrix = code_matrix(text)
-    cell, left, top = code_cells(matrix)
+    cell, left, top = code_cells(matrix, box, x, y)
     for row, modules in enumerate(matrix):
         for column, dark in enumerate(modules):
             if dark:
@@ -218,7 +218,6 @@ def draw_post(product, summary, photo, store=None):
     code at the foot right, with the words kept CODE_GAP clear of it."""
     from io import BytesIO
 
-    from django.contrib.staticfiles import finders
     from PIL import Image, ImageDraw
 
     size, margin = POST_SIZE, POST_MARGIN
@@ -227,16 +226,7 @@ def draw_post(product, summary, photo, store=None):
     draw = ImageDraw.Draw(card)
     well = (margin, margin, size - margin, 540)
     draw.rounded_rectangle(well, radius=40, fill=SHELF)
-    if photo:
-        try:
-            with Image.open(BytesIO(photo)) as picture:
-                picture = picture.convert("RGBA")
-                picture.thumbnail((well[2] - well[0] - 80, well[3] - well[1] - 80))
-                x = (size - picture.width) // 2
-                y = well[1] + (well[3] - well[1] - picture.height) // 2
-                card.paste(picture, (x, y), picture)
-        except (OSError, ValueError):
-            pass
+    paste_photo(card, photo, well)
     name_font = post_font(52, 700, 24)
     y = 584
     for line in fit_lines(draw, product.name, name_font, size - 2 * margin):
@@ -253,34 +243,185 @@ def draw_post(product, summary, photo, store=None):
         taken = draw.textlength(price, font=price_font) + 20
         draw.text((margin + taken, y + 48), fit_lines(draw, after, small, words - taken, lines=1)[0], font=small,
                   fill=INK_MUTED)
-        shops = len({offer.retailer_id for offer in getattr(product, "offers", [])
-                     if offer.availability == Listing.Availability.IN_STOCK})
-        if best.availability == Listing.Availability.PREORDER:
-            first = copy.get("product.share.post_image_preorder", store=store)
-        elif shops > 1:
-            first = copy.get("product.share.post_image_shops", store=store, shops=shops)
-        else:
-            first = copy.get("product.share.post_image_one", store=store)
-        lines = [first, copy.get("product.share.post_checked", store=store, when=when_words(best.last_checked))]
-    else:
-        lines = [copy.get("product.share.post_image_none", store=store)]
+    lines = picture_lines(product, best, store)
     y = 856
     for line in lines:
         draw.text((margin, y), fit_lines(draw, line, small, words, lines=1)[0], font=small, fill=INK_MUTED)
         y += 42
     foot, height = 1000, 48
     x = margin
-    logo_path = finders.find(LOGO)
-    if logo_path:
-        with Image.open(logo_path) as logo:
-            logo = logo.convert("RGBA")
-            logo = logo.resize((round(logo.width * height / logo.height), height))
-            card.paste(logo, (margin, foot), logo)
-            x += logo.width + 24
+    logo = paste_logo(card, height, (margin, foot))
+    if logo:
+        x += logo + 24
     draw.text((x, foot + 8), "ripraptor.com", font=post_font(30, 600, 14), fill=INK_MUTED)
     draw_code(draw, post_url(product))
     out = BytesIO()
     card.save(out, "PNG", optimize=True)
+    return out.getvalue()
+
+
+def paste_photo(card, photo, well, inset=40):
+    """The product's photo, fitted ``inset`` inside the well and centred in it. A photo that will not open leaves the
+    well empty."""
+    picture = fitted_photo(photo, well[2] - well[0] - 2 * inset, well[3] - well[1] - 2 * inset)
+    if picture is not None:
+        paste_centred(card, picture, well)
+
+
+def fitted_photo(photo, width, height, grow=1.0):
+    """The photo as an RGBA image fitted inside ``width`` by ``height``, made up to ``grow`` times bigger when it is
+    smaller (a shop's photo is often a few hundred pixels), or None when there is none or it will not open."""
+    from io import BytesIO
+
+    from PIL import Image
+
+    if not photo:
+        return None
+    try:
+        with Image.open(BytesIO(photo)) as opened:
+            picture = opened.convert("RGBA")
+    except (OSError, ValueError, Image.DecompressionBombError):
+        return None
+    scale = min(width / picture.width, height / picture.height, grow)
+    if scale < 1 or grow > 1:
+        size = (max(1, round(picture.width * scale)), max(1, round(picture.height * scale)))
+        picture = picture.resize(size, Image.LANCZOS)
+    return picture
+
+
+def paste_centred(card, picture, box):
+    x = box[0] + (box[2] - box[0] - picture.width) // 2
+    y = box[1] + (box[3] - box[1] - picture.height) // 2
+    card.paste(picture, (x, y), picture)
+
+
+def paste_logo(card, height, at, centred=False):
+    """The logo, ``height`` tall, at ``at`` (across the middle of the card at ``at``'s height when ``centred``): its
+    width, or 0 without the file."""
+    from django.contrib.staticfiles import finders
+    from PIL import Image
+
+    logo_path = finders.find(LOGO)
+    if not logo_path:
+        return 0
+    with Image.open(logo_path) as logo:
+        logo = logo.convert("RGBA")
+        logo = logo.resize((round(logo.width * height / logo.height), height))
+        if centred:
+            at = ((card.width - logo.width) // 2, at[1])
+        card.paste(logo, at, logo)
+        return logo.width
+
+
+def picture_lines(product, best, store=None):
+    """The short lines under the price on a post's or a story's picture: how many UK shops have it (or that it is on
+    pre-order) and when it was checked, or that no shop has it."""
+    if best is None:
+        return [copy.get("product.share.post_image_none", store=store)]
+    shops = len({offer.retailer_id for offer in getattr(product, "offers", [])
+                 if offer.availability == Listing.Availability.IN_STOCK})
+    if best.availability == Listing.Availability.PREORDER:
+        first = copy.get("product.share.post_image_preorder", store=store)
+    elif shops > 1:
+        first = copy.get("product.share.post_image_shops", store=store, shops=shops)
+    else:
+        first = copy.get("product.share.post_image_one", store=store)
+    return [first, copy.get("product.share.post_checked", store=store, when=when_words(best.last_checked))]
+
+
+# Share to story ------------------------------------------------------------------------------------------------------
+# A tall picture (9:16) of the product and its price for an Instagram story. A web page cannot open Instagram's story
+# editor itself: that takes an app registered with Meta. So the phone's share sheet takes the picture, where Instagram
+# offers Stories, and the product's link goes on the clipboard for the story's link sticker (share.js). The owner, 18
+# Nov 2026: "someones website had a insta stories share button one Tap created the insta story in its drafting
+# state". Everything sits between STORY_TOP and STORY_FOOT: Instagram lays its name and progress bar over the top of
+# a story and its reply box over the foot. The product is a white card on the site's soft orange, as on its pages.
+
+STORY_WIDTH, STORY_HEIGHT = 1080, 1920
+STORY_TOP, STORY_FOOT = 260, 1660
+STORY_MARGIN = 80
+STORY_LOGO = 76                    # the logo's height, centred at the top
+STORY_PAD = 48                     # inside the card
+STORY_GAP = 40                     # between the logo, the card and the code's row
+STORY_PHOTO = 440                  # the photo's height at most
+STORY_NAME_LINE, STORY_PRICE, STORY_LINE = 66, 144, 48
+STORY_TILE = 264                   # the white square the code sits on, at the foot left
+STORY_CODE = 216                   # the code in it; the tile's edge round it is the code's quiet zone
+STORY_TILE_X, STORY_TILE_Y = STORY_MARGIN, STORY_FOOT - STORY_TILE
+STORY_CODE_X = STORY_TILE_X + (STORY_TILE - STORY_CODE) // 2
+STORY_CODE_Y = STORY_TILE_Y + (STORY_TILE - STORY_CODE) // 2
+BRAND_SOFT = "#fff1ea"             # --color-brand-soft
+
+
+def story_image(product, summary, store=None):
+    """The story's picture as PNG bytes, kept POST_SECONDS for the same price, as the post's is."""
+    from django.core.cache import cache
+
+    key = post_image_key(product, summary, kind="story-image:v1")
+    found = cache.get(key)
+    if found is not None:
+        return found
+    png = draw_story(product, summary, photo_bytes(product), store)
+    cache.set(key, png, POST_SECONDS)
+    return png
+
+
+def draw_story(product, summary, photo, store=None):
+    """The picture: the logo at the top and, at the foot, the code that opens the page beside a line saying what it
+    does and the site; between them the product's card, as tall as what it holds, centred: the photo when there is one
+    (on the white card, so a shop's white background melts into it), the name (two lines at most), the price in the
+    site's green and the lines about the shops and when it was checked."""
+    from io import BytesIO
+
+    from PIL import Image, ImageDraw
+
+    width, margin = STORY_WIDTH, STORY_MARGIN
+    story = Image.new("RGB", (width, STORY_HEIGHT), BRAND_SOFT)
+    draw = ImageDraw.Draw(story)
+    paste_logo(story, STORY_LOGO, (0, STORY_TOP), centred=True)
+    inner = width - 2 * margin - 2 * STORY_PAD
+    picture = fitted_photo(photo, inner, STORY_PHOTO, grow=2)
+    name_font = post_font(54, 700, 24)
+    names = fit_lines(draw, product.name, name_font, inner)
+    best = post_lead(product, summary)
+    lines = picture_lines(product, best, store)
+    height = (STORY_PAD + (STORY_PHOTO + 36 if picture is not None else 0) + len(names) * STORY_NAME_LINE + 20
+              + (STORY_PRICE if best is not None else 0) + len(lines) * STORY_LINE + STORY_GAP)
+    space_top, space_foot = STORY_TOP + STORY_LOGO + STORY_GAP, STORY_TILE_Y - STORY_GAP
+    top = space_top + max(0, (space_foot - space_top - height) // 2)
+    draw.rounded_rectangle((margin, top, width - margin, top + height), radius=48, fill=PAPER)
+    x, y = margin + STORY_PAD, top + STORY_PAD
+    if picture is not None:
+        paste_centred(story, picture, (x, y, x + inner, y + STORY_PHOTO))
+        y += STORY_PHOTO + 36
+    for line in names:
+        draw.text((x, y), line, font=name_font, fill=INK)
+        y += STORY_NAME_LINE
+    y += 20
+    small = post_font(34, 500, 14)
+    if best is not None:
+        price_font = post_font(108, 700, 32)
+        price = f"£{best.shown_price:.2f}"
+        draw.text((x, y), price, font=price_font, fill=PRICE)
+        after = post_price(best, store).replace(price, "").strip()
+        taken = draw.textlength(price, font=price_font) + 24
+        draw.text((x + taken, y + 60), fit_lines(draw, after, small, inner - taken, lines=1)[0], font=small,
+                  fill=INK_MUTED)
+        y += STORY_PRICE
+    for line in lines:
+        draw.text((x, y), fit_lines(draw, line, small, inner, lines=1)[0], font=small, fill=INK_MUTED)
+        y += STORY_LINE
+    tile = (STORY_TILE_X, STORY_TILE_Y, STORY_TILE_X + STORY_TILE - 1, STORY_TILE_Y + STORY_TILE - 1)   # ends inclusive
+    draw.rounded_rectangle(tile, radius=32, fill=PAPER)
+    draw_code(draw, post_url(product), STORY_CODE, STORY_CODE_X, STORY_CODE_Y)
+    words_x = STORY_TILE_X + STORY_TILE + STORY_GAP
+    words = width - margin - words_x
+    scan = post_font(44, 700, 24)
+    draw.text((words_x, STORY_TILE_Y + 72), fit_lines(draw, copy.get("product.share.story_scan", store=store), scan,
+                                                     words, lines=1)[0], font=scan, fill=INK)
+    draw.text((words_x, STORY_TILE_Y + 140), "ripraptor.com", font=post_font(36, 600, 14), fill=INK_MUTED)
+    out = BytesIO()
+    story.save(out, "PNG", optimize=True)
     return out.getvalue()
 
 

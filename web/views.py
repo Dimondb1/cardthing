@@ -3329,6 +3329,17 @@ def product_post_image(request, slug):
     return response
 
 
+@require_GET
+def product_story_image(request, slug):
+    """Share to story: the tall picture, PNG (web/share.py). The Story button is a link to it that saves it, so it
+    works without script; share.js hands it to the phone's share sheet instead."""
+    product, summary = post_product(slug)
+    response = HttpResponse(share.story_image(product, summary, copy.for_request(request)), content_type="image/png")
+    response["X-Robots-Tag"] = "noindex"
+    response["Cache-Control"] = f"private, max-age={share.POST_SECONDS}"
+    return response
+
+
 def share_links(request, product, page_url, cheapest=None):
     """The product page's Share panel. Each network's link names where it was shared (utm_source), so analytics
     shows which one sends visitors; the link to copy by hand is the plain address. Reddit takes a link, a title
@@ -3347,6 +3358,10 @@ def share_links(request, product, page_url, cheapest=None):
         "tiktok": tagged("tiktok"),
         "copy": tagged("copy_link"),
         "native": tagged("share_sheet"),
+        # Share to story: the picture to save or share, and the link copied for the story's link sticker.
+        "story": tagged("instagram_story"),
+        "story_image": reverse("web:product_story_image", args=[product.slug]),
+        "story_file": f"{product.slug}-story.png",
     }
 
 

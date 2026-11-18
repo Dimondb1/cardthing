@@ -1,0 +1,1 @@
+<svg class="{{ class|default:"share-box__mark share-box__mark--line" }}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9" stroke-dasharray="3.4 2.25"/><path d="M12 8.5v7M8.5 12h7"/></svg>

@@ -70,6 +70,8 @@ urlpatterns = [
     # Share as post: the caption and the picture's address, and the picture itself (web/share.py).
     path("products/<slug:slug>/post/", views.product_post, name="product_post"),
     path("products/<slug:slug>/post.png", views.product_post_image, name="product_post_image"),
+    # Share to story: the tall picture (web/share.py).
+    path("products/<slug:slug>/story.png", views.product_story_image, name="product_story_image"),
     # Rip's answer as a card to share (web/share.py), while the answer is kept.
     path("products/<slug:slug>/rip.png", views.ask_rip_card, name="ask_rip_card"),
     path("go/<int:listing_id>/", views.go, name="go"),

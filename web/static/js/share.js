@@ -1,9 +1,20 @@
 // Share: the round logos in a product page's Share panel, and on pages of product cards, where one dialog serves
-// every card. Post makes an Instagram post's picture and caption (below). Instagram, TikTok and Copy link put the product's link, marked with where it was shared, on the
-// clipboard and say where to paste it; More opens the phone's share sheet. Without a clipboard the address
+// every card. Post makes an Instagram post's picture and caption, and Story an Instagram story's picture (below).
+// Instagram, TikTok and Copy link put the product's link, marked with where it was shared, on the clipboard and say
+// where to paste it; More opens the phone's share sheet. Without a clipboard the address
 // stays in its box to copy by hand. Without this file a card's share icon is a link to its product page's
 // Share panel, which works without script.
 (() => {
+  // A picture saved where the browser keeps downloads: the way out when it cannot be shared.
+  const saveFile = (file) => {
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(file);
+    link.download = file.name;
+    document.body.append(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(link.href), 60000);
+  };
   const tagged = (page, source) => {
     const url = new URL(page);
     url.hash = "";
@@ -58,18 +69,50 @@
             await navigator.share({ files: [file], title: name, text: caption });
             status.textContent = post.dataset.shareShared;
           } else {
-            const link = document.createElement("a");
-            link.href = URL.createObjectURL(file);
-            link.download = file.name;
-            document.body.append(link);
-            link.click();
-            link.remove();
-            setTimeout(() => URL.revokeObjectURL(link.href), 60000);
+            saveFile(file);
             status.textContent = post.dataset.shareSaved;
           }
         } catch (error) {
           if (error && error.name === "AbortError") { status.textContent = ""; return; }   // the sheet was closed
           status.textContent = post.dataset.shareFailed;
+        }
+      });
+    }
+    // Share to story: a tall picture of the product and its price (web/share.py). Instagram takes no story from a
+    // web page, so the product's link goes on the clipboard for a link sticker, and the picture to the phone's share
+    // sheet, where Instagram offers Stories. The button is a link that saves the picture: without script, or on a
+    // browser that cannot share pictures (a computer), it does just that, with the link copied too.
+    const story = box.querySelector("[data-share-story]");
+    if (story) {
+      const link = story.querySelector("a");
+      link.addEventListener("click", async (event) => {
+        const copied = navigator.clipboard && window.isSecureContext && link.dataset.shareStoryLink
+          ? navigator.clipboard.writeText(link.dataset.shareStoryLink).then(() => true, () => false)
+          : Promise.resolve(false);
+        const probe = new File([""], "story.png", { type: "image/png" });
+        if (!("fetch" in window) || !navigator.canShare || !navigator.canShare({ files: [probe] })) {
+          status.textContent = "";
+          copied.then((done) => { if (done) status.textContent = story.dataset.shareSaved; });
+          return;   // the link saves the picture
+        }
+        event.preventDefault();
+        status.textContent = story.dataset.shareMaking;
+        let file = null;
+        try {
+          const picture = await fetch(link.href, { credentials: "same-origin" });
+          if (!picture.ok) throw new Error(String(picture.status));
+          file = new File([await picture.blob()], link.getAttribute("download") || "story.png", { type: "image/png" });
+          status.textContent = (await copied) ? story.dataset.shareShared : "";
+          await navigator.share({ files: [file] });
+        } catch (error) {
+          if (error && error.name === "AbortError") { status.textContent = ""; return; }   // the sheet was closed
+          // The tap was too long ago by the time the picture came (a browser allows a sheet only just after one).
+          if (file && error && error.name === "NotAllowedError") {
+            saveFile(file);
+            status.textContent = (await copied) ? story.dataset.shareSaved : "";
+            return;
+          }
+          status.textContent = story.dataset.shareFailed;
         }
       });
     }
@@ -97,6 +140,14 @@
     const native = box.querySelector("[data-share-native]");
     if (native) native.dataset.shareUrl = tagged(page, "share_sheet");
     box.dataset.sharePost = page.pathname.replace(/\/?$/, "/") + "post/";
+    const story = box.querySelector("[data-share-story]");
+    if (story) {
+      const link = story.querySelector("a");
+      link.href = page.pathname.replace(/\/?$/, "/") + "story.png";
+      link.setAttribute("download", `${page.pathname.split("/").filter(Boolean).pop()}-story.png`);
+      link.dataset.shareStoryLink = tagged(page, "instagram_story");
+      story.hidden = false;
+    }
     box.querySelector("[data-share-link]").value = page.href;
     box.querySelector("[data-share-status]").textContent = "";
     dialog.showModal();

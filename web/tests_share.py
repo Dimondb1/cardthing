@@ -308,3 +308,139 @@ class PostTests(TestCase):
         with CaptureQueriesContext(connection) as queries:
             self.client.get(self.url)
         self.assertLessEqual(len(queries), 8)
+
+
+class StoryTests(TestCase):
+    """Share to story (web/share.py): a tall picture of the product and its price for an Instagram story, handed to
+    the phone's share sheet with the product's link copied for a link sticker. The owner, 18 Nov 2026: "someones
+    website had a insta stories share button one Tap created the insta story in its drafting state"."""
+
+    setUp = PostTests.setUp
+
+    def story(self, photo=None):
+        """The picture as served, with the shop's photo coming (a red block) or not."""
+        from io import BytesIO
+        from unittest import mock
+
+        from django.core.cache import cache
+        from PIL import Image
+
+        cache.clear()
+        self.addCleanup(cache.clear)
+        found = {"return_value": photo} if photo else {"side_effect": OSError("down")}
+        with mock.patch("catalogue.importers.fetch", **found):
+            response = self.client.get(f"/products/{self.product.slug}/story.png")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "image/png")
+        self.assertEqual(response["X-Robots-Tag"], "noindex")
+        picture = Image.open(BytesIO(response.content))
+        picture.load()
+        return picture.convert("RGB")
+
+    def red_block(self):
+        from io import BytesIO
+
+        from PIL import Image
+
+        photo = BytesIO()
+        Image.new("RGB", (300, 300), "#ff0000").save(photo, "PNG")
+        return photo.getvalue()
+
+    def card_rows(self, picture):
+        """How many rows of the card are white down its left edge, between the logo and the code's row."""
+        from web import share
+
+        return sum(picture.getpixel((share.STORY_MARGIN + 10, y)) == (255, 255, 255)
+                   for y in range(share.STORY_TOP + share.STORY_LOGO, share.STORY_TILE_Y))
+
+    def test_the_picture_is_a_tall_png_with_the_photo_made_bigger_on_the_white_card(self):
+        from unittest import mock
+
+        from web import share
+
+        picture = self.story(self.red_block())
+        self.assertEqual(picture.size, (1080, 1920))
+        self.assertEqual(picture.getpixel((5, 5)), (255, 241, 234))   # the site's soft orange
+        red = [y for y in range(picture.height) if picture.getpixel((540, y)) == (255, 0, 0)]
+        self.assertEqual(len(red), 440)   # a 300 pixel photo made up to the photo's full height, not its own
+        self.assertIn((16, 122, 50), {colour for _n, colour in picture.getcolors(1080 * 1920)})   # the price's green
+        # Kept for the next tap at the same price: the shop's photo is not fetched again.
+        with mock.patch("catalogue.importers.fetch") as fetched:
+            self.client.get(f"/products/{self.product.slug}/story.png")
+        fetched.assert_not_called()
+        self.assertTrue(share.STORY_FOOT <= 1920 - 250 and share.STORY_TOP >= 250)
+
+    def test_without_a_photo_the_card_closes_up_rather_than_show_an_empty_box(self):
+        with_photo, without = self.story(self.red_block()), self.story()
+        self.assertNotIn((255, 0, 0), {colour for _n, colour in without.getcolors(1080 * 1920)})
+        self.assertNotIn((246, 246, 248), {colour for _n, colour in without.getcolors(1080 * 1920)})   # no grey well
+        self.assertGreater(self.card_rows(with_photo) - self.card_rows(without), 400)
+
+    def test_nothing_is_drawn_where_instagram_lays_its_own_bars(self):
+        from web import share
+
+        picture = self.story(self.red_block())
+        for box in ((0, 0, 1080, share.STORY_TOP), (0, share.STORY_FOOT, 1080, 1920)):
+            self.assertEqual(picture.crop(box).getcolors(), [(1080 * (box[3] - box[1]), (255, 241, 234))], box)
+
+    def test_the_code_opens_the_product_page_as_a_visit_from_instagram(self):
+        from web import share
+
+        picture = self.story()
+        matrix = share.code_matrix(share.post_url(self.product))
+        cell, left, top = share.code_cells(matrix, share.STORY_CODE, share.STORY_CODE_X, share.STORY_CODE_Y)
+        self.assertGreaterEqual(cell, 5)
+        ink = (0x1f, 0x24, 0x30)
+        for row, modules in enumerate(matrix):
+            for column, dark in enumerate(modules):
+                pixel = picture.getpixel((left + column * cell + cell // 2, top + row * cell + cell // 2))
+                self.assertEqual(pixel == ink, dark, (row, column))
+        # Its quiet zone, white on every side, at least four modules wide.
+        quiet, span = 4 * cell, cell * len(matrix)
+        for x, y in ((left - quiet, top + 50), (left + 50, top - quiet), (left + span + quiet - 1, top + 50),
+                     (left + 50, top + span + quiet - 1)):
+            self.assertEqual(picture.getpixel((x, y)), (255, 255, 255), (x, y))
+
+    def test_it_says_when_the_price_was_checked(self):
+        from web import share, views
+
+        product, summary = views.post_product(self.product.slug)
+        lines = share.picture_lines(product, share.post_lead(product, summary))
+        self.assertEqual(lines, ["Cheapest of 2 UK shops compared", f"Checked {when_words(self.listing.last_checked)}."])
+
+    def test_the_share_panel_offers_story_which_saves_the_picture_without_script(self):
+        html = self.client.get(self.product.get_absolute_url()).content.decode()
+        link = escape(f"http://testserver/products/{self.product.slug}/?utm_source=instagram_story&utm_medium=social"
+                      "&utm_campaign=product_share")
+        self.assertIn(
+            '<li data-share-story data-share-making="Making the picture." data-share-shared="Link copied. Choose Instagram '
+            'Stories, then paste the link into a link sticker." data-share-saved="Picture saved and link copied. Add the '
+            'picture to a story, then paste the link into a link sticker." data-share-failed="The picture could not be '
+            f'made. Try again in a moment."><a class="share-box__item" href="/products/{self.product.slug}/story.png" '
+            f'download="{self.product.slug}-story.png" data-share-story-link="{link}" aria-label="Share to story">', html)
+        self.assertIn('<span class="share-box__name" aria-hidden="true">Story</span>', html)
+        # The cards' sheet has it hidden until share.js fills it for the card tapped.
+        sheet = self.client.get(self.game.get_absolute_url()).content.decode()
+        self.assertIn('<li hidden data-share-story', sheet)
+        self.assertIn('"story.png"', open("web/static/js/share.js", encoding="utf-8").read())
+
+    def test_a_product_nobody_can_see_has_no_story(self):
+        from catalogue.models import Product
+
+        Product.objects.filter(pk=self.product.pk).update(is_active=False)
+        self.assertEqual(self.client.get(f"/products/{self.product.slug}/story.png").status_code, 404)
+
+    def test_the_picture_costs_a_few_queries(self):
+        from unittest import mock
+
+        from django.core.cache import cache
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        cache.clear()
+        self.addCleanup(cache.clear)
+        make_listing(self.product, make_retailer("Moor Toys"), price="99.00", delivery="0.00")
+        with mock.patch("catalogue.importers.fetch", side_effect=OSError("down")), \
+                CaptureQueriesContext(connection) as queries:
+            self.client.get(f"/products/{self.product.slug}/story.png")
+        self.assertLessEqual(len(queries), 8)

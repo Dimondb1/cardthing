@@ -7328,6 +7328,26 @@ saves the picture instead. The picture is kept an hour for the same price.
 `/products/<slug>/post/` gives the caption and the picture's address,
 `/products/<slug>/post.png` the picture; both are noindex.
 
+**Share to story** (`web/share.py` `draw_story`, `share.js`; the owner, 18
+Nov 2026: a site's "insta stories share button"): the Story icon beside Post
+makes an Instagram story. A web page cannot open Instagram's story editor
+itself (that takes an app registered with Meta), so the server draws a tall
+picture (1080 by 1920) and the phone's share sheet takes it, where Instagram
+offers Stories and opens the editor with it as a draft. The product's link,
+tagged `utm_source=instagram_story`, goes on the clipboard for a link
+sticker, since a story takes no link from a web page. The picture is the
+logo at the top, the product as a white card on the site's soft orange (the
+shop's photo made up to twice its size when small, with no grey well behind
+it so a white background melts into the card; without a photo the card
+closes up), its name, the delivered price in green, the shops and when it
+was checked, and at the foot the same QR code as the post's beside "Scan
+for today's price". Everything sits between 260 and 1660 pixels down,
+clear of Instagram's name bar and reply box. The icon is a link to
+`/products/<slug>/story.png` that saves the picture, so it works without
+script and on a computer (where the link is copied too); a browser that
+loses the tap while the picture comes saves it instead. The picture is kept
+an hour for the same price, noindex.
+
 **Download a report** (`/dashboard/report.txt`, `web/report.py`; linked at
 the top of the dashboard and on the admin home): the dashboard's figures,
 built fresh, and the Insights page's for the last 28 days, as one plain

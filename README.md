@@ -5773,6 +5773,48 @@ events are counted with no record of who, through `/api/note/`: shown,
 added, dismissed, and opened from the icon (once per browser per day).
 Insights shows them under "Home screen".
 
+## Admin home
+
+The admin home (`web/templates/admin/ripraptor_index.html`; the owner, 18 Nov
+2026: "The admin area has grown legs and requires tidying and
+categorisation") is laid out in three parts:
+
+- **Needs you** lists only what is waiting, in bold: the background reader
+  stopped, new messages, shops asking to be listed, shops to follow up,
+  guides due for review, keyrings to post and referrals for review. With
+  nothing waiting it says so. It always ends with All messages and Things to
+  check.
+- **Six groups**, a card each, every page once with a quiet line saying what
+  it is for. **Numbers**: Dashboard, Shop clicks timeline, Insights, Who is
+  online, Shop performance, What Rip couldn't find, Search visibility,
+  Download a report. **Catalogue**: Things to check, Catalogue quality,
+  Merge two products, Products, Sets, Your data in Excel (owner only).
+  **Shops**: Crawl health, Shops, Add shops, Shop delivery, Shops asking to
+  be listed, Shop outreach, eBay health, Amazon. **Site**: Site look, Drop
+  spotlight, Partners, Seasonal themes, Site text, Refer a friend (while it
+  runs). **Settings**: Claude, Email sending, Sending shop emails, Visitor
+  check. **Guides**: Guides, Fair Price Checker. One column on a phone, two
+  on a tablet, three on a computer.
+- **Every table**: Django's own list of every table, folded away and opened
+  with a tap. Django's Recent actions column is left out, so the groups have
+  the page's full width.
+
+A guide editor sees only the Guides group and the Admin app box.
+
+**Shop clicks timeline** (`/admin/clicks/`, `web/click_timeline.py`; the
+owner, 18 Nov 2026: "see the click throughs to shops in a visual that
+illustrates the shop the product and the time on a timeline"). It covers
+Today (from midnight UK time), 7 days or 28 days, and real people's clicks
+only (`OutboundClick.objects.people()`, as the dashboard counts them). At the
+top is one lane a shop, busiest first, with a dot for each click placed along
+the time axis, ringed when Rip had helped that visitor. Each dot links to its
+click in the list below, so a tap shows the product with no script. A shop's
+name shows only its clicks (`?shop=`). Under the lanes is every click, newest
+first and grouped by day: the time, the product's picture and name (linked),
+the shop, the game, the page or button it came from, and "after Rip helped".
+It draws the newest 5,000 clicks and lists the newest 300, from one query.
+Staff only, never for guide editors, never cached or indexed.
+
 ## Admin app
 
 The admin is a home screen app of its own, separate from the public one.

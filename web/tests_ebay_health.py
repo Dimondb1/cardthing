@@ -392,6 +392,6 @@ class EbayHealthTests(TestCase):
         with CaptureQueriesContext(connection) as queries:
             self.page()
         self.assertLess(len(queries), 25)
-        self.assertContains(self.client.get(reverse("admin:index")), f'<a href="{self.url}">')
+        self.assertContains(self.client.get(reverse("admin:index")), f'<a href="{self.url}" class="section">eBay health</a>')
         self.client.logout()
         self.assertEqual(self.client.get(self.url).status_code, 302)

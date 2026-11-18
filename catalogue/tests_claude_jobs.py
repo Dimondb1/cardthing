@@ -119,7 +119,7 @@ class PageTests(Base):
 
     def test_the_page_is_for_staff_and_linked_from_admin_home_and_the_claude_box(self):
         self.assertEqual(reverse("claude"), URL)
-        self.assertContains(self.client.get(reverse("admin:index")), f'href="{URL}">Claude:')
+        self.assertContains(self.client.get(reverse("admin:index")), f'href="{URL}" class="section">Claude</a>')
         judge.write_key(KEY)
         self.assertContains(self.client.get(reverse("checks")), f'<a href="{URL}">Jobs and spending</a>')
         self.client.logout()

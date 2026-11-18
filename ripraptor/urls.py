@@ -6,6 +6,7 @@ from twostep.forms import LoginForm
 from web import add_shops as web_add_shops
 from web import amazon_admin as web_amazon
 from web import botcheck as web_botcheck
+from web import click_timeline as web_click_timeline
 from web import delivery as web_delivery
 from web import ebay_health as web_ebay_health
 from web import quality as web_quality
@@ -32,6 +33,7 @@ urlpatterns = [
     path("admin/claude/", web_views.claude_page, name="claude"),
     path("admin/crawl/", web_views.crawl_page, name="crawl"),
     path("admin/online/", web_online.online_page, name="online"),
+    path("admin/clicks/", web_click_timeline.click_timeline_page, name="click_timeline"),
     path("admin/rip-wants/", web_rip_wants.rip_wants_page, name="rip_wants"),
     path("admin/ebay/", web_ebay_health.ebay_health_page, name="ebay_health"),
     path("admin/merge/", web_merge_box.merge_page, name="merge_products"),

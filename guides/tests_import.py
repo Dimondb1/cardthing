@@ -259,7 +259,7 @@ class AdminImportTests(ImportCase):
         for words in ("Dashboard", "Things to check", "Crawl health", "Insights", "new message"):
             with self.subTest(words):
                 self.assertNotIn(words, home)
-        self.assertIn("Guides: advice pages with live prices", home)
+        self.assertIn('<span class="rr-note">Advice pages with live prices', home)
 
     def test_the_owner_still_opens_them(self):
         owner = get_user_model().objects.create_superuser("owner", "owner@example.com", "pw")

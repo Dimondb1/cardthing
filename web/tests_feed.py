@@ -935,8 +935,8 @@ class AdminTests(TestCase):
 
     def test_admins_home_page_leads_to_the_switch(self):
         html = self.client.get(reverse("admin:index")).content.decode()
-        self.assertIn(f'<a href="{reverse("admin:catalogue_sitelook_changelist")}">Site look: switch the new home '
-                      'page on, or back off</a>', html)
+        self.assertIn(f'<a href="{reverse("admin:catalogue_sitelook_changelist")}" class="section">Site look</a>'
+                      '<span class="rr-note">Switch the new home page on, or back off</span>', html)
 
     def test_the_one_row_has_the_switch_and_a_way_to_see_each_look(self):
         response = self.client.get(reverse("admin:catalogue_sitelook_changelist"))

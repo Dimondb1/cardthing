@@ -114,6 +114,7 @@ class RipWantsTests(TestCase):
         self.assertLess(len(queries), 20)
 
     def test_staff_only_and_on_the_admin_home(self):
-        self.assertContains(self.client.get(reverse("admin:index")), f'<a href="{self.url}">')
+        self.assertContains(self.client.get(reverse("admin:index")),
+                            f'<a href="{self.url}" class="section">What Rip couldn\'t find</a>')
         self.client.logout()
         self.assertEqual(self.client.get(self.url).status_code, 302)

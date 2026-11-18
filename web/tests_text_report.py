@@ -31,7 +31,7 @@ class AccessTests(ReportCase):
     def test_the_address_and_the_links_to_it(self):
         self.assertEqual(reverse("web:dashboard_report"), URL)
         self.assertContains(self.client.get("/dashboard/"), f'href="{URL}">Download a report</a>')
-        self.assertContains(self.client.get(reverse("admin:index")), f'href="{URL}">Download a report')
+        self.assertContains(self.client.get(reverse("admin:index")), f'href="{URL}" class="section">Download a report')
 
     def test_anonymous_visitors_go_to_the_admin_sign_in(self):
         self.client.logout()

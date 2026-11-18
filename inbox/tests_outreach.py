@@ -361,7 +361,8 @@ class AdminTests(OutreachTestCase):
 
     def test_the_admin_home_says_who_to_follow_up(self):
         home = reverse("admin:index")
-        self.assertContains(self.client.get(home), "Shop outreach: write to shops with their own figures")
+        self.assertContains(self.client.get(home), 'class="section">Shop outreach</a><span class="rr-note">Write to shops '
+                                                   'with their own figures')
         outreach.ensure_contacts()
         ShopContact.objects.filter(retailer=self.shop).update(status=ShopContact.Status.EMAILED,
                                                               follow_up_on=timezone.localdate())

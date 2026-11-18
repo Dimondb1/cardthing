@@ -1,0 +1,79 @@
+{% extends "admin/base_site.html" %}
+{% block title %}Shop clicks timeline | {{ site_title }}{% endblock %}
+{% block extrahead %}{{ block.super }}<meta name="robots" content="noindex, nofollow">{% endblock %}
+{% block extrastyle %}{{ block.super }}<style>
+  .clicks { display: grid; gap: 20px; max-width: 72rem; }
+  .clicks p { margin: 0; }
+  .clicks .muted { color: var(--body-quiet-color); }
+  .clicks .periods { display: flex; gap: 14px; flex-wrap: wrap; }
+  .clicks .periods strong { font-weight: 600; }
+  .clicks .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  /* The lanes: a shop's name, then its track with a dot a click, placed along it by the time. */
+  .lanes { display: grid; gap: 2px; }
+  .lane { display: grid; grid-template-columns: minmax(6rem, 9rem) 1fr; align-items: center; gap: 10px; min-height: 30px; }
+  .lane__name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.9em; }
+  .lane__name .muted { font-variant-numeric: tabular-nums; }
+  .lane__track { position: relative; height: 26px; margin: 0 8px; border-bottom: 1px solid var(--hairline-color); }
+  .lane--axis .lane__track { border-bottom: 0; height: 18px; }
+  .tick { position: absolute; top: 0; transform: translateX(-50%); font-size: 0.75em; color: var(--body-quiet-color); white-space: nowrap; }
+  .tick--end { left: 100%; transform: translateX(-100%); }
+  .dot { position: absolute; top: 50%; width: 12px; height: 12px; margin: -6px 0 0 -6px; border-radius: 50%;
+         background: var(--link-fg); opacity: 0.7; }
+  .dot--rip { background: var(--message-success-bg, #dfd); box-shadow: inset 0 0 0 3px var(--link-fg); opacity: 1; }
+  .dot:hover, .dot:focus-visible { opacity: 1; transform: scale(1.4); }
+  .lanes-key { display: flex; gap: 16px; flex-wrap: wrap; font-size: 0.85em; color: var(--body-quiet-color); }
+  .lanes-key .dot { position: static; display: inline-block; margin: 0 6px -1px 0; transform: none; }
+  /* The list: a click a row, time, picture, product, then the shop and where it came from. */
+  .days h2 { margin: 16px 0 6px; font-size: 1em; }
+  .days ol { list-style: none; margin: 0; padding: 0; }
+  .click { display: grid; grid-template-columns: 3.2rem 48px 1fr; gap: 10px; align-items: center; padding: 8px 6px;
+           border-bottom: 1px solid var(--hairline-color); scroll-margin-top: 80px; }
+  .click:target { background: var(--selected-row, #ffc); }
+  .click time { font-variant-numeric: tabular-nums; font-weight: 600; }
+  .click img, .click .no-picture { width: 48px; height: 48px; object-fit: contain; border-radius: 6px; background: var(--darkened-bg); }
+  .click .product { display: block; font-weight: 600; overflow-wrap: anywhere; }
+  .click .to { display: block; }
+</style>{% endblock %}
+{% block breadcrumbs %}<div class="breadcrumbs"><a href="{% url 'admin:index' %}">Home</a> &rsaquo; Shop clicks timeline</div>{% endblock %}
+{% block content %}
+<div class="clicks">
+  <p class="periods">{% for key, label, days in periods %}{% if key == period %}<strong>{{ label }}</strong>{% else %}<a href="?period={{ key }}{% if shop %}&amp;shop={{ shop }}{% endif %}">{{ label }}</a>{% endif %}{% endfor %}</p>
+  <p>{{ count }} click{{ count|pluralize }} to {{ shops }} shop{{ shops|pluralize }}, on {{ products }} product{{ products|pluralize }}{% if via_rip %}, {{ via_rip }} after Rip helped{% endif %}. Real people only: direct hits and scripts are left out, as on the dashboard.{% if capped %} The newest {{ count }} are drawn.{% endif %}</p>
+  {% if shop %}<p>Only {{ shop_name|default:"this shop" }}. <a href="?period={{ period }}">Show every shop</a></p>{% endif %}
+
+  {% if lanes %}
+  <section class="lanes" aria-label="Clicks by shop along the time">
+    <div class="lane lane--axis" aria-hidden="true"><span></span><div class="lane__track">{% for label, left in ticks %}<span class="tick" style="left: {{ left|stringformat:'.2f' }}%">{{ label }}</span>{% endfor %}<span class="tick tick--end">Now</span></div></div>
+    {% for lane in lanes %}
+    <div class="lane">
+      <a class="lane__name" href="?period={{ period }}&amp;shop={{ lane.shop.pk }}" title="Only {{ lane.shop.name }}">{{ lane.shop.name }} <span class="muted">{{ lane.count }}</span></a>
+      <div class="lane__track">{% for click, left in lane.dots %}<a class="dot{% if click.via_rip %} dot--rip{% endif %}" style="left: {{ left|stringformat:'.2f' }}%" href="#click-{{ click.pk }}" title="{{ click.created_at|date:'D j M, H:i' }}: {{ click.product.name }}"><span class="visually-hidden">{{ click.created_at|date:'D j M, H:i' }}: {{ click.product.name }} at {{ lane.shop.name }}</span></a>{% endfor %}</div>
+    </div>
+    {% endfor %}
+    <p class="lanes-key"><span><span class="dot"></span>A click to the shop: tap it for the product</span><span><span class="dot dot--rip"></span>After Rip helped</span><span>Tap a shop's name to see only its clicks</span></p>
+  </section>
+  {% else %}
+  <p>No clicks to shops {% if period == "today" %}yet today{% else %}in the last {{ period }} days{% endif %}.</p>
+  {% endif %}
+
+  {% if days %}
+  <section class="days" aria-label="Every click, newest first">
+    {% for day, rows in days %}
+    <h2>{{ day|date:"l j F" }}</h2>
+    <ol>{% for click in rows %}
+      <li class="click" id="click-{{ click.pk }}">
+        <time datetime="{{ click.created_at|date:'c' }}">{{ click.created_at|date:"H:i" }}</time>
+        {% if click.product.image_src %}<img src="{{ click.product.image_src }}" alt="" loading="lazy" width="48" height="48">{% else %}<span class="no-picture"></span>{% endif %}
+        <div>
+          <a class="product" href="{{ click.product.get_absolute_url }}" target="_blank" rel="noopener">{{ click.product.name }}</a>
+          <span class="to">&rarr; <a href="?period={{ period }}&amp;shop={{ click.retailer_id }}">{{ click.retailer.name }}</a></span>
+          <span class="muted">{{ click.product.game.display_short }}{% if click.where %} &middot; {{ click.where }}{% endif %}{% if click.via_rip %} &middot; after Rip helped{% endif %}</span>
+        </div>
+      </li>{% endfor %}
+    </ol>
+    {% endfor %}
+    {% if more %}<p class="muted">And {{ more }} older click{{ more|pluralize }} in this time, drawn in the lanes above.</p>{% endif %}
+  </section>
+  {% endif %}
+</div>
+{% endblock %}

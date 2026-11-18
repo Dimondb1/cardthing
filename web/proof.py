@@ -162,6 +162,24 @@ def llms_line(text, path):
     return next((line for line in text.splitlines() if line.startswith("- [") and f"{path})" in line), "")
 
 
+COUNTS = "counts agree"
+
+
+def game_beside(fetch, path, crawler, html):
+    """game() on a game's page with llms.txt read straight after it, as the same crawler. Both counts change every
+    few minutes as shops' stock does, and the page is rebuilt every five: an llms.txt read once at the start of a run
+    and pages read a minute or two later failed on numbers that were each true when read (18 Nov 2026: 9 of 183
+    checks, llms.txt 1,907 in stock and the page 1,914). When they still differ, the page and llms.txt are read once
+    more, together: a copy rebuilt between the two reads then agrees, and only a gap still there fails."""
+    found = game(html, llms_line(fetch("/llms.txt", crawler)[1], path))
+    if all(passed for name, passed, _detail in found if name.startswith(COUNTS)):
+        return found
+    status, again = fetch(path, crawler)
+    if status != 200 or is_check_page(again):
+        return found
+    return game(again, llms_line(fetch("/llms.txt", crawler)[1], path))
+
+
 # Running them all -------------------------------------------------------------------------------------------------
 
 GAMES = ("/games/pokemon/", "/games/magic-the-gathering/")
@@ -250,7 +268,7 @@ def run(fetch, site, set_path="", known_by_address=False):
     rows += [Row("/llms.txt", "", *check) for check in llms(llms_text, site)]
     rows += [Row("/sitemap.xml", "", *check) for check in sitemap(fetch("/sitemap.xml", "ClaudeBot")[1], site)]
     pages = [("/", home)]
-    pages += [(path, lambda html, path=path: game(html, llms_line(llms_text, path))) for path in GAMES]
+    pages += [(path, game) for path in GAMES]   # read beside llms.txt (game_beside)
     if set_path:
         pages.append((set_path, product_set))
     pages += [(GUIDE, guide), ("/guides/", guides_index)]
@@ -265,7 +283,8 @@ def run(fetch, site, set_path="", known_by_address=False):
                 continue
             rows.append(Row(path, crawler, "answers 200", status == 200, f"status {status}, {len(html):,} bytes"))
             if status == 200:
-                rows += [Row(path, crawler, *found) for found in check(html)]
+                found = game_beside(fetch, path, crawler, html) if check is game else check(html)
+                rows += [Row(path, crawler, *item) for item in found]
     return rows
 
 

@@ -6359,7 +6359,10 @@ hard-coded."). In the compact layout, which is the one that is live:
 - **One count** (`views.game_stats`, `hubs.HubStats`). The game's line, its
   search engine description, its questions and its line in `llms.txt` read
   the one kept count, so they agree: products listed, products in stock,
-  the UK shops with one in stock. Before, the description counted every
+  the UK shops with one in stock. `llms.txt` takes the copy the game's own
+  page (its address with nothing after it) was built with
+  (`views.keep_counts`), so a filtered list working the figures out afresh
+  no longer moves `llms.txt` while that page still shows its earlier copy. Before, the description counted every
   product in stock, the page only those filed under a set, and `llms.txt`
   every product listed, each unlabelled. "UK shops" now leaves out eBay and
   Amazon wherever it is said, as the home page does; a
@@ -6398,6 +6401,13 @@ hard-coded."). In the compact layout, which is the one that is live:
   that only uses their name is shown the visitor check, and the report says
   so; `--inside` asks the machine's own copy with no network, which is what
   those two are served.
+
+  `llms.txt` is read again beside each game page, as the same crawler, and
+  when the counts differ both are read once more (`proof.game_beside`): a
+  count moves every few minutes as shops' stock does, and on 18 Nov 2026 an
+  `llms.txt` read once at the start failed 9 checks against pages read a
+  minute or two later (1,907 in stock against 1,914), each number true when
+  read. Only a gap still there on the second read fails.
 
       python manage.py visibility_proof            # the live site, from anywhere
 

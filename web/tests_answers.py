@@ -465,6 +465,59 @@ class ProofTests(AnswersCase):
             {"heading says what the page compares", "cheapest of each kind in stock", "5 to 7 questions on the page",
              "FAQPage matches the page word for word", "ItemList of the products named", "counts agree: description, page"})
 
+    def test_llms_txt_is_read_beside_each_game_page_not_once_at_the_start(self):
+        # 18 Nov 2026: llms.txt was read once, the game pages a minute or two later, and 9 of 183 checks failed on
+        # counts that had moved in between (llms.txt 1,907 in stock, the page 1,914).
+        from web import proof
+
+        site, inside, reads = "http://testserver", proof.inside("http://testserver"), []
+
+        def fetch(path, crawler):
+            status, body = inside(path, crawler)
+            if path == "/llms.txt" and not reads:
+                body = body.replace("5 in stock now", "4 in stock now")   # the count before stock moved
+            reads.append(path)
+            return status, body
+
+        rows = proof.run(fetch, site)
+        self.assertFalse([row for row in rows if not row.passed])
+        self.assertEqual(len([row for row in rows if row.name.startswith(proof.COUNTS)]),
+                         len(proof.GAMES) * len(proof.CRAWLERS))
+        # Once at the start for its own checks, then once beside each game page as each crawler.
+        self.assertEqual(reads.count("/llms.txt"), 1 + len(proof.GAMES) * len(proof.CRAWLERS))
+
+    def test_a_count_that_moved_between_reads_is_read_again_and_a_gap_that_stays_fails(self):
+        from web import proof
+
+        path = self.pokemon.get_absolute_url()
+        html, llms = self.page(path), self.client.get("/llms.txt").content.decode()
+        stale = llms.replace("5 in stock now", "4 in stock now")
+
+        def counts_row(found):
+            return next(item for item in found if item[0].startswith(proof.COUNTS))
+
+        def reader(llms_reads):
+            reads = []
+
+            def fetch(asked, _crawler):
+                reads.append(asked)
+                return 200, (llms_reads.pop(0) if asked == "/llms.txt" else html)
+            return fetch, reads
+
+        # Agreeing beside the page: one read of llms.txt, nothing read again.
+        fetch, reads = reader([llms])
+        self.assertTrue(counts_row(proof.game_beside(fetch, path, "ClaudeBot", html))[1])
+        self.assertEqual(reads, ["/llms.txt"])
+        # The page was rebuilt between the two reads: read together again, they agree.
+        fetch, reads = reader([stale, llms])
+        self.assertTrue(counts_row(proof.game_beside(fetch, path, "ClaudeBot", html))[1])
+        self.assertEqual(reads, ["/llms.txt", path, "/llms.txt"])
+        # A gap still there on the second read fails, with the numbers each gave.
+        fetch, reads = reader([stale, stale])
+        name, passed, detail = counts_row(proof.game_beside(fetch, path, "ClaudeBot", html))
+        self.assertFalse(passed)
+        self.assertIn("page 5 in stock at 3; llms.txt 4 in stock at 3", detail)
+
     def test_the_visitor_check_is_told_from_a_page(self):
         from web import proof
 
@@ -513,6 +566,32 @@ class KeptCountsTests(AnswersCase):
             self.assertIn("6 sealed products listed, 5 in stock now at 3 UK shops", llms)
             self.assertFalse([query for query in asked if "catalogue_listing" in query["sql"]
                               and "COUNT" in query["sql"] and "product_type" in query["sql"]])
+
+
+    def test_a_filtered_list_working_the_numbers_out_leaves_llms_txt_on_the_page_being_served(self):
+        # The game's figures are kept for five minutes and so is its page, each from when it was built. A filtered
+        # list could build the figures afresh while the game's page still served its earlier copy, and llms.txt
+        # followed the figures: it now follows the page.
+        from unittest import mock
+
+        from django.test import override_settings
+
+        from web import hubs, pagecache
+
+        with override_settings(RIPRAPTOR_PAGE_CACHE_SECONDS=300):
+            path = self.pokemon.get_absolute_url()
+            self.assertIn("5 sealed Pokémon products in stock at 3 UK shops", self.page(path))
+            cache.delete(pagecache.key_for(f"game-shared/stats/{self.pokemon.pk}"))   # the figures' five minutes end
+            moved = hubs.HubStats(products=7, in_stock=6, stock_shops=4)
+            with mock.patch("web.hubs.hub_stats", return_value=moved):
+                self.page(path, type=BOX)
+            self.assertIn("5 sealed Pokémon products in stock at 3 UK shops", self.page(path))   # the kept copy
+            self.assertIn("5 in stock now at 3 UK shops", self.client.get("/llms.txt").content.decode())
+            # Its next build shows the new figures, and llms.txt with it.
+            pagecache.forget()
+            with mock.patch("web.hubs.hub_stats", return_value=moved):
+                self.page(path)
+            self.assertIn("6 in stock now at 4 UK shops", self.client.get("/llms.txt").content.decode())
 
 
 class VisibilityPageTests(ProofTests):

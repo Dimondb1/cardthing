@@ -1408,24 +1408,28 @@ def game_stats(game):
     one count its page's line, its search engine description, its questions and llms.txt all quote, so they agree
     (the owner, 9 Nov 2026: the description said 1,901 in stock at 101 shops and the page 535 at 130). Kept with the
     game's other figures (shared_for_game)."""
-    def build():
-        stats = hubs.hub_stats(game=game)
-        # A copy of the three counts with no end date, for llms.txt (game_counts).
-        cache.set(f"{GAME_COUNTS}{game.pk}", (stats.products, stats.in_stock, stats.stock_shops), None)
-        return stats
-
-    return shared_for_game(f"stats/{game.pk}", build)
+    return shared_for_game(f"stats/{game.pk}", lambda: hubs.hub_stats(game=game))
 
 
 GAME_COUNTS = "game-counts:"
 
 
+def keep_counts(request, game, stats):
+    """Keep the counts the game's own page shows (its address with nothing after it, the copy crawlers are served)
+    for llms.txt (game_counts), as that page is built. Before, the copy was kept whenever the numbers were worked out,
+    so a filtered list could change llms.txt while the game's page went on showing its earlier copy for up to five
+    minutes (the search visibility check, 18 Nov 2026: llms.txt 1,907 in stock, the page 1,914). A tab's list
+    (?pane=) has an address with something after it, so never keeps its empty figures."""
+    if pagecache.on() and request.get_full_path() == game.get_absolute_url():
+        cache.set(f"{GAME_COUNTS}{game.pk}", (stats.products, stats.in_stock, stats.stock_shops), None)
+
+
 def game_counts(game):
-    """(products listed, products in stock, UK shops with one in stock) as the game's page last worked them out
-    (game_stats), for llms.txt: it lists every game, and working each one's numbers out afresh there took seconds a
-    game on the live site. The kept copy has no end date and is written each time a page builds the numbers, every few
-    minutes, so llms.txt says what the pages say. Worked out here only before any page has, and while pages are not
-    kept (the tests)."""
+    """(products listed, products in stock, UK shops with one in stock) as the game's own page shows them
+    (keep_counts), for llms.txt: it lists every game, and working each one's numbers out afresh there took seconds a
+    game on the live site. The kept copy has no end date and is written each time that page is built, every few
+    minutes, so llms.txt says what the page says. Worked out here only before the page has been built, and while
+    pages are not kept (the tests)."""
     found = cache.get(f"{GAME_COUNTS}{game.pk}") if pagecache.on() else None
     if found is None:
         stats = game_stats(game)
@@ -1466,6 +1470,7 @@ def game_detail(request, game_slug):
         # Its written answer and questions (web/answers.py) quote the same counts as its description: one HubStats.
         words = hubs.Words(text, request)
         stats = game_stats(game)
+        keep_counts(request, game, stats)
         facts = shared_for_game(f"answers/{game.pk}", lambda: answers.game_facts(game))
         meta_title, meta_description = hubs.game_meta(words, game, stats)
         page_url = request.build_absolute_uri(game.get_absolute_url())
@@ -1528,6 +1533,7 @@ def game_detail(request, game_slug):
         set_clear_url = set_link("")
     words = hubs.Words(text, request)
     stats = hubs.HubStats() if pane else game_stats(game)
+    keep_counts(request, game, stats)
     meta_title, meta_description = hubs.game_meta(words, game, stats)
     page_url = request.build_absolute_uri(game.get_absolute_url())
     crumbs = breadcrumbs_json(request, [(game.name, game.get_absolute_url())], page_url=page_url)

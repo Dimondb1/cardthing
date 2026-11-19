@@ -951,6 +951,28 @@ class ShareCardTests(AskRipCase):
         self.assertEqual(askrip.share.copy.get("product.ask.card_checked", when="Thu 19 Nov, 10:15"),
                          "Prices checked Thu 19 Nov, 10:15")
 
+    def test_a_long_first_sentence_steps_down_to_fit_whole(self):
+        # 19 Nov 2026: a long first sentence was cut at "£7.4..." ("It doesn't fit").
+        from PIL import Image, ImageDraw
+
+        draw = ImageDraw.Draw(Image.new("RGB", (10, 10)))
+        share = askrip.share
+        points, _font, lines = share.fit_headline(draw, "It looks good value.", 960)
+        self.assertEqual((points, lines), (56, ["It looks good value."]))
+        long = ("It looks good value: Winston's Emporium has it at £104.70 delivered, and today's cheapest offer is "
+                "£4.58 a pack, 38% under the typical £7.46 a pack.")
+        points, _font, lines = share.fit_headline(draw, long, 960)
+        self.assertLess(points, 56)
+        self.assertEqual(" ".join(lines), long)   # every word, none cut
+
+    def test_his_instructions_name_ebay_keep_amazon_out_and_never_the_sites_workings(self):
+        prompt = askrip.SYSTEM_PROMPT
+        for words in ("a first sentence of at most 10 words", 'say "eBay" by name', "never compare a price with Amazon",
+                      "Never name the facts' own labels or the site's workings, such as the quick value check"):
+            with self.subTest(words=words):
+                self.assertIn(words, prompt)
+        self.assertEqual(askrip.ANSWER_FORM, 3)   # answers kept in the older form are written afresh
+
     def test_a_long_sentence_after_the_first_is_cut_to_fit_never_over_the_code(self):
         from io import BytesIO
 

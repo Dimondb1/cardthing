@@ -672,7 +672,20 @@ def rip_url(product):
 
 
 RIP_LINE_LINES = 3      # the answer's first sentence, large, at most
+RIP_LINE_SIZES = (56, 50, 44, 40)   # it steps down to fit whole; only past the last is it cut
 RIP_MORE_FONT, RIP_MORE_LINE = 34, 46   # the sentences after it
+
+
+def fit_headline(draw, text, width):
+    """(size, font, lines) for the card's first sentence: whole, at the largest of RIP_LINE_SIZES it fits in
+    RIP_LINE_LINES (the owner, 19 Nov 2026, of one cut short at "£7.4...": "It doesn't fit"); past the smallest, one
+    line more, and only then cut."""
+    for points in RIP_LINE_SIZES:
+        font = post_font(points, 600, 28)
+        lines = fit_lines(draw, text, font, width, lines=99)
+        if len(lines) <= RIP_LINE_LINES:
+            return points, font, lines
+    return points, font, fit_lines(draw, text, font, width, lines=RIP_LINE_LINES + 1)
 
 
 def rip_card(product, kept, store=None):
@@ -716,10 +729,10 @@ def rip_card(product, kept, store=None):
         y += 130
     y = max(y, rip_bottom + 40)
     width = size - 2 * margin
-    line_font = post_font(56, 600, 28)
-    for line in fit_lines(draw, kept.get("line") or kept.get("answer", ""), line_font, width, lines=RIP_LINE_LINES):
+    points, line_font, lines = fit_headline(draw, kept.get("line") or kept.get("answer", ""), width)
+    for line in lines:
         draw.text((margin, y), line, font=line_font, fill=INK)
-        y += 72
+        y += round(points * 1.28)
     # The sentences after it, whole, while they fit above the code's row.
     from . import askrip
 

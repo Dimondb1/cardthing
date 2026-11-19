@@ -1306,7 +1306,14 @@ we need to."
   about ("£82.38 at eBay is 29% under the average of the 2 UK shops with
   it in stock, £117.34"), and an eBay seller is set against all the UK
   shops, never "the other" ones: worded without them, Rip once gave eBay's
-  29% to the cheapest UK shop, whose own price was 11% under (19 Nov 2026). The owner, 12 Nov 2026: "it needs to be able to find out
+  29% to the cheapest UK shop, whose own price was 11% under (19 Nov 2026).
+  Rip opens with a short sentence of at most 10 words saying the verdict
+  (the line shown large on a shared card), names eBay like any shop when
+  its seller has the price he means (the owner, 19 Nov 2026: "Rip should
+  talk about eBay, we just don't talk about Amazon"), never compares a
+  price with Amazon's, and never names the site's workings, such as the
+  quick value check. `ANSWER_FORM` 3 keeps answers in the older form from
+  being shown again. The owner, 12 Nov 2026: "it needs to be able to find out
   if something's good value ... This has to be a useful tool, otherwise
   we'll get rid of it".
 - With no red flags he still says something useful (`red_flag_check`):
@@ -1339,7 +1346,8 @@ we need to."
 - Share Rip's answer: a square card of Rip himself at the top right (glad
   at a good verdict, puzzled at a warning, his usual face otherwise, from
   the owner's pack rendered to `img/rip/avatars/card_*.png`), the verdict,
-  the answer's first sentence large, then as many of the sentences after
+  the answer's first sentence large (stepping down from 56 to 40 points so
+  it fits whole, `share.fit_headline`), then as many of the sentences after
   it as fit, whole and smaller, as one paragraph (`askrip.later_sentences`;
   the owner, 19 Nov 2026, of a card saying only "It looks good value." over
   empty space), the product and when its prices were checked

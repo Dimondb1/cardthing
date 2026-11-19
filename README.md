@@ -1302,7 +1302,11 @@ we need to."
   also told the page's own badges (cheaper than the next shop, Lowest in
   30 days, Best in 7 days) and why the Price check is missing (too few
   days or shops, delivery unknown). A doubtful cheapest price gets no
-  quick check. The owner, 12 Nov 2026: "it needs to be able to find out
+  quick check. Each comparison opens with the price and the seller it is
+  about ("£82.38 at eBay is 29% under the average of the 2 UK shops with
+  it in stock, £117.34"), and an eBay seller is set against all the UK
+  shops, never "the other" ones: worded without them, Rip once gave eBay's
+  29% to the cheapest UK shop, whose own price was 11% under (19 Nov 2026). The owner, 12 Nov 2026: "it needs to be able to find out
   if something's good value ... This has to be a useful tool, otherwise
   we'll get rid of it".
 - With no red flags he still says something useful (`red_flag_check`):
@@ -1335,8 +1339,11 @@ we need to."
 - Share Rip's answer: a square card of Rip himself at the top right (glad
   at a good verdict, puzzled at a warning, his usual face otherwise, from
   the owner's pack rendered to `img/rip/avatars/card_*.png`), the verdict,
-  the answer's first sentence, the product, the logo and a code to the
-  product page
+  the answer's first sentence large, then as many of the sentences after
+  it as fit, whole and smaller, as one paragraph (`askrip.later_sentences`;
+  the owner, 19 Nov 2026, of a card saying only "It looks good value." over
+  empty space), the product and when its prices were checked
+  (`product.ask.card_checked`), the logo and a code to the product page
   (`share.rip_card`, `/products/<slug>/rip.png?ask=`, noindex, while the
   answer is kept), sent with "Rip says: ..." and a link tagged
   `utm_source=rip_share` to the phone's share sheet; without one the words

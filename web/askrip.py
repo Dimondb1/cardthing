@@ -113,7 +113,7 @@ How to answer:
 - Reply in two parts. The first line is "VERDICT: " and then the verdict in at most three words. Then, on a new line, the answer in at most three short sentences and under 50 words: start with the fact that backs the verdict (the shop, the price, the count), then at most one more. Never start the answer with yes or no when the verdict says otherwise.
 - The verdict: for whether a price is good, or whether to buy now or wait, exactly the value verdict in the facts ("verdicts", "value"); for red flags or whether something is a scam, fake or a scalper's price, exactly the red flags verdict ("verdicts", "red_flags"); otherwise a short plain label from the facts, such as "36 packs" or "In stock at 3 shops", never a guess.
 - Use only the facts given. Never use what you know from elsewhere about the product, the game, the shops or prices. If the facts do not answer the question, say so plainly and say what the page does show that helps.
-- Whether a price is good: with a Price check in the facts ("price_check"), say its verdict in its own words, for example "Good price" or "Lowest yet", and back it with its numbers: today's cheapest against the average and the lowest in our record, and the RRP or Cardmarket price where the facts give them. Never contradict the Price check. Without one, answer from the quick value check ("quick_value_check"): give its lean in your first sentence, for example "It looks good value", with the comparison it rests on, then add the page's badges ("page_badges") or how it compares with the other UK shops. Say the site's Price check has no verdict yet only in passing, with its reason ("price_check_missing_because"). Never say you cannot tell whether it is good value when the facts give a quick value check or page badges; only with neither, say there is not enough to judge yet and give the prices there are.
+- Whether a price is good: with a Price check in the facts ("price_check"), say its verdict in its own words, for example "Good price" or "Lowest yet", and back it with its numbers: today's cheapest against the average and the lowest in our record, and the RRP or Cardmarket price where the facts give them. Never contradict the Price check. Without one, answer from the quick value check ("quick_value_check"): give its lean in your first sentence, for example "It looks good value", with the comparison it rests on, then add the page's badges ("page_badges") or how it compares with the other UK shops. Each of its comparisons opens with the price and the seller it is about: keep a figure with that price and seller, and never give it to another shop. Say the site's Price check has no verdict yet only in passing, with its reason ("price_check_missing_because"). Never say you cannot tell whether it is good value when the facts give a quick value check or page badges; only with neither, say there is not enough to judge yet and give the prices there are.
 - Prices are in pounds. An offer's "total" includes delivery; without a total, delivery is not known and must be checked at the shop. When you name a price, name the shop.
 - Name a price only as the facts give it, or the sum or the gap between two prices in the facts. Prices per pack are in the facts where they can be worked out.
 - Point out what saves money when the facts show it: a cheaper shop once delivery is added, a free delivery threshold, a multi-buy, a discount code with its terms (prices do not include it), or a cheaper price per pack on another product in the same set.
@@ -501,34 +501,42 @@ def typical_price_a_pack(product):
 
 
 def quick_value(product, cheapest, current, rrp, market, money):
-    """The quick value check (see GOOD_UNDER): today's cheapest delivered price against the RRP, Cardmarket, the other
-    UK shops with it in stock and the typical price a pack of the same kind, with a lean when one of the first two or
-    the typical price a pack gives one. {} without a confirmed delivered price, or when it may not be this product."""
+    """The quick value check (see GOOD_UNDER): today's cheapest delivered price against the RRP, Cardmarket, the UK
+    shops with it in stock and the typical price a pack of the same kind, with a lean when one of the first two or
+    the typical price a pack gives one. {} without a confirmed delivered price, or when it may not be this product.
+
+    Each comparison opens with the price and the seller it is about ("£82.38 at eBay is 29% under ..."). Worded
+    without them, Rip once gave eBay's 29% under the UK shops' average to the cheapest UK shop, whose own price was
+    11% under (the owner, 19 Nov 2026: "it's a bit different")."""
     if cheapest is None or not cheapest.delivery_known or cheapest.sanity == Listing.Sanity.DOUBTFUL:
         return {}
     price = cheapest.delivered_price
+    who = f"{money(price)} at {cheapest.retailer.name}"
     found, leans = {}, []
     if rrp:
-        found["against_the_rrp"] = f"{gap_words(price, rrp)} the RRP of {money(rrp)}"
+        found["against_the_rrp"] = f"{who} is {gap_words(price, rrp)} the RRP of {money(rrp)}"
         leans.append(lean_against(price, rrp))
     if market is not None:
-        found["against_cardmarket"] = f"{gap_words(price, market.gbp)} Cardmarket's price of {money(market.gbp)}"
+        found["against_cardmarket"] = f"{who} is {gap_words(price, market.gbp)} Cardmarket's price of {money(market.gbp)}"
         leans.append(lean_against(price, market.gbp))
     others = [listing.delivered_price for listing in current if listing.pk != cheapest.pk and listing.delivery_known
               and listing.availability == Listing.Availability.IN_STOCK
               and listing.retailer.source_type not in pricing.MARKETPLACES]
     if others:
         average = (sum(others) / len(others)).quantize(Decimal("0.01"))
-        found["against_other_uk_shops"] = (f"{gap_words(price, average)} the average of the other {len(others)} UK "
-                                           f"shops with it in stock, {money(average)}")
+        # "The other" UK shops only when the cheapest is one of them: an eBay seller's price is set against them all.
+        other = "other " if cheapest.retailer.source_type not in pricing.MARKETPLACES else ""
+        shops = "UK shop" if len(others) == 1 else f"{len(others)} UK shops"
+        found["against_other_uk_shops"] = (f"{who} is {gap_words(price, average)} the average of the {other}{shops} "
+                                           f"with it in stock, {money(average)}")
     packs = product.packs_inside
     typical = typical_price_a_pack(product) if packs and packs > 1 else None
     if typical is not None:
         a_pack = (price / packs).quantize(Decimal("0.01"))
         found["against_the_same_kind_a_pack"] = (
-            f"{money(a_pack)} a pack, {gap_words(a_pack, typical[0])} the typical {money(typical[0])} a pack across "
-            f"{typical[1]} other {product.language_name or 'English'} {product.game.name} products of the same kind "
-            f"({product.type_name.lower()}) on RipRaptor")
+            f"{money(a_pack)} a pack at {cheapest.retailer.name}, {gap_words(a_pack, typical[0])} the typical "
+            f"{money(typical[0])} a pack across {typical[1]} other {product.language_name or 'English'} "
+            f"{product.game.name} products of the same kind ({product.type_name.lower()}) on RipRaptor")
         if not leans:   # the RRP and Cardmarket say more about this product than other sets do
             leans.append(lean_against(a_pack, typical[0], TYPICAL_GOOD, TYPICAL_DEAR))
     if leans:
@@ -1078,6 +1086,13 @@ def first_sentence(text):
     """The answer's first sentence, for a shared card."""
     found = re.match(r"(.+?[.?])(?:\s|$)", text or "")
     return (found.group(1) if found else text or "").strip()
+
+
+def later_sentences(text):
+    """The answer's sentences after the first, cut as first_sentence cuts it, for the shared card's smaller lines:
+    the numbers the first sentence rests on."""
+    found = [part.strip() for part in re.findall(r".+?[.?](?=\s|$)", text or "", re.S)]
+    return [part for part in found[1:] if part]
 
 
 def box(request, product, state="", token=""):

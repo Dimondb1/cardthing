@@ -671,9 +671,16 @@ def rip_url(product):
     return f"{settings.RIPRAPTOR_SITE_URL}{product.get_absolute_url()}?utm_source={RIP_SOURCE}"
 
 
+RIP_LINE_LINES = 3      # the answer's first sentence, large, at most
+RIP_MORE_FONT, RIP_MORE_LINE = 34, 46   # the sentences after it
+
+
 def rip_card(product, kept, store=None):
-    """The card as PNG bytes: "Rip says", the verdict as a badge, the answer's first sentence large, the product's
-    name, the logo and site at the foot and the code at the foot right."""
+    """The card as PNG bytes: "Rip says", the verdict as a badge, the answer's first sentence large, then as many of
+    the sentences after it as fit, smaller, so the card carries the numbers the verdict rests on (the owner, 19 Nov
+    2026, of a card that said only "It looks good value." over empty space: "it's a bit different"). Whole
+    sentences only, the first cut short when even it does not fit. At the foot, the product's name and when its
+    prices were checked beside the code, the logo and the site."""
     from io import BytesIO
 
     from django.contrib.staticfiles import finders
@@ -708,16 +715,39 @@ def rip_card(product, kept, store=None):
         draw.text((margin + 32, y + (86 - points) // 2 - 4), verdict, font=font, fill=ink)
         y += 130
     y = max(y, rip_bottom + 40)
+    width = size - 2 * margin
     line_font = post_font(56, 600, 28)
-    for line in fit_lines(draw, kept.get("line") or kept.get("answer", ""), line_font, size - 2 * margin, lines=5):
+    for line in fit_lines(draw, kept.get("line") or kept.get("answer", ""), line_font, width, lines=RIP_LINE_LINES):
         draw.text((margin, y), line, font=line_font, fill=INK)
         y += 72
+    # The sentences after it, whole, while they fit above the code's row.
+    from . import askrip
+
+    more_font = post_font(RIP_MORE_FONT, 500, 16)
+    room = (CODE_Y - 28 - (y + 18)) // RIP_MORE_LINE
+    taken, shown = [], []
+    for sentence in askrip.later_sentences(kept.get("answer", "")):
+        lines = fit_lines(draw, " ".join(taken + [sentence]), more_font, width, lines=99)   # one paragraph
+        if len(lines) > room:
+            if not taken and room > 0:   # not even the first fits: as much of it as does, cut
+                shown = fit_lines(draw, sentence, more_font, width, lines=room)
+            break
+        taken.append(sentence)
+        shown = lines
+    y += 18
+    for line in shown:
+        draw.text((margin, y), line, font=more_font, fill=INK)
+        y += RIP_MORE_LINE
     small = post_font(32, 500, 14)
     words = CODE_X - CODE_GAP - margin
     name_y = CODE_Y - 8
     for line in fit_lines(draw, product.name, small, words, lines=2):
         draw.text((margin, name_y), line, font=small, fill=INK_MUTED)
         name_y += 42
+    if kept.get("checked"):
+        draw.text((margin, name_y + 6), copy.get("product.ask.card_checked", store=store,
+                                                 when=when_words(kept["checked"])),
+                  font=post_font(28, 500, 14), fill=INK_MUTED)
     foot, height = 1000, 48
     x = margin
     logo_path = finders.find(LOGO)

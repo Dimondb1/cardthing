@@ -671,12 +671,24 @@ class QuickValueTests(AskRipCase):
                          "we have 0 days of prices and the Price check needs 14")
         quick = found["quick_value_check"]
         self.assertEqual(quick["lean"], "looks good value")
+        # Each comparison names the price and the seller it is about.
         self.assertEqual(quick["against_the_same_kind_a_pack"],
-                         "£3.89 a pack, 22% under the typical £5.00 a pack across 5 other English Pokémon products of "
-                         "the same kind (booster box) on RipRaptor")
+                         "£3.89 a pack at Harbour Games, 22% under the typical £5.00 a pack across 5 other English "
+                         "Pokémon products of the same kind (booster box) on RipRaptor")
         self.assertEqual(quick["against_other_uk_shops"],
-                         "9% under the average of the other 1 UK shops with it in stock, £153.99")
+                         "£140.00 at Harbour Games is 9% under the average of the other UK shop with it in stock, £153.99")
         self.assertTrue({Decimal("3.89"), Decimal("5.00"), Decimal("153.99")} <= amounts)
+
+    def test_an_ebay_sellers_cheaper_price_is_named_as_theirs_against_every_uk_shop(self):
+        # 19 Nov 2026: eBay's price was 29% under the UK shops' average, and Rip gave the 29% to the cheapest UK shop,
+        # whose own price was 11% under. The comparison now says whose price it is, and an eBay seller is set against
+        # all the UK shops, not "the other" ones.
+        ebay = make_retailer("eBay", source_type=Retailer.Source.EBAY)
+        make_listing(self.box, ebay, price="110.00", delivery="0.00")
+        quick = askrip.facts(self.box)[0]["quick_value_check"]
+        self.assertEqual(quick["against_other_uk_shops"],
+                         "£110.00 at eBay is 25% under the average of the 2 UK shops with it in stock, £147.00")
+        self.assertIn("Each of its comparisons opens with the price and the seller it is about", askrip.SYSTEM_PROMPT)
 
     def test_dearer_a_pack_than_the_same_kind_leans_dear(self):
         self.same_kind(["100.00"] * 5)   # £2.78 a pack against the box's £3.89
@@ -689,7 +701,7 @@ class QuickValueTests(AskRipCase):
         self.box.save()
         found = askrip.facts(self.box)[0]
         self.assertEqual(found["price_check"]["verdict"], "Above average")
-        self.assertEqual(found["quick_value_check"]["against_the_rrp"], "27% over the RRP of £110.00")
+        self.assertEqual(found["quick_value_check"]["against_the_rrp"], "£140.00 at Harbour Games is 27% over the RRP of £110.00")
         self.assertNotIn("lean", found["quick_value_check"])
 
     def test_a_doubtful_cheapest_price_gets_no_quick_check(self):
@@ -911,6 +923,45 @@ class ShareCardTests(AskRipCase):
                 corner = card.convert("RGB").crop((680, 60, 1020, 320))
                 orange = sum(1 for pixel in corner.getdata() if pixel == (255, 90, 31))
                 self.assertGreater(orange / (corner.width * corner.height), 0.2)
+
+    def test_the_card_carries_the_numbers_after_the_first_sentence_and_when_they_were_checked(self):
+        # 19 Nov 2026: the card said only "It looks good value." over empty space ("it's a bit different").
+        from datetime import datetime
+        from io import BytesIO
+
+        from django.utils import timezone
+        from PIL import Image
+
+        answer = ("It looks good value. eBay has it at £82.38 delivered, 29% under the £117.34 average of the 2 UK "
+                  "shops with it in stock. Per pack it works out at £4.58 at eBay. The Price check has no verdict yet.")
+        self.assertEqual(askrip.later_sentences(answer), [
+            "eBay has it at £82.38 delivered, 29% under the £117.34 average of the 2 UK shops with it in stock.",
+            "Per pack it works out at £4.58 at eBay.", "The Price check has no verdict yet."])
+        self.assertEqual(askrip.later_sentences("It looks good value."), [])
+
+        def ink_under_the_line(text):
+            kept = {"verdict": "Looks good value", "tone": "good", "answer": text, "line": askrip.first_sentence(text),
+                    "checked": timezone.make_aware(datetime(2026, 11, 19, 10, 15))}
+            with Image.open(BytesIO(askrip.share.rip_card(self.box, kept))) as card:
+                band = card.convert("L").crop((60, 470, 1020, 700))   # under the large first line, over the code
+                return sum(1 for value in band.getdata() if value < 128)
+
+        self.assertEqual(ink_under_the_line("It looks good value."), 0)
+        self.assertGreater(ink_under_the_line(answer), 2000)
+        self.assertEqual(askrip.share.copy.get("product.ask.card_checked", when="Thu 19 Nov, 10:15"),
+                         "Prices checked Thu 19 Nov, 10:15")
+
+    def test_a_long_sentence_after_the_first_is_cut_to_fit_never_over_the_code(self):
+        from io import BytesIO
+
+        from PIL import Image
+
+        answer = "It looks good value. " + "eBay has it at £82.38 delivered and well under the UK shops " * 20 + "."
+        kept = {"verdict": "Looks good value", "tone": "good", "answer": answer, "line": askrip.first_sentence(answer)}
+        with Image.open(BytesIO(askrip.share.rip_card(self.box, kept))) as card:
+            # The row of the code and the name stays clear of the answer's words.
+            gap = card.convert("L").crop((60, askrip.share.CODE_Y - 26, 1020, askrip.share.CODE_Y - 10))
+            self.assertEqual(min(gap.getdata()), 255)
 
     def test_no_card_once_the_answer_is_gone(self):
         url = reverse("web:ask_rip_card", args=[self.box.slug])

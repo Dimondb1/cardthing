@@ -349,7 +349,7 @@ class WorkerWarmingTests(Catalogue):
 
     def test_run_worker_turns_it_on(self):
         source = (Path(settings.BASE_DIR) / "catalogue/management/commands/run_worker.py").read_text()
-        self.assertIn("worker.Worker(threads=max_threads, warm=True)", source)
+        self.assertIn("worker.Worker(threads=max_threads, warm=True, limit=worker.memory_limit())", source)
 
 
 @override_settings(RIPRAPTOR_SERVE_STALE=True)

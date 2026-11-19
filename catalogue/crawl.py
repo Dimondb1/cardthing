@@ -239,6 +239,8 @@ def shops(now, state=_UNREAD):
 
 def worker_status(state, now):
     """What the Crawl health page and the admin home page say about the background reader."""
+    from .worker import MEMORY_SHARE   # here: the reader imports this module
+
     if state is None or state.heartbeat_at is None:
         return {"known": False, "alive": False}
     return {
@@ -251,4 +253,7 @@ def worker_status(state, now):
         "requests": state.requests_last_hour,
         "errors": state.errors_last_hour,
         "note": state.note,
+        "memory": state.memory_mb, "memory_limit": state.memory_limit_mb,
+        # Where it restarts itself to free memory (worker.MEMORY_SHARE).
+        "memory_restart": round(state.memory_limit_mb * MEMORY_SHARE) if state.memory_limit_mb else None,
     }

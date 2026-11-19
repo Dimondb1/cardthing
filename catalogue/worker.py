@@ -151,6 +151,17 @@ VISITS_EVERY = timedelta(minutes=1)
 # How often shops pasted on the Add shops page are looked for (catalogue/shop_adding.py).
 SHOPS_EVERY = timedelta(seconds=30)
 IMPORT_LOCK_HOLD_LIMIT = timedelta(minutes=20)
+# Memory. On 18 Nov 2026 the reader passed its memory limit (MemoryMax in ripraptor-worker.service) four times and was
+# killed each time, part way through its reads; the owner, 19 Nov: "look at the memory too". Each shop read builds an
+# index of every product (about 30 MB for 10,000), up to three at once in separate threads, and a threaded Python
+# process keeps much of what it frees. So after jobs it hands freed memory back (at most every FREE_EVERY), and past
+# MEMORY_SHARE of its limit it starts no new job, lets those running finish (for MEMORY_DRAIN at most) and ends
+# itself, for systemd to start a fresh one: a clean restart between reads instead of a kill in the middle of one.
+MEMORY_SHARE = 0.75
+MEMORY_ONE_READ = 0.5   # past this share of its limit, one whole-shop read at a time, so two big reads never peak together
+MEMORY_DRAIN = timedelta(minutes=15)
+MEMORY_CHECK = timedelta(seconds=30)
+FREE_EVERY = timedelta(seconds=60)
 # Reads kept waiting for the import lock this long are said in the log (worklog, the eBay health page's Log to copy),
 # then again this often. A shorter wait is the lock's ordinary turn-taking and is not worth a line.
 LOCK_WAIT_SAID_AFTER = timedelta(minutes=5)
@@ -421,9 +432,55 @@ def deadline_for(task):
     return max(limit, min(usual, LONGEST_READ_DEADLINE))
 
 
+def memory_used(statm="/proc/self/statm"):
+    """This process's resident memory in bytes, or None where the system does not say (anything but Linux)."""
+    try:
+        with open(statm) as handle:
+            return int(handle.read().split()[1]) * os.sysconf("SC_PAGE_SIZE")
+    except (OSError, ValueError, IndexError):
+        return None
+
+
+def memory_limit(cgroup="/proc/self/cgroup", root="/sys/fs/cgroup"):
+    """The memory limit systemd holds this process to (the service's MemoryMax, cgroup v2), in bytes, or None
+    without one."""
+    try:
+        with open(cgroup) as handle:
+            path = next(line.split("::", 1)[1].strip() for line in handle if line.startswith("0::"))
+        with open(os.path.join(root, path.lstrip("/"), "memory.max")) as handle:
+            value = handle.read().strip()
+    except (OSError, StopIteration, IndexError):
+        return None
+    return int(value) if value.isdigit() else None
+
+
+_LIBC = []
+
+
+def free_memory():
+    """Hand back the memory finished jobs let go of: Python's reference cycles collected, then the free space in
+    every thread's heap returned to the system (glibc's malloc_trim). Without glibc it only collects."""
+    import ctypes
+    import gc
+
+    gc.collect()
+    if not _LIBC:
+        try:
+            _LIBC.append(ctypes.CDLL("libc.so.6").malloc_trim)
+        except (OSError, AttributeError):
+            _LIBC.append(None)
+    if _LIBC[0] is not None:
+        _LIBC[0](0)
+
+
+def megabytes(size):
+    return round(size / 1048576) if size else None
+
+
 class Worker:
     def __init__(self, clock=None, fetch=None, sleep=None, threads=THREADS, executor=None, import_lock=None,
-                 page_pause=None, release_fetch=None, warm=False, ebay_request=None):
+                 page_pause=None, release_fetch=None, warm=False, ebay_request=None, memory=None, limit=None,
+                 free=None, exit=None):
         self.clock = clock or timezone.now
         self.sleep = sleep or time.sleep
         self.fetch = fetch
@@ -458,10 +515,23 @@ class Worker:
         self.shop_thread = None
         self.last_warm = None
         self.warm_forced = None
+        # Memory (MEMORY_SHARE): what this process uses and is held to (run_worker passes memory_limit(); without
+        # one it never restarts for memory), how it hands memory back and ends itself.
+        self.memory = memory or memory_used
+        self.limit = limit or None
+        self.free = free or free_memory
+        self.exit = exit or os._exit
+        self.memory_now = None
+        self.last_memory = None
+        self.last_free = None
+        self.freed_after = 0       # jobs done at the last hand back
+        self.draining_since = None  # when it stopped starting jobs to restart
 
     # Planning ---------------------------------------------------------------------------------
 
     def max_reads(self):
+        if self.limit and self.memory_now and self.memory_now > self.limit * MEMORY_ONE_READ:
+            return 1
         return max(1, min(MAX_READS, self.threads - 1))
 
     def plan(self, now):
@@ -669,7 +739,7 @@ class Worker:
 
     def dispatch(self, now):
         """Start every queued job there is room for. Returns how many started."""
-        if not self.queue:
+        if not self.queue or self.draining_since is not None:
             return 0
         if crawl.all_paused():
             self.queue = []
@@ -788,6 +858,10 @@ class Worker:
                 self.last_job = task.label[:120]
             if task.kind == SHOP_READ:
                 self.import_lock.release()
+                if self.limit:
+                    # In the reader's own log (worklog keeps lines about memory): which shops' reads are the heavy ones.
+                    logger.info("Memory after %s: %s MB of its %s MB limit", task.label,
+                                megabytes(self.memory()), megabytes(self.limit))
             if getattr(self.executor, "threaded", True):
                 # Each pool thread has its own database connection; it is closed with the job.
                 connections.close_all()
@@ -1016,6 +1090,7 @@ class Worker:
                 "heartbeat_at": now, "jobs_done": done, "last_job": last, "in_flight": reads,
                 "requests_last_hour": self.politeness.requests_last_hour(),
                 "errors_last_hour": self.errors_last_hour(now),
+                "memory_mb": megabytes(self.memory_now), "memory_limit_mb": megabytes(self.limit),
             })
         except Exception:  # noqa: BLE001 - a busy database must not stop the watchdog
             logger.exception("Could not write the heartbeat")
@@ -1099,6 +1174,7 @@ class Worker:
         if self.last_beat is None or now - self.last_beat >= BEAT_EVERY:
             self.beat(now)
         self.check_deadlines(now)
+        self.keep_memory_down(now)
         try:
             if self.last_plan is None or now - self.last_plan >= PLAN_EVERY:
                 self.last_plan = now
@@ -1116,6 +1192,47 @@ class Worker:
         self.keep_dashboard_warm(now)
         self.keep_visits_tidy(now)
         self.keep_shops_checked(now)
+
+    def keep_memory_down(self, now):
+        """After jobs, hand freed memory back (FREE_EVERY); look at what the process uses (MEMORY_CHECK); past
+        MEMORY_SHARE of its limit, start no new job and, once those running finish or MEMORY_DRAIN passes, end
+        itself for systemd to start afresh (restart_for_memory)."""
+        with self.lock:
+            done, busy = self.jobs_done, bool(self.running)
+        if done != self.freed_after and (self.last_free is None or now - self.last_free >= FREE_EVERY):
+            self.freed_after, self.last_free = done, now
+            try:
+                self.free()
+            except Exception:  # noqa: BLE001 - only a saving
+                logger.exception("Could not hand memory back")
+            self.last_memory = None   # look again now it is freed
+        if self.last_memory is None or now - self.last_memory >= MEMORY_CHECK:
+            self.last_memory = now
+            self.memory_now = self.memory()
+        if self.draining_since is None:
+            if self.limit and self.memory_now and self.memory_now > self.limit * MEMORY_SHARE:
+                self.draining_since = now
+                logger.warning("Using %s MB of its %s MB limit: no new jobs, and a restart once those running finish",
+                               megabytes(self.memory_now), megabytes(self.limit))
+            return
+        if not busy or now - self.draining_since >= MEMORY_DRAIN:
+            self.restart_for_memory(now)
+
+    def restart_for_memory(self, now):
+        """End the process for systemd to start a fresh one (Restart=always), saying why on Crawl health. Reads still
+        running after MEMORY_DRAIN are closed and read again as soon as it is back."""
+        note = (f"Restarted at {crawl.clock(now, now)} to free memory: it was using {megabytes(self.memory_now)} MB "
+                f"of its {megabytes(self.limit)} MB limit.")
+        logger.warning(note)
+        try:
+            WorkerState.objects.update_or_create(pk=1, defaults={"note": note[:300]})
+            with self.lock:
+                reads = [job for job in self.running.values() if job.task.kind == SHOP_READ]
+            self.hand_back(reads, now)
+        except Exception:  # noqa: BLE001 - the restart matters more than the bookkeeping
+            logger.exception("Could not record the restart")
+        sd_notify("STOPPING=1")
+        self.exit(0)
 
     def keep_dashboard_warm(self, now):
         """Build again the dashboard's parts over a minute old while it is in use (web.dashboard.warm), so the owner's

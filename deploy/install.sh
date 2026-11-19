@@ -119,6 +119,11 @@ ROTATE
 # address moves before the language and type steps below read it, with the background reader stopped first so
 # its old code never meets the new address (it is started again at the end). The old pages send visitors on.
 systemctl stop ripraptor-worker 2>/dev/null || true
+# Whatever ends this script from here (a step that fails, the console closed or reconnected, Ctrl+C), the reader
+# starts again on the way out: it is only started at the very end otherwise. On 18 Nov 2026 an update cut short
+# after this point left it stopped overnight, with only the hourly fallback reading the shops. On a normal finish
+# it is already running by then and this does nothing.
+trap 'systemctl start ripraptor-worker 2>/dev/null || true' EXIT
 .venv/bin/python manage.py file_sports_cards
 .venv/bin/python manage.py backfill_restocks >/dev/null
 .venv/bin/python manage.py set_languages >/dev/null

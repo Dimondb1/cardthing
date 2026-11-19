@@ -42,6 +42,7 @@
     {% if ebay_usage %}<p class="note" id="ebay-line">eBay today, as of {{ ebay_usage.asked }}: {% if ebay_usage.searches is not None %}{{ ebay_usage.searches }} searches{% else %}searches not counted{% endif %} and {% if ebay_usage.lookups is not None %}{{ ebay_usage.lookups }} item lookups{% else %}item lookups not counted{% endif %} left{% if ebay_usage.reset %}, resetting {{ ebay_usage.reset }}{% endif %}. Searches find products not yet on eBay; item lookups keep known listings fresh, twenty at a time.</p>{% endif %}
     {% if worker.known %}
     <p class="note">In the last hour: {{ worker.requests }} request{{ worker.requests|pluralize }} to shops, {{ worker.errors }} error{{ worker.errors|pluralize }}. Jobs done since {{ worker.started|default:"it started" }}: {{ worker.jobs_done }}{% if worker.last_job %}, the latest: {{ worker.last_job }}{% endif %}.</p>
+    {% if worker.memory %}<p class="note" id="worker-memory">Memory: {{ worker.memory }} MB{% if worker.memory_limit %} of its {{ worker.memory_limit }} MB limit. Past {{ worker.memory_restart }} MB it finishes its reads and restarts itself{% endif %}.</p>{% endif %}
     {% if worker.note %}<p class="note">Last restart: {{ worker.note }}</p>{% endif %}
     {% endif %}
     {% if all_paused %}

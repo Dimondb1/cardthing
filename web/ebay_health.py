@@ -276,7 +276,8 @@ def log_text(now, state, why, fresh, found, facts):
                 f"started {clock_time(worker.started_at, now)}",
                 f"pause all: {'ON' if worker.paused else 'off'}",
                 f"jobs done since it started: {worker.jobs_done}, last job: {worker.last_job or 'none'}",
-                f"requests in the last hour: {worker.requests_last_hour}, errors: {worker.errors_last_hour}"]
+                f"requests in the last hour: {worker.requests_last_hour}, errors: {worker.errors_last_hour}",
+                f"memory: {worker.memory_mb or '?'} MB of a {worker.memory_limit_mb or '?'} MB limit"]
         if worker.note:
             out.append(f"note: {worker.note}")
     if not plan:

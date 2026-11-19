@@ -18,6 +18,10 @@ User=ripraptor
 WorkingDirectory=/srv/ripraptor
 EnvironmentFile=/srv/ripraptor/.env
 Environment=PYTHONUNBUFFERED=1
+# At most two memory pools shared by its threads: glibc's default gives each thread its own, and memory freed in one
+# is kept from the others, so a threaded reader grows. It also hands memory back after jobs and restarts itself past
+# three quarters of MemoryMax (catalogue/worker.py MEMORY_SHARE) rather than reach it.
+Environment=MALLOC_ARENA_MAX=2
 ExecStart=/srv/ripraptor/.venv/bin/python manage.py run_worker
 Restart=always
 RestartSec=10

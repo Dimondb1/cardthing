@@ -1405,3 +1405,169 @@ class SharedDatabaseTests(TestCase):
             self.assertEqual(Listing.objects.filter(retailer=probed, availability="in_stock").count(), 20)
             self.assertTrue(ImportRun.objects.get(retailer=read).ok)
             self.assertEqual(DailyPageView.objects.get(key="busy").hits, len(counted))
+
+
+class UpdateRestartsTheReaderTests(TestCase):
+    """deploy/install.sh stops the reader near its start and starts it at its end. On 18 Nov 2026 an update cut short
+    in between left it stopped overnight; the owner: "Why did the crawl stop at night last night"."""
+
+    def install(self):
+        return (Path(__file__).resolve().parent.parent / "deploy" / "install.sh").read_text()
+
+    def test_the_way_out_starts_it_again_set_right_after_it_is_stopped(self):
+        text = self.install()
+        stop = text.index("systemctl stop ripraptor-worker")
+        trap = text.index("trap 'systemctl start ripraptor-worker 2>/dev/null || true' EXIT")
+        self.assertLess(stop, trap)
+        self.assertNotIn("manage.py", text[stop:trap])   # nothing that could fail runs between them
+        self.assertLess(trap, text.index("systemctl restart ripraptor-worker"))
+
+    def test_an_update_cut_short_by_an_error_or_a_closed_console_still_starts_it(self):
+        import shutil
+        import signal
+        import subprocess
+        import time
+
+        if not shutil.which("bash"):
+            self.skipTest("no bash")
+        line = next(row for row in self.install().splitlines() if row.startswith("trap 'systemctl start ripraptor-worker"))
+        with tempfile.TemporaryDirectory() as folder:
+            fake = Path(folder) / "systemctl"
+            fake.write_text(f'#!/bin/sh\necho "$@" >> {folder}/calls\n')
+            fake.chmod(0o755)
+            env = {**os.environ, "PATH": f"{folder}:{os.environ['PATH']}"}
+            # A step that fails under set -e.
+            subprocess.run(["bash", "-c", f"set -euo pipefail; systemctl stop ripraptor-worker; {line}; false; echo never"],
+                           env=env, capture_output=True)
+            self.assertEqual((Path(folder) / "calls").read_text().split("\n")[:2],
+                             ["stop ripraptor-worker", "start ripraptor-worker"])
+            # The console closed part way through: the shell is hung up on.
+            (Path(folder) / "calls").unlink()
+            script = subprocess.Popen(["bash", "-c", f"set -euo pipefail; {line}; sleep 30"], env=env)
+            time.sleep(0.5)   # time for the trap to be set before hanging up
+            script.send_signal(signal.SIGHUP)
+            script.wait(timeout=10)
+            self.assertEqual((Path(folder) / "calls").read_text().strip(), "start ripraptor-worker")
+
+
+class MemoryTests(WorkerTestCase):
+    """On 18 Nov 2026 the reader passed its memory limit four times and was killed part way through its reads; the
+    owner: "look at the memory too". It hands freed memory back after jobs, and past MEMORY_SHARE of its limit starts
+    no new job and restarts itself once the jobs running finish."""
+
+    MB = 1048576
+
+    def reader(self, used, limit=600, **kwargs):
+        self.used = used
+        self.freed, self.exits = [], []
+        return self.make_worker(memory=lambda: self.used * self.MB, limit=limit * self.MB,
+                                free=lambda: self.freed.append(self.clock()), exit=self.exits.append, **kwargs)
+
+    def test_it_reads_its_memory_and_its_limit_from_the_system(self):
+        with tempfile.TemporaryDirectory() as folder:
+            base = Path(folder)
+            (base / "statm").write_text("90000 50000 3000 1 0 40000 0\n")
+            self.assertEqual(worker.memory_used(str(base / "statm")), 50000 * os.sysconf("SC_PAGE_SIZE"))
+            (base / "cgroup").write_text("0::/system.slice/ripraptor-worker.service\n")
+            service = base / "system.slice" / "ripraptor-worker.service"
+            service.mkdir(parents=True)
+            (service / "memory.max").write_text("660602880\n")
+            self.assertEqual(worker.memory_limit(str(base / "cgroup"), str(base)), 660602880)
+            (service / "memory.max").write_text("max\n")   # no limit
+            self.assertIsNone(worker.memory_limit(str(base / "cgroup"), str(base)))
+        self.assertIsNone(worker.memory_used("/nowhere/statm"))
+        self.assertIsNone(worker.memory_limit("/nowhere/cgroup"))
+        worker.free_memory()   # never fails, with or without glibc
+
+    def test_freed_memory_is_handed_back_after_jobs_at_most_once_a_minute(self):
+        reader = self.reader(used=200)
+        reader.keep_memory_down(self.clock())
+        self.assertEqual(self.freed, [])        # no job finished yet
+        reader.jobs_done = 1
+        reader.keep_memory_down(self.clock())
+        self.assertEqual(len(self.freed), 1)
+        reader.jobs_done = 2
+        reader.keep_memory_down(self.clock())
+        self.assertEqual(len(self.freed), 1)    # within the minute
+        self.clock.advance(seconds=61)
+        reader.keep_memory_down(self.clock())
+        self.assertEqual(len(self.freed), 2)
+
+    def test_past_three_quarters_of_its_limit_it_starts_no_job_then_restarts_once_they_finish(self):
+        reader = self.reader(used=470, limit=600)   # past three quarters of 600 MB (450)
+        reader.running[1] = mock.Mock(task=mock.Mock(kind=worker.SHOP_READ))
+        reader.keep_memory_down(self.clock())
+        self.assertIsNotNone(reader.draining_since)
+        reader.queue = [mock.Mock(kind=worker.SHOP_READ)]
+        self.assertEqual(reader.dispatch(self.clock()), 0)   # nothing new starts
+        self.assertEqual(len(reader.queue), 1)
+        self.assertEqual(self.exits, [])                     # the read running is let finish
+        reader.running.clear()
+        self.clock.advance(seconds=31)
+        with self.assertLogs("catalogue.worker", "WARNING"):
+            reader.keep_memory_down(self.clock())
+        self.assertEqual(self.exits, [0])                    # a clean end; systemd starts a fresh reader
+        state = WorkerState.load()
+        self.assertIn("to free memory: it was using 470 MB of its 600 MB limit", state.note)
+
+    def test_a_read_that_runs_on_is_handed_back_after_the_wait(self):
+        reader = self.reader(used=500)
+        reader.running[1] = mock.Mock(task=mock.Mock(kind=worker.SHOP_READ))
+        reader.keep_memory_down(self.clock())
+        with mock.patch.object(reader, "hand_back") as hand_back:
+            self.clock.advance(seconds=int(worker.MEMORY_DRAIN.total_seconds()) + 1)
+            reader.keep_memory_down(self.clock())
+        self.assertEqual(self.exits, [0])
+        self.assertEqual(len(hand_back.call_args[0][0]), 1)
+
+    def test_under_the_line_or_with_no_limit_it_carries_on(self):
+        for used, limit in ((440, 600), (5000, 0)):
+            with self.subTest(used=used, limit=limit):
+                reader = self.reader(used=used, limit=limit)
+                reader.keep_memory_down(self.clock())
+                self.assertIsNone(reader.draining_since)
+                self.assertEqual(self.exits, [])
+
+    def test_the_heartbeat_and_crawl_health_say_how_much_it_uses(self):
+        reader = self.reader(used=312, limit=630)
+        reader.keep_memory_down(self.clock())
+        reader.beat(self.clock())
+        state = WorkerState.load()
+        self.assertEqual((state.memory_mb, state.memory_limit_mb), (312, 630))
+        from catalogue import crawl
+
+        status = crawl.worker_status(state, self.clock())
+        self.assertEqual((status["memory"], status["memory_limit"], status["memory_restart"]), (312, 630, 472))
+
+    def test_past_half_its_limit_one_whole_shop_read_runs_at_a_time(self):
+        reader = self.reader(used=200, limit=600)
+        reader.keep_memory_down(self.clock())
+        self.assertEqual(reader.max_reads(), worker.MAX_READS)
+        self.used = 320
+        self.clock.advance(seconds=31)
+        reader.keep_memory_down(self.clock())
+        self.assertEqual(reader.max_reads(), 1)
+        self.assertIsNone(reader.draining_since)   # not yet near the restart line
+
+    def test_each_shop_read_says_its_memory_in_the_readers_own_log(self):
+        from catalogue import worklog
+
+        self.assertIn("memory", worklog.ABOUT)
+        shop = self.shop("Harbour Games", due=True)
+        reader = self.reader(used=300, limit=600)
+        task = worker.Task(kind=worker.SHOP_READ, retailer_id=shop.pk, source_type=Retailer.Source.SHOPIFY, priority=1,
+                           label="Read Harbour Games")
+        job = worker.Job(task=task, started=self.clock(), deadline=self.clock() + timedelta(minutes=20))
+        reader.running[shop.pk] = job
+        reader.import_lock.acquire(self.clock())
+        with mock.patch.object(reader, "read_shop", return_value=True), \
+                self.assertLogs("catalogue.worker", "INFO") as logs:
+            reader.run_job(job)
+        self.assertIn("Memory after Read Harbour Games: 300 MB of its 600 MB limit", "\n".join(logs.output))
+
+    def test_the_service_shares_two_memory_pools_between_its_threads(self):
+        unit = (Path(__file__).resolve().parent.parent / "deploy" / "ripraptor-worker.service").read_text()
+        self.assertIn("Environment=MALLOC_ARENA_MAX=2", unit)
+        self.assertIn("Restart=always", unit)   # a clean end is started again
+        command = (Path(__file__).resolve().parent / "management" / "commands" / "run_worker.py").read_text()
+        self.assertIn("limit=worker.memory_limit()", command)   # held to the service's limit

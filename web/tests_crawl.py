@@ -65,6 +65,17 @@ class CrawlPageTests(TestCase):
         self.shop.refresh_from_db()
         self.assertFalse(self.shop.reading_paused)
 
+    def test_the_page_says_the_readers_memory_against_its_limit(self):
+        from catalogue.models import WorkerState
+
+        WorkerState.objects.update_or_create(pk=1, defaults={
+            "heartbeat_at": timezone.now(), "started_at": timezone.now(), "memory_mb": 312, "memory_limit_mb": 630,
+            "note": "Restarted at 14:02 to free memory: it was using 480 MB of its 630 MB limit."})
+        page = self.client.get(self.url).content.decode()
+        self.assertIn('<p class="note" id="worker-memory">Memory: 312 MB of its 630 MB limit. Past 472 MB it finishes '
+                      'its reads and restarts itself.</p>', page)
+        self.assertIn("Last restart: Restarted at 14:02 to free memory", page)
+
     def test_read_now_clears_the_wait_and_pause_and_resume_set_the_shop(self):
         self.shop.next_read_at = self.now + timedelta(hours=3)
         self.shop.backoff_until = self.now + timedelta(hours=2)

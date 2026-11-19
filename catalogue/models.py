@@ -2106,6 +2106,8 @@ class WorkerState(models.Model):
     requests_last_hour = models.PositiveIntegerField(default=0)
     errors_last_hour = models.PositiveIntegerField(default=0)
     note = models.CharField(max_length=300, blank=True)
+    memory_mb = models.PositiveIntegerField("memory used (MB)", null=True, blank=True)
+    memory_limit_mb = models.PositiveIntegerField("memory limit (MB)", null=True, blank=True)
     # The shop reads in progress, as {"retailer": pk, "since": iso time}, written before each read so a
     # restart can close the runs they left open.
     in_flight = models.JSONField(default=list, blank=True)

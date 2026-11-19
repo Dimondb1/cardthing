@@ -36,7 +36,8 @@ class Command(BaseCommand):
         # first to the last: the keeper comes off again when the reader stops.
         keeper = worklog.install()
         try:
-            reader = worker.Worker(threads=max_threads, warm=True)
+            # Held to the service's MemoryMax: past three quarters of it the reader restarts itself between reads.
+            reader = worker.Worker(threads=max_threads, warm=True, limit=worker.memory_limit())
             closed = reader.begin()
             if closed:
                 self.stdout.write(f"Closed {closed} earlier runs that stopped before they finished.")

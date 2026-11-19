@@ -2963,6 +2963,36 @@ restarts it after three minutes without one. It is capped at 32% of the
 server's memory (`MemoryMax`: about 300 MB on a "1 GB" server, 600 MB on a
 2 GB one) and runs at a lower priority than the site.
 
+**Memory** (the owner, 19 Nov 2026, after it passed `MemoryMax` four times
+on 18 Nov and was killed part way through its reads: "look at the memory
+too"). Each shop read builds an index of every product (about 30 MB and 4
+seconds for 10,000), and one whole read peaked near 250 MB, so two together
+neared the limit. Now:
+
+- its threads share two memory pools (`MALLOC_ARENA_MAX=2` in the unit);
+- after jobs it hands freed memory back to the system (`free_memory`:
+  Python's cycles collected, then glibc's `malloc_trim`), at most once a
+  minute;
+- past half its limit it runs one whole-shop read at a time;
+- past three quarters (`MEMORY_SHARE`) it starts no new job, lets those
+  running finish (15 minutes at most, then hands them back) and ends itself
+  cleanly, and systemd starts a fresh one ten seconds later. Crawl health's
+  Last restart line says so ("Restarted at ... to free memory").
+
+The limit is read from the service's own cgroup (`memory_limit`), only by
+`run_worker`. Crawl health shows its memory against the limit (written with
+each heartbeat, `WorkerState.memory_mb`), the eBay health log has the same,
+and after each shop read the reader's own log says its memory ("Memory after
+Read ...: 312 MB of its 630 MB limit"), so the heavy shops show in the Log to
+copy.
+
+**An update never leaves it stopped.** `install.sh` stops the reader before
+the steps that move data and starts it at its very end. Right after the stop,
+a `trap ... EXIT` starts it again however the script ends: a step failing,
+the console closed or reconnected, Ctrl+C. On 18 Nov 2026 an update cut
+short in between left it stopped overnight, with only the hourly fallback
+reading the shops.
+
 To stop it, start it or read its log on the server:
 
 ```sh

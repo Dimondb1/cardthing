@@ -15,6 +15,14 @@
     </dl>
   </section>
 
+  <section aria-labelledby="faq-title" id="faq">
+    <h2 id="faq-title">{% copy "about.faq.title" %}</h2>
+    <dl class="askrip-faq">{% for question, answer in faq %}
+      <div class="askrip-faq__item"><dt>{{ question }}</dt><dd>{{ answer }}</dd></div>{% endfor %}
+    </dl>
+    <p class="button-row"><a class="button button--quiet" href="{% url 'web:prices' %}">{% copy "site.nav.prices" %}</a> <a class="button button--quiet" href="{% url 'web:ask_rip_about' %}">{% copy "site.nav.askrip" %}</a>{% if guides_live %} <a class="button button--quiet" href="{% url 'web:fair_price' %}">{% copy "guides.checker.title" %}</a> <a class="button button--quiet" href="{% url 'web:guides' %}">{% copy "site.nav.guides" %}</a>{% endif %}</p>
+  </section>
+
   <section aria-labelledby="prices-title">
     <h2 id="prices-title">{% copy "about.prices.title" %}</h2>
     <div class="prose">{% copy "about.prices.body" hours=stale_hours %}</div>

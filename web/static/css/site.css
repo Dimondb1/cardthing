@@ -3474,3 +3474,5 @@ li + li > .checker__option { border-top: var(--border-width) solid var(--color-l
   .price-table td::before { content: none; }
   .price-table__rrp:empty, .price-table__check:empty { display: table-cell; }
 }
+/* The questions on the how it works page (web.views.about_faq) borrow the Ask Rip page's list; the links under it need air. */
+.prose-page .askrip-faq { margin-bottom: var(--space-4); }

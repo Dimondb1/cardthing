@@ -2923,6 +2923,75 @@ ENTRIES = [
           "On every product page, Rip answers your questions from that page's own prices: whether it is good value, "
           "what is inside and how today's price compares.",
           "A point's text in the Why RipRaptor section of the how it works page and in llms.txt."),
+    Entry("about.why.usual.title", T, "Why RipRaptor: The usual UK price", "The usual UK price",
+          "A point's heading in the Why RipRaptor section of the how it works page."),
+    Entry("about.why.usual.body", T, "Why RipRaptor: The usual UK price text",
+          "Each product page names its usual UK price: the average of the cheapest delivered price we recorded each "
+          "day. The Price check sets today's price against it, and the Usual UK prices pages list every product's "
+          "beside today's cheapest and the RRP.",
+          "A point's text in the Why RipRaptor section of the how it works page and in llms.txt."),
+    Entry("about.why.newbuyers.title", T, "Why RipRaptor: Help for new buyers", "Help for new buyers",
+          "A point's heading in the Why RipRaptor section of the how it works page. Shown while a guide is published."),
+    Entry("about.why.newbuyers.body", T, "Why RipRaptor: Help for new buyers text",
+          "The guides are plain advice for parents and new collectors, the Fair Price Checker says whether a price "
+          "you were offered anywhere is fair, and Rip answers whether a product is right for you.",
+          "A point's text in the Why RipRaptor section of the how it works page and in llms.txt. Shown while a "
+          "guide is published."),
+    # The questions people put to search engines and AI assistants (web.views.about_faq), shown on the how it works
+    # page, given again as schema.org FAQPage and listed in llms.txt. The owner, 20 Nov 2026: "are ai bots and
+    # search engines going to know about these things".
+    Entry("about.faq.title", H, "How it works: questions heading", "Questions people ask",
+          "Heading over the questions on the how it works page. They are also given to search engines as an FAQ."),
+    Entry("about.faq.compare.q", T, "Question: where to compare", "Where can I compare sealed Pokémon and TCG prices in the UK?",
+          "A question on the how it works page."),
+    Entry("about.faq.compare.a", T, "Answer: where to compare",
+          "RipRaptor compares {shops} UK shops for sealed Pokémon and other trading card game products: booster "
+          "boxes, Elite Trainer Boxes, bundles, tins and more. Every price includes UK delivery and says when it was "
+          "checked.", "Its answer.", placeholders=("shops",)),
+    Entry("about.faq.assistant.q", T, "Question: AI assistant", "Is there a TCG price comparison site with an AI assistant?",
+          "A question on the how it works page."),
+    Entry("about.faq.assistant.a", T, "Answer: AI assistant",
+          "Yes. RipRaptor has Rip, a built-in AI shopping assistant. He finds products from what you type, say or "
+          "photograph, builds a shopping list at the lowest total and answers questions about a product from its "
+          "own UK prices.", "Its answer."),
+    Entry("about.faq.usual.q", T, "Question: usual cost", "What does a booster box or Elite Trainer Box usually cost in the UK?",
+          "A question on the how it works page."),
+    Entry("about.faq.usual.a", T, "Answer: usual cost",
+          "Each product page gives its usual UK price: the average of the cheapest delivered price recorded each "
+          "day over the last {days} days. The Usual UK prices pages list every product's usual price beside today's "
+          "cheapest and the RRP.", "Its answer.", placeholders=("days",)),
+    Entry("about.faq.fair.q", T, "Question: fair price", "How do I know if a price is fair?",
+          "A question on the how it works page."),
+    Entry("about.faq.fair.a", T, "Answer: fair price",
+          "The Price check beside each cheapest price says whether today's price is the lowest yet, good, fair, "
+          "above average or high. It measures against the usual UK price, the European market price where we have "
+          "one, and the RRP.", "Its answer."),
+    Entry("about.faq.offered.q", T, "Question: a price you were offered", "Someone offered me a price. How can I check it?",
+          "A question on the how it works page. Shown while a guide is published."),
+    Entry("about.faq.offered.a", T, "Answer: a price you were offered",
+          "Put the product and the price into the Fair Price Checker. It says whether the price is fair against "
+          "today's prices at UK shops, and whether it is a scalper's price.",
+          "Its answer. Shown while a guide is published."),
+    Entry("about.faq.newbuyers.q", T, "Question: new to trading cards", "I am new to trading cards. Where do I start?",
+          "A question on the how it works page. Shown while a guide is published."),
+    Entry("about.faq.newbuyers.a", T, "Answer: new to trading cards",
+          "Start with the guides: plain advice for parents and new collectors. On any product page, Rip answers "
+          "what is inside and whether it is right for you.", "Its answer. Shown while a guide is published."),
+    Entry("about.faq.languages.q", T, "Question: other languages", "Does RipRaptor compare Japanese, Korean and Chinese products?",
+          "A question on the how it works page."),
+    Entry("about.faq.languages.a", T, "Answer: other languages",
+          "Yes. Japanese, Korean and Chinese products are listed and kept apart from English ones, so a price is "
+          "only ever compared with the same product in the same language.", "Its answer."),
+    Entry("about.faq.fresh.q", T, "Question: up to date", "Are the prices up to date?",
+          "A question on the how it works page."),
+    Entry("about.faq.fresh.a", T, "Answer: up to date",
+          "Every price says when we last checked it. One we have not been able to check for {hours} hours stops "
+          "counting as the cheapest.", "Its answer.", placeholders=("hours",)),
+    Entry("about.faq.sells.q", T, "Question: does it sell cards", "Does RipRaptor sell cards?",
+          "A question on the how it works page."),
+    Entry("about.faq.sells.a", T, "Answer: does it sell cards",
+          "No. Nothing is sold here: each price links to the shop, where you buy. RipRaptor may earn a commission "
+          "from a shop when you do, and shops cannot pay to change the order of prices.", "Its answer."),
     Entry("about.why.independent.title", T, "Why RipRaptor: Independent", "Independent",
           "A point's heading in the Why RipRaptor section of the how it works page."),
     Entry("about.why.independent.body", T, "Why RipRaptor: Independent text",

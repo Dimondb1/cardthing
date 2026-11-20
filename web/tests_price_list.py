@@ -135,3 +135,63 @@ class UsualLineTests(Base):
         html = self.page(box.get_absolute_url()).content.decode()
         self.assertIn("Usual UK price £59.50", html)
         self.assertNotIn("Check a price you were offered", html)
+
+
+class ToldToSearchAndAITests(Base):
+    """What search engines and AI assistants are told sets the site apart: the usual UK price, Rip, and help for new
+    buyers. The owner, 20 Nov 2026: "are ai bots and search engines going to know about these things"."""
+
+    def faq_block(self, html):
+        import json
+        import re
+
+        for block in re.findall(r'<script type="application/ld\+json">(.*?)</script>', html, re.S):
+            data = json.loads(block)
+            for entry in data if isinstance(data, list) else [data]:
+                if entry.get("@type") == "FAQPage":
+                    return [(row["name"], row["acceptedAnswer"]["text"]) for row in entry["mainEntity"]]
+        return []
+
+    def test_how_it_works_answers_what_people_ask_and_gives_it_as_faq_data_word_for_word(self):
+        from html import unescape
+
+        response = self.page(reverse("web:about"))
+        html, asked = unescape(response.content.decode()), response.context["faq"]
+        questions = [question for question, _answer in asked]
+        self.assertIn("Is there a TCG price comparison site with an AI assistant?", questions)
+        self.assertIn("What does a booster box or Elite Trainer Box usually cost in the UK?", questions)
+        self.assertEqual(self.faq_block(response.content.decode()), asked)
+        for question, answer in asked:
+            self.assertIn(f"<dt>{question}</dt><dd>{answer}</dd>", html)
+        self.assertIn("over the last 365 days", dict(asked)["What does a booster box or Elite Trainer Box usually cost in the UK?"])
+        self.assertIn(f'href="{reverse("web:prices")}"', html)
+        titles = [point["title"] for point in response.context["why"]]
+        self.assertIn("The usual UK price", titles)
+
+    def test_the_guides_and_the_checker_are_named_only_while_a_guide_is_published(self):
+        closed = self.page(reverse("web:about")).context
+        self.assertNotIn("Help for new buyers", [point["title"] for point in closed["why"]])
+        self.assertNotIn("Someone offered me a price. How can I check it?", dict(closed["faq"]))
+        cache.set(guide_state.KEY, {"live": True, "doors": {}}, None)
+        live = self.page(reverse("web:about")).context
+        self.assertIn("Help for new buyers", [point["title"] for point in live["why"]])
+        self.assertIn("Someone offered me a price. How can I check it?", dict(live["faq"]))
+        self.assertIn("I am new to trading cards. Where do I start?", dict(live["faq"]))
+
+    def test_llms_txt_names_the_usual_price_pages_and_the_questions(self):
+        self.product("good-box", "52.00", ["50.00"] + ["60.00"] * 19)
+        self.bands()
+        body = self.client.get("/llms.txt").content.decode()
+        self.assertIn(f"- [Usual UK prices](http://testserver{reverse('web:prices')}): ", body)
+        self.assertIn("## Usual UK prices", body)
+        self.assertIn(f"- [Pokémon: usual UK prices](http://testserver{reverse('web:prices_game', args=['pokemon'])})",
+                      body)
+        self.assertIn("### Is there a TCG price comparison site with an AI assistant?\n\nYes. RipRaptor has Rip, "
+                      "a built-in AI shopping assistant.", body)
+        self.assertIn("- The usual UK price: Each product page names its usual UK price", body)
+        self.assertNotIn("<", body)
+
+    def test_llms_txt_has_no_usual_price_section_before_any_product_has_one(self):
+        body = self.client.get("/llms.txt").content.decode()
+        self.assertNotIn("## Usual UK prices", body)
+        self.assertIn("## Questions people ask", body)

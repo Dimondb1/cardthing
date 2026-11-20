@@ -2344,30 +2344,62 @@ def price_note(request, listing):
 
 @require_GET
 def about(request):
+    page_url = request.build_absolute_uri(request.path)
+    faq = about_faq(request)
     return render(
         request,
         "web/about.html",
         {
             "shops_compared": pricing.shops_compared(),
             "why": why_points(request),
+            "faq": faq,
             "contact_email": settings.RIPRAPTOR_CONTACT_EMAIL,
             "stale_hours": settings.RIPRAPTOR_STALE_AFTER_HOURS,
             "meta_title": text(request, "about.title"),
-            "canonical_url": request.build_absolute_uri(request.path),
+            "canonical_url": page_url,
+            "structured_json": ld_json(answers.faq_json(page_url, faq)),
         },
     )
 
 
-WHY_POINTS = ("price", "stock", "trust", "deals", "askrip", "shops", "alerts", "independent")
+WHY_POINTS = ("price", "stock", "trust", "deals", "usual", "askrip", "newbuyers", "shops", "alerts", "independent")
+# The questions people put to search engines and AI assistants, answered on the how it works page.
+ABOUT_FAQ = ("compare", "assistant", "usual", "fair", "offered", "newbuyers", "languages", "fresh", "sells")
+# Said only while a guide is published: the guides and the Fair Price Checker are open then, and not before.
+NEED_GUIDES = ("newbuyers", "offered")
+
+
+def said_now(keys):
+    """``keys`` without those that hold only while the Guides are live (NEED_GUIDES), when they are not."""
+    live = guide_doors.current()["live"]
+    return [key for key in keys if live or key not in NEED_GUIDES]
+
+
+def about_values():
+    """What the how it works page's wording is filled with: the live shop count, the hours a price counts for and
+    the days the usual UK price is worked out over."""
+    return {"shops": pricing.shops_compared(), "hours": settings.RIPRAPTOR_STALE_AFTER_HOURS,
+            "days": fair_price.WINDOW_DAYS}
 
 
 def why_points(request):
     """The Why RipRaptor points (title, text), filled with the live shop count and the hours a price counts for,
     for the how it works page and llms.txt."""
     store = copy.for_request(request)
-    values = {"shops": pricing.shops_compared(), "hours": settings.RIPRAPTOR_STALE_AFTER_HOURS}
+    values = about_values()
     return [{"title": copy.get(f"about.why.{key}.title", store=store),
-             "body": copy.get(f"about.why.{key}.body", store=store, **values)} for key in WHY_POINTS]
+             "body": copy.get(f"about.why.{key}.body", store=store, **values)} for key in said_now(WHY_POINTS)]
+
+
+def about_faq(request):
+    """[(question, answer)] for the how it works page, its schema.org FAQPage and llms.txt: what RipRaptor is and
+    does, in the words people ask a search engine or an AI assistant (the owner, 20 Nov 2026: "are ai bots and search
+    engines going to know about these things"). Every answer is one the site already keeps true: the live shop
+    count, and the guides only while one is published."""
+    store = copy.for_request(request)
+    values = about_values()
+    return [(copy.get(f"about.faq.{key}.q", store=store), copy.get(f"about.faq.{key}.a", store=store, **values))
+            for key in said_now(ABOUT_FAQ)]
 
 
 @require_GET
@@ -4184,12 +4216,29 @@ def llms_txt(request):
         f"- [Every game and set]({request.build_absolute_uri(reverse('web:games'))})",
         f"- [Upcoming drops with dates and pre-order prices]({request.build_absolute_uri(reverse('web:drops'))})",
         f"- [How it works]({request.build_absolute_uri(reverse('web:about'))})",
+        f"- [Usual UK prices]({request.build_absolute_uri(reverse('web:prices'))}): "
+        f"{text(request, 'browse.prices.intro')}",
         f"- [Ask Rip]({request.build_absolute_uri(reverse('web:ask_rip_about'))}): {text(request, 'meta.askrip.description')}",
         f"- [Terms and disclosures]({request.build_absolute_uri(reverse('web:terms'))})",
         f"- [Sitemap]({request.build_absolute_uri('/sitemap.xml')}): every product on sale, coming soon or priced "
         "in the last month, and every game and set",
         "",
     ]
+    # The usual UK price of every product, a page a game: what an assistant asked "what does a booster box usually
+    # cost in the UK" should read.
+    from .price_list import ON_RECORD
+
+    priced = list(Game.objects.filter(is_active=True, products__is_active=True, products__price_basis__in=ON_RECORD)
+                  .distinct().order_by("name"))
+    if priced:
+        lines += ["## Usual UK prices", "",
+                  text(request, "browse.prices.how", days=fair_price.WINDOW_DAYS), ""]
+        lines += [f"- [{text(request, 'browse.prices.title', game=game.name)}]"
+                  f"({request.build_absolute_uri(reverse('web:prices_game', args=[game.slug]))})" for game in priced]
+        lines.append("")
+    lines += [f"## {text(request, 'about.faq.title')}", ""]
+    for question, answer in about_faq(request):
+        lines += [f"### {question}", "", answer, ""]
     # The published guides and the Fair Price Checker: plain advice for parents and new collectors, the pages an
     # assistant asked "is this a fair price" or "what should I buy my child" should point to.
     from guides.models import Guide

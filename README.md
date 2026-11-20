@@ -2470,6 +2470,19 @@ check's verdict but are never shown as the usual price.
   query for the rows and one for the count, however many products.
 - `/prices/` lists the games with a list. Both are in the sitemap and the
   footer links to them as "Usual UK prices".
+- **What search engines and AI assistants are told** (the owner, 20 Nov 2026:
+  "are ai bots and search engines going to know about these things"). The
+  how it works page has two more Why RipRaptor points, The usual UK price
+  and Help for new buyers, and a Questions people ask section
+  (`views.about_faq`, `about.faq.*` in the registry) in the words people put
+  to a search engine or an AI assistant: where to compare UK sealed prices,
+  a comparison site with an AI assistant, what a box usually costs, whether a
+  price is fair, other languages, freshness and that nothing is sold here.
+  The same questions are given as schema.org FAQPage, word for word, and in
+  `llms.txt`, which also lists each game's usual UK prices page. The points
+  and questions about the guides and the Fair Price Checker are said only
+  while a guide is published (`NEED_GUIDES`). Nothing claims to be the only
+  or the first: a claim about other sites must be checked before it is made.
 
 - A **listing** is one retailer's offer: product link, item price, delivery
   charge for one item to a UK address, stock status and when it was last

@@ -48,8 +48,12 @@ THEMES = (
      r"dodgy|proper seller)\b"),
     ("delivery", "Delivery and the total cost",
      r"\b(?:deliver\w*|shipping|postage|courier|dispatch\w*|p ?& ?p)\b"),
+    ("resale", "Resale value and investing",
+     r"\b(?:sell (?:it|them|this|these)|sell for|resell\w*|resale|invest\w*|rare|rarity|hold (?:it|onto)|"
+     r"keep sealed)\b"),
     ("when", "Buy now or wait",
-     r"\bwait\b|\bbuy (?:it )?now\b|\bblack friday\b|\bprice drops?\b|\b(?:go|going|come|coming) (?:up|down)\b|"
+     r"\bwait\b|\bbuy (?:it )?now\b|\bblack friday\b|\bprice drops?\b|"
+     r"\b(?:go|going|come|coming)(?: back)? (?:up|down)\b|"
      r"\bcheaper (?:later|soon|next)\b|\bwhen (?:to|should i|do i) buy\b"),
     ("rrp", "RRP, pre-orders and release dates",
      r"\b(?:rrp|msrp|retail price|pre-?orders?|pre orders?|releas\w*|launch\w*|coming out|out yet)\b"),

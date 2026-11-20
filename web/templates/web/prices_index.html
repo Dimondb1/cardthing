@@ -1,0 +1,16 @@
+{% extends "web/base.html" %}
+{% load sitecopy ripraptor %}
+{# UK prices (web/price_list.py): the games with a usual UK price list, each with how many products it has. #}
+{% block content %}
+<div class="price-list">
+  <h1 class="page-title">{{ heading }}</h1>
+  <p class="page-intro">{% copy "browse.prices.index_intro" %}</p>
+  {% if games %}
+  <ul class="price-games">{% for game in games %}
+    <li><a class="price-games__link" href="{% url 'web:prices_game' game.slug %}">{{ game.name }}</a> <span class="price-games__count">{% copy_count "browse.count" game.listed %}</span></li>{% endfor %}
+  </ul>
+  {% else %}
+  <p class="price-list__empty">{% copy "browse.prices.empty" days=least_days %}</p>
+  {% endif %}
+</div>
+{% endblock %}

@@ -107,12 +107,25 @@ class PageSitemap(Sitemap):
     address, and lists different products, so it is a page of its own here too."""
 
     def items(self):
-        return ["web:home", "web:deals", "web:per_card", "web:drops", "web:drops?show=out", "web:games", "web:about",
-                "web:ask_rip_about", "web:list_shop", "web:terms"]
+        return ["web:home", "web:deals", "web:per_card", "web:prices", "web:drops", "web:drops?show=out", "web:games",
+                "web:about", "web:ask_rip_about", "web:list_shop", "web:terms"]
 
     def location(self, name):
         name, _, query = name.partition("?")
         return reverse(name) + (f"?{query}" if query else "")
+
+
+class PricesSitemap(Sitemap):
+    """Each game's UK prices page (web/price_list.py), for the games with a usual UK price to list."""
+
+    def items(self):
+        from .price_list import ON_RECORD
+
+        return (Game.objects.filter(is_active=True, products__is_active=True, products__price_basis__in=ON_RECORD)
+                .distinct().order_by("pk"))
+
+    def location(self, game):
+        return reverse("web:prices_game", args=[game.slug])
 
 
 class GuideSitemap(Sitemap):
@@ -149,5 +162,6 @@ SITEMAPS = {
     "games": GameSitemap,
     "sets": SetSitemap,
     "pages": PageSitemap,
+    "prices": PricesSitemap,
     "guides": GuideSitemap,
 }

@@ -3436,3 +3436,41 @@ li + li > .checker__option { border-top: var(--border-width) solid var(--color-l
 .guide-live a { font-weight: var(--weight-strong); color: var(--color-brand-text); }
 .guide-games__list { list-style: none; display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-4); margin: var(--space-2) 0 var(--space-4); padding: 0; }
 .guide-games__list a { font-weight: var(--weight-strong); color: var(--color-brand-text); }
+
+/* Usual UK price (web/price_list.py): the line under the cheapest price on a product page, then each game's list of
+   usual UK prices. On a phone each product is a block of labelled figures; from a tablet up, a table. */
+.buybox__usual-check { color: var(--color-brand-text); font-weight: var(--weight-strong); }
+.price-list__kinds { margin-bottom: var(--space-4); }
+.price-list__empty { color: var(--color-ink-muted); }
+.price-table { width: 100%; border-collapse: collapse; font-size: var(--text-sm); font-variant-numeric: tabular-nums; }
+.price-table thead { display: none; }   /* on a phone each figure carries its own label (data-label) */
+.price-table tbody, .price-table th, .price-table td { display: block; }
+.price-table tr { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2) var(--space-3); padding: var(--space-3) 0; border-bottom: var(--border-width) solid var(--color-line-soft); }
+.price-table th, .price-table td { padding: 0; text-align: left; }
+.price-table td::before { content: attr(data-label); display: block; color: var(--color-ink-subtle); font-size: var(--text-xs); }
+.price-table__product { grid-column: 1 / -1; font-weight: var(--weight-strong); }
+.price-table__product a { color: var(--color-ink); text-decoration: none; }
+.price-table__product a:hover { color: var(--color-brand-text); text-decoration: underline; }
+.price-table__set { display: block; color: var(--color-ink-subtle); font-size: var(--text-xs); font-weight: var(--weight-body); }
+.price-table__usual { font-weight: var(--weight-strong); }
+.price-table__today { color: var(--color-price); font-weight: var(--weight-strong); }
+.price-table__rrp { color: var(--color-ink-muted); }
+.price-table__rrp:empty, .price-table__check:empty { display: none; }
+.price-list__how { max-width: var(--measure); margin-top: var(--space-7); }
+.price-list__how h2 { font-size: var(--text-section); margin-bottom: var(--space-3); }
+.price-list__how p { color: var(--color-ink-muted); margin-bottom: var(--space-3); }
+.price-games { list-style: none; margin: 0; padding: 0; max-width: var(--measure); }
+.price-games li { display: flex; justify-content: space-between; gap: var(--space-3); padding: var(--space-3) 0; border-bottom: var(--border-width) solid var(--color-line-soft); }
+.price-games__link { font-weight: var(--weight-strong); color: var(--color-brand-text); text-decoration: none; }
+.price-games__link:hover { text-decoration: underline; }
+.price-games__count { color: var(--color-ink-muted); font-size: var(--text-sm); }
+@media (min-width: 48rem) {
+  .price-table thead { display: table-header-group; }
+  .price-table tbody { display: table-row-group; }
+  .price-table tr { display: table-row; }
+  .price-table th, .price-table td { display: table-cell; padding: var(--space-3) var(--space-2); border-bottom: var(--border-width) solid var(--color-line-soft); vertical-align: middle; }
+  .price-table thead th { color: var(--color-ink-subtle); font-size: var(--text-xs); font-weight: var(--weight-medium); white-space: nowrap; }
+  .price-table td { white-space: nowrap; }
+  .price-table td::before { content: none; }
+  .price-table__rrp:empty, .price-table__check:empty { display: table-cell; }
+}

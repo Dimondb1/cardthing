@@ -162,14 +162,15 @@ class SitemapTests(TestCase):
         self.assertIsNone(SetSitemap().lastmod(item))
 
     def test_two_queries_a_section_however_many_products(self):
-        # A count and a page each for products, games and sets; the fixed pages need none.
-        with self.assertNumQueries(6):
+        # A count and a page each for products, games and sets; the fixed pages need none. The UK prices pages
+        # (web/price_list.py) need a count, and a page once a game has one: none here.
+        with self.assertNumQueries(7):
             self.client.get("/sitemap.xml")
         for n in range(15):
             product = make_product(self.set, name=f"Extra Box {n}", slug=f"extra-{n}")
             make_listing(product, self.shop)
             make_listing(product, self.other_shop, availability=OUT)
-        with self.assertNumQueries(6):
+        with self.assertNumQueries(7):
             response = self.client.get("/sitemap.xml")
         self.assertContains(response, "/products/extra-14/")
 
@@ -316,7 +317,7 @@ class PageEditTests(TestCase):
     def test_the_sitemap_still_costs_two_queries_a_section(self):
         product = make_product(self.set, slug="pe-etb")
         make_listing(product, self.shop)
-        with self.assertNumQueries(6):
+        with self.assertNumQueries(7):
             self.client.get("/sitemap.xml")
 
 

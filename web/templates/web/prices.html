@@ -1,0 +1,44 @@
+{% extends "web/base.html" %}
+{% load sitecopy ripraptor %}
+{# A game's UK prices (web/price_list.py): each product's usual UK price, the Price check's own average, beside today's cheapest delivered price, the Price check and the RRP, and how the usual price is worked out. A table on a wide screen; on a phone each product is a block of labelled lines. #}
+{% block content %}
+<div class="price-list">
+  <h1 class="page-title">{{ heading }}</h1>
+  <p class="page-intro">{% copy "browse.prices.intro" %}</p>
+  <p class="page-head__line">{% if checked %}{% copy "browse.prices.checked" time=checked|ago %}{% endif %}{% if checked and guides_live %}<span aria-hidden="true"> · </span><span class="visually-hidden">. </span>{% endif %}{% if guides_live %}<a href="{% url 'web:fair_price' %}">{% copy "product.usual.check" %}</a>{% endif %}</p>
+
+  {% if kinds|length > 1 %}
+  <nav class="chips price-list__kinds" aria-label="{% copy 'browse.prices.kinds' %}">
+    <ul class="chips__list">
+      <li><a class="chip" href="{% url 'web:prices_game' game.slug %}"{% if not kind %} aria-current="page"{% endif %}>{% copy "browse.prices.all" %}</a></li>
+      {% for code, label in kinds %}<li><a class="chip" href="{% url 'web:prices_game' game.slug %}?type={{ code }}"{% if kind == code %} aria-current="page"{% endif %}>{{ label }}</a></li>{% endfor %}
+    </ul>
+  </nav>
+  {% endif %}
+
+  {% if rows %}
+  {% copy "browse.prices.usual" as usual_label %}{% copy "browse.prices.today" as today_label %}{% copy "browse.prices.check" as check_label %}{% copy "browse.prices.rrp" as rrp_label %}
+  <table class="price-table">
+    <thead><tr><th scope="col">{% copy "browse.prices.product" %}</th><th scope="col">{{ usual_label }}</th><th scope="col">{{ today_label }}</th><th scope="col">{{ check_label }}</th><th scope="col">{{ rrp_label }}</th></tr></thead>
+    <tbody>{% for row in rows %}
+      <tr>
+        <th scope="row" class="price-table__product"><a href="{{ row.get_absolute_url }}">{{ row.name }}</a>{% if row.product_set %}<span class="price-table__set">{{ row.product_set.name }}</span>{% endif %}</th>
+        <td class="price-table__usual" data-label="{{ usual_label }}">{{ row.usual|gbp }}</td>
+        <td class="price-table__today" data-label="{{ today_label }}">{{ row.today|gbp }}</td>
+        <td class="price-table__check" data-label="{{ check_label }}">{% if row.check %}{% include "web/includes/fair_card.html" with check=row.check product=row %}{% endif %}</td>
+        <td class="price-table__rrp" data-label="{{ rrp_label }}">{% if row.rrp_figure %}{{ row.rrp_figure|gbp }}{% endif %}</td>
+      </tr>{% endfor %}
+    </tbody>
+  </table>
+  {% if page.has_other_pages %}{% include "web/includes/pagination.html" %}{% endif %}
+  {% else %}
+  <p class="price-list__empty">{% copy "browse.prices.empty" days=least_days %}</p>
+  {% endif %}
+
+  <section class="price-list__how" aria-labelledby="how-title">
+    <h2 id="how-title">{% copy "browse.prices.how_title" %}</h2>
+    <p>{% copy "browse.prices.how" days=days %}</p>
+    <p>{% copy "browse.prices.how_rules" count=least_shops days=least_days %}</p>
+  </section>
+</div>
+{% endblock %}

@@ -2448,6 +2448,29 @@ it again after changing the mark and commit the files.
 
 ## Prices
 
+**Usual UK prices** (`/prices/` and `/prices/<game>/`, `web/price_list.py`;
+the owner, 20 Nov 2026, choosing to make visible what the site already knows
+so RipRaptor can be the UK price benchmark). The usual UK price is the Price
+check's own average: the cheapest delivered price we recorded each day
+(`DailyLowestPrice`), averaged over the last `fair_price.WINDOW_DAYS` days,
+given once at least `MIN_SHOPS` UK shops list the product and there are
+`MIN_DAYS` days of prices. Cardmarket and the RRP still inform the Price
+check's verdict but are never shown as the usual price.
+
+- On a product page it is one line under the cheapest price, "Usual UK price
+  £x" (`usual_line.html`), with "Check a price you were offered" opening the
+  Fair Price Checker with the product chosen, while the Guides are live.
+- `/prices/<game>/` lists every product whose Price check rests on that
+  record (`price_basis` record or both, kept hourly by `refresh_bands`): the
+  usual UK price, today's cheapest delivered price, the Price check chip and
+  the RRP, newest set first, by kind with `?type=`, 100 a page, with when
+  today's prices were checked and how the figure is worked out. It never says
+  High price beside a shop that pays a commission, as product pages and
+  cards do not. A table from a tablet up, labelled blocks on a phone. One
+  query for the rows and one for the count, however many products.
+- `/prices/` lists the games with a list. Both are in the sitemap and the
+  footer links to them as "Usual UK prices".
+
 - A **listing** is one retailer's offer: product link, item price, delivery
   charge for one item to a UK address, stock status and when it was last
   checked. The delivered price is worked out by the database.
@@ -7312,7 +7335,8 @@ each time, so the page stays quick.
 owner, 20 Nov 2026, planning how RipRaptor becomes the UK price benchmark:
 "We need to solve a problem that exists"). Everything visitors asked over the
 last 30, 90 or 180 days, sorted into the problems they have: fakes, reseals
-and safe sellers; delivery and the total cost; buy now or wait; RRP,
+and safe sellers; delivery and the total cost; resale value and investing;
+buy now or wait; RRP,
 pre-orders and release dates; stock and restocks; is it a fair price; what's
 inside; which to buy; languages; and looking for a product. Read from what is
 already kept, nothing new: questions typed to Rip on product pages, the

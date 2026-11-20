@@ -1,0 +1,63 @@
+{% extends "admin/base_site.html" %}
+{% block title %}What people ask | {{ site_title }}{% endblock %}
+{% block extrahead %}{{ block.super }}<meta name="robots" content="noindex, nofollow">{% endblock %}
+{% block extrastyle %}{{ block.super }}<style>
+  .asks { display: grid; gap: 24px; max-width: 72rem; }
+  .asks h2 { margin: 0 0 4px; }
+  .asks p { margin: 0 0 8px; }
+  .asks .note, .asks .muted { color: var(--body-quiet-color); }
+  .asks .periods { display: flex; gap: 14px; flex-wrap: wrap; }
+  .asks .periods strong { font-weight: 600; }
+  .asks .themes { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; }
+  .asks .theme { padding: 12px 14px; border: 1px solid var(--hairline-color); border-radius: 8px; }
+  .asks .theme h3 { margin: 0 0 2px; font-size: 1em; }
+  .asks .theme .count { font-variant-numeric: tabular-nums; }
+  .asks .theme ul { margin: 6px 0 0; padding-left: 18px; }
+  .asks .theme li { margin: 4px 0; overflow-wrap: anywhere; }
+  .asks table { width: 100%; }
+  .asks td.number { font-variant-numeric: tabular-nums; text-align: right; }
+  .asks textarea.log { display: block; width: 100%; height: 22rem; max-height: none; box-sizing: border-box; margin: 0; padding: 8px; font: 12px/1.45 ui-monospace, Menlo, Consolas, monospace; white-space: pre-wrap; overflow: auto; }
+</style>{% endblock %}
+{% block breadcrumbs %}<div class="breadcrumbs"><a href="{% url 'admin:index' %}">Home</a> &rsaquo; What people ask</div>{% endblock %}
+{% block content %}
+<div class="asks">
+  <div>
+    <p class="periods">{% for period in periods %}{% if period == days %}<strong>Last {{ period }} days</strong>{% else %}<a href="?days={{ period }}">Last {{ period }} days</a>{% endif %}{% endfor %}</p>
+    <p>{{ counted.typed }} question{{ counted.typed|pluralize }} typed to Rip on product pages, {{ counted.tapped }} one-tap question{{ counted.tapped|pluralize }}, {{ counted.rip }} asked of Rip elsewhere, {{ counted.search }} search{{ counted.search|pluralize:"es" }} ({{ counted.searches_different }} different) and {{ counted.message }} message{{ counted.message|pluralize }}.</p>
+    <p class="note">Each is put under the first problem its words match. The problems are ranked by what people raise in their own words: one-tap questions are ones we offered, so they are counted but do not rank. This page only reads: nothing new is kept. <a href="#log">Log to copy</a> at the bottom.</p>
+  </div>
+
+  {% if themes %}
+  <section>
+    <h2>The problems people raise</h2>
+    <ol class="themes">{% for theme in themes %}
+      <li class="theme" id="theme-{{ theme.key }}">
+        <h3>{{ theme.label }}</h3>
+        <p><span class="count">{{ theme.own }}</span> in their own words, <span class="count">{{ theme.total }}</span> in all: <span class="muted">{% for name, count in theme.parts %}{{ name }} {{ count }}{% if not forloop.last %}, {% endif %}{% endfor %}</span></p>
+        {% if theme.examples %}<ul>{% for example in theme.examples %}
+          <li>&ldquo;{{ example.text }}&rdquo; <span class="muted">{{ example.from|capfirst }}{% if example.product %}, {{ example.product }}{% endif %}{% if example.source == "search" %}, {{ example.times }} time{{ example.times|pluralize }}{% elif example.at %}, {{ example.at|date:"j M" }}{% endif %}</span></li>{% endfor %}
+        </ul>{% endif %}
+      </li>{% endfor %}
+    </ol>
+  </section>
+  {% else %}
+  <p>Nothing asked in the last {{ days }} days.</p>
+  {% endif %}
+
+  {% if taps %}
+  <section>
+    <h2>One-tap questions</h2>
+    <table>
+      <thead><tr><th>Question</th><th>Times</th></tr></thead>
+      <tbody>{% for words, times in taps %}<tr><td>{{ words }}</td><td class="number">{{ times }}</td></tr>{% endfor %}</tbody>
+    </table>
+  </section>
+  {% endif %}
+
+  <section id="log">
+    <h2>Log to copy</h2>
+    <p class="note">The page as text. Long press, Select all, Copy, then paste it to Claude.</p>
+    <textarea id="people-ask-log" class="log" rows="14" readonly spellcheck="false" aria-label="Log to copy">{{ log }}</textarea>
+  </section>
+</div>
+{% endblock %}

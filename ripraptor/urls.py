@@ -14,6 +14,7 @@ from web import merge_box as web_merge_box
 from web import email_admin as web_email
 from web import media as web_media
 from web import online as web_online
+from web import people_ask as web_people_ask
 from web import rip_wants as web_rip_wants
 from web import shop_report as web_shop_report
 from web import visibility as web_visibility
@@ -35,6 +36,7 @@ urlpatterns = [
     path("admin/online/", web_online.online_page, name="online"),
     path("admin/clicks/", web_click_timeline.click_timeline_page, name="click_timeline"),
     path("admin/rip-wants/", web_rip_wants.rip_wants_page, name="rip_wants"),
+    path("admin/people-ask/", web_people_ask.people_ask_page, name="people_ask"),
     path("admin/ebay/", web_ebay_health.ebay_health_page, name="ebay_health"),
     path("admin/merge/", web_merge_box.merge_page, name="merge_products"),
     path("admin/quality/", web_quality.quality_page, name="catalogue_quality"),

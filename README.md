@@ -5838,7 +5838,7 @@ categorisation") is laid out in three parts:
   check.
 - **Six groups**, a card each, every page once with a quiet line saying what
   it is for. **Numbers**: Dashboard, Shop clicks timeline, Insights, Who is
-  online, Shop performance, What Rip couldn't find, Search visibility,
+  online, Shop performance, What people ask, What Rip couldn't find, Search visibility,
   Download a report. **Catalogue**: Things to check, Catalogue quality,
   Merge two products, Products, Sets, Your data in Excel (owner only).
   **Shops**: Crawl health, Shops, Add shops, Shop delivery, Shops asking to
@@ -7307,6 +7307,25 @@ the Ask popup and the search bars); nothing new is kept:
 
 At most `CHECKED` products and requests are checked against the catalogue
 each time, so the page stays quick.
+
+**What people ask** (Admin, `/admin/people-ask/`, `web/people_ask.py`; the
+owner, 20 Nov 2026, planning how RipRaptor becomes the UK price benchmark:
+"We need to solve a problem that exists"). Everything visitors asked over the
+last 30, 90 or 180 days, sorted into the problems they have: fakes, reseals
+and safe sellers; delivery and the total cost; buy now or wait; RRP,
+pre-orders and release dates; stock and restocks; is it a fair price; what's
+inside; which to buy; languages; and looking for a product. Read from what is
+already kept, nothing new: questions typed to Rip on product pages, the
+one-tap questions, Rip's requests from the list builder, microphone, Ask popup
+and search bars, the site's searches (scanners' probes left out) and visitors'
+messages. Each goes under the first problem its words match (`THEMES`, word
+rules, no Claude, so it costs nothing to open). Problems are ranked by what
+people raise in their own words; the one-tap questions are ones we offer, so
+they are counted but do not rank. Each problem shows up to 8 examples in
+people's own words, with email addresses, links and long numbers taken out
+as Rip's questions are. A Log to copy at the bottom has the whole page as
+text to paste to Claude. Four queries however many questions; staff only,
+never for editors, never cached or indexed.
 
 **Ask Rip to watch a price** (the owner picked it on 15 Nov 2026). Rip's
 reply has `watch` ("price" or "stock") and `watch_price`: "tell me when the

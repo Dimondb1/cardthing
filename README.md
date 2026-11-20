@@ -3671,7 +3671,14 @@ What counts, in order:
   Heroes, Ninja Spinner). These mean Japanese, because Korean and
   Traditional Chinese reuse the codes but say so. English numbering (SV3.5,
   SV08, SWSH12.5), bare codes English shares (SV8, SM6, M2) and set names
-  English shares (Black Bolt, White Flare, 151) say nothing.
+  English shares (Black Bolt, White Flare, 151) say nothing. A kind or set
+  name only mainland China has means Simplified Chinese the same way:
+  Mid-Autumn Festival boxes, and the sets Terastal Grand Gathering, Pursue
+  (or Chasing) Glory Together, Black (or Dark) Crystal Blaze, Blade
+  Awakening, Brilliant Illusions, Paradox Veil, Stellar Crystal and
+  Storming Emergence (`SIMPLIFIED_SETS`). A shop that leaves the language
+  out of one of these then joins the other shops' Simplified Chinese page
+  at the next hourly merge, instead of standing apart as English.
 
 "Chinese" with something that says which Chinese ("Chinese Gem Pack Vol 4",
 "(csv9C) Slim Booster Box Chinese") is that one, here Simplified Chinese.

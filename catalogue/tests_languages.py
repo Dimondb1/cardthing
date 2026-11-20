@@ -312,3 +312,50 @@ class MidAutumnTests(TestCase):
         call_command("merge_duplicates", stdout=StringIO())
         self.assertEqual(Product.objects.filter(pk__in=[chinese.pk, solent.pk], is_active=True).count(), 1)
         self.assertEqual(Listing.objects.filter(retailer__name__in=["eBay", "Solent Cards"]).values("product").distinct().count(), 1)
+
+
+class ChineseOnlySetTests(TestCase):
+    """Sets made only for mainland China: a title naming one with no language is Simplified Chinese, so one shop's
+    "Terastal Grand Gathering Booster Box" joins the six shops' Simplified Chinese box instead of standing apart
+    as English (the owner, 20 Nov 2026: "Why didn't the Claude checks match these")."""
+
+    def test_the_set_names_read_as_simplified_chinese_unless_the_title_says_otherwise(self):
+        for title in ("Terastal Grand Gathering Booster Box", "Pokemon Terastal Grand Crystal Gathering Card Frame",
+                      "Pursue Glory Together Slim Booster Box", "Chasing Glory Together Jumbo Booster Box",
+                      "Black Crystal Blaze Slim Booster Box", "Dark Crystal Blaze Booster Box",
+                      "Blade Awakening Jumbo Booster Box", "Brilliant Illusions Slim Booster Box",
+                      "Paradox Veil Slim Booster Box", "Stellar Crystal Booster Box",
+                      "Storming Emergence Jumbo Booster Box"):
+            with self.subTest(title=title):
+                self.assertEqual(languages.language_of(title, POKEMON), languages.SIMPLIFIED)
+        # What the title states still wins, and only Pokémon's sets count.
+        self.assertEqual(languages.language_of("Terastal Grand Gathering Booster Box Traditional Chinese", POKEMON),
+                         languages.TRADITIONAL)
+        self.assertEqual(languages.language_of("Terastal Grand Gathering Booster Box (Japanese)", POKEMON),
+                         languages.JAPANESE)
+        self.assertEqual(languages.language_of("Blade Awakening Booster Box", "one-piece"), languages.ENGLISH)
+        # The English and Japanese sets they sound like are not them.
+        self.assertEqual(languages.language_of("Stellar Crown Booster Box", POKEMON), languages.ENGLISH)
+        self.assertEqual(languages.language_of("Terastal Festival ex Booster Box", POKEMON), languages.JAPANESE)
+        self.assertEqual(languages.language_of("Paradox Rift Booster Box", POKEMON), languages.ENGLISH)
+
+    def test_the_shop_that_left_out_the_language_is_merged_into_the_chinese_page(self):
+        from io import StringIO
+
+        from django.core.management import call_command
+
+        pset = make_set(make_game())
+        chinese = make_product(pset, name="Simplified Chinese Terastal Grand Gathering Booster Box",
+                               slug="simplified-chinese-terastal-grand-gathering-booster-box",
+                               product_type="booster_box")
+        alone = make_product(pset, name="Terastal Grand Gathering Booster Box",
+                             slug="terastal-grand-gathering-booster-box", product_type="booster_box")
+        Product.objects.filter(pk=alone.pk).update(language=languages.ENGLISH)   # as it was saved before the rule
+        for number, shop in enumerate(("Harbour Games", "Kestrel Cards", "Moorland TCG")):
+            make_listing(chinese, make_retailer(shop), price=f"5{number}.94")
+        make_listing(alone, make_retailer("Wyvern Collectables"), price="55.98")
+        call_command("set_languages", stdout=StringIO())
+        self.assertEqual(Product.objects.get(pk=alone.pk).language, languages.SIMPLIFIED)
+        call_command("merge_duplicates", stdout=StringIO())
+        self.assertEqual(Product.objects.filter(pk__in=[chinese.pk, alone.pk], is_active=True).count(), 1)
+        self.assertEqual(Listing.objects.values("product").distinct().count(), 1)

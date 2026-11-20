@@ -21,7 +21,9 @@ the title states:
 "English", "Eng" or "(EN)" then outweighs what the rest implies, for Pokémon only: a set code with a
 letter after the number (sv2a, s12a, SM12a, M2a), a Japanese-only kind of product (High Class Pack,
 Deck Build Box) or set name (Terastal Festival, Eevee Heroes). Korean and Traditional Chinese reuse the
-Japanese codes, so these mean Japanese only when nothing states another language. A bare code English
+Japanese codes, so these mean Japanese only when nothing states another language. A kind or set name only
+mainland China has (Mid-Autumn Festival boxes, Terastal Grand Gathering, Blade Awakening) means Simplified
+Chinese the same way. A bare code English
 shares (SV3, SV8, SM6, M2, OP-09) says nothing, and neither do set names English shares (Black Bolt,
 White Flare, 151).
 
@@ -204,6 +206,13 @@ JAPANESE_SETS_WITH_KIND = re.compile(
 # language: Solent Cards' "2026 Pokémon Mid-Autumn Festival Gift Box" is the Simplified Chinese box the
 # other shops call so, and was kept apart from it as English (15 Oct 2026).
 SIMPLIFIED_KINDS = re.compile(r"\bmid[- ]?autumn(?: festival)?\b")
+# Simplified-Chinese-only set names: sets made for mainland China, so no English, Japanese, Korean or Traditional
+# Chinese set has the name. A shop that leaves the language out ("Terastal Grand Gathering Booster Box", one shop,
+# kept apart as English from the six shops' Simplified Chinese box, the owner, 20 Nov 2026) is read as the others
+# are. The names shops give them on ripraptor.com, with the translations they differ on.
+SIMPLIFIED_SETS = re.compile(
+    r"\b(?:terastal grand (?:crystal )?gathering|(?:pursue|chasing) glory together|(?:black|dark) crystal blaze|"
+    r"blade awakening|brilliant illusions|paradox veil|stellar crystal|storming emergence)\b")
 # A Japanese-only set joined to another: a mixed bundle.
 JOINED = re.compile(r"\s(?:/|&|\+|and)\s")
 
@@ -291,7 +300,7 @@ def implied(text, game=""):
     if (any(pattern.search(low) for pattern in POKEMON_CODE) or OTHER_JAPANESE_CODE.search(low)
             or JAPANESE_KINDS.search(low) or JAPANESE_SETS.search(low) or JAPANESE_SETS_WITH_KIND.search(low)):
         return JAPANESE
-    if SIMPLIFIED_KINDS.search(low):
+    if SIMPLIFIED_KINDS.search(low) or SIMPLIFIED_SETS.search(low):
         return SIMPLIFIED
     return ENGLISH
 

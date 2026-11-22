@@ -26,7 +26,7 @@
     {% if worker.alive %}
     <p class="ok" id="worker-line"><strong>Background reader running.</strong> Last heartbeat at {{ worker.heartbeat }}.</p>
     {% elif worker.known %}
-    <p class="bad" id="worker-line"><strong>Background reader stopped.</strong> Last heartbeat at {{ worker.heartbeat }}. The hourly schedule reads the shops until it is back.</p>
+    <p class="bad" id="worker-line"><strong>Background reader stopped.</strong> Last heartbeat at {{ worker.heartbeat }}. The hourly schedule reads the shops until it is back. The server checks every five minutes and starts it again, unless an update is running.</p>
     {% else %}
     <p class="bad" id="worker-line"><strong>Background reader not started.</strong> The hourly schedule reads the shops.</p>
     {% endif %}

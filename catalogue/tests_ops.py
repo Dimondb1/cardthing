@@ -398,8 +398,9 @@ class CronTests(TestCase):
         from django.core.cache.backends.filebased import FileBasedCache
 
         text = (DEPLOY / "install.sh").read_text()
+        # Under the update's time limit ($STEP), like every step run while the reader is stopped.
         found = re.search(r"sudo -u ripraptor bash -c \"cd \$DIR && set -a && \. \./\.env && set \+a && "
-                          r"\.venv/bin/python manage\.py shell -c '([^']+)'\"", text)
+                          r"\$STEP \.venv/bin/python manage\.py shell -c '([^']+)'\"", text)
         self.assertIsNotNone(found, "install.sh does not empty the cache")
         self.assertGreater(found.start(), text.index("manage.py migrate"))
         self.assertGreater(found.start(), text.index("systemctl restart ripraptor"))

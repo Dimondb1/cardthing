@@ -118,20 +118,32 @@ ROTATE
 # Football cards became Sports cards at /games/sports-cards/, filed by product line (catalogue/sports.py). The
 # address moves before the language and type steps below read it, with the background reader stopped first so
 # its old code never meets the new address (it is started again at the end). The old pages send visitors on.
+# The reader's safety net (deploy/heal.sh), in place before the reader is stopped: root's cron starts the reader within
+# five minutes whenever it is found not running, whatever became of this script. It holds off only while the mark
+# below is fresh (20 minutes), so an update that hangs or is killed outright (which no trap survives) costs 25 minutes
+# of reading at most, not a night. On 21 Nov 2026 the reader stayed stopped from 18:15 until the owner looked the
+# next morning: "This needs to self heal or recover or not break as much".
+install -m 755 deploy/heal.sh /usr/local/sbin/ripraptor-heal
+printf '%s\n' 'PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin' '*/5 * * * * root /usr/local/sbin/ripraptor-heal' > /etc/cron.d/ripraptor-heal
+chmod 644 /etc/cron.d/ripraptor-heal
+touch /run/ripraptor-updating
 systemctl stop ripraptor-worker 2>/dev/null || true
 # Whatever ends this script from here (a step that fails, the console closed or reconnected, Ctrl+C), the reader
 # starts again on the way out: it is only started at the very end otherwise. On 18 Nov 2026 an update cut short
 # after this point left it stopped overnight, with only the hourly fallback reading the shops. On a normal finish
-# it is already running by then and this does nothing.
-trap 'systemctl start ripraptor-worker 2>/dev/null || true' EXIT
-.venv/bin/python manage.py file_sports_cards
-.venv/bin/python manage.py backfill_restocks >/dev/null
-.venv/bin/python manage.py set_languages >/dev/null
-.venv/bin/python manage.py set_types >/dev/null
-.venv/bin/python manage.py collectstatic --noinput -v0
-.venv/bin/python manage.py setup_shops
+# it is already running by then and this only takes the mark away.
+trap 'rm -f /run/ripraptor-updating; systemctl start ripraptor-worker 2>/dev/null || true' EXIT
+# Every step while the reader is stopped has a time limit: one that hangs is ended, which ends the script and starts
+# the reader on the way out, where before it would have waited for ever with the reader stopped.
+STEP="timeout -k 30 900"
+$STEP .venv/bin/python manage.py file_sports_cards
+$STEP .venv/bin/python manage.py backfill_restocks >/dev/null
+$STEP .venv/bin/python manage.py set_languages >/dev/null
+$STEP .venv/bin/python manage.py set_types >/dev/null
+$STEP .venv/bin/python manage.py collectstatic --noinput -v0
+$STEP .venv/bin/python manage.py setup_shops
 # Products added by hand rather than by a shop read, so they are on the site before any shop lists them.
-.venv/bin/python manage.py import_products catalogue/data/union_arena.csv >/dev/null
+$STEP .venv/bin/python manage.py import_products catalogue/data/union_arena.csv >/dev/null
 grep -q RIPRAPTOR_GEOIP_DB .env || echo "RIPRAPTOR_GEOIP_DB=/var/lib/ripraptor/dbip-country.mmdb" >> .env
 # Pre-order emails go only to alerts asked for from this install on, when the form first promised them.
 # Written once, so a later update never moves the cut-off and an earlier subscriber never hears about pre-orders.
@@ -146,7 +158,7 @@ grep -q RIPRAPTOR_WORKER_THREADS .env || { [ "$(awk '/^MemTotal:/ {print $2}' /p
 # would keep sending there, so it goes and the site's default (settings.py) applies.
 sed -i '/^RIPRAPTOR_GA_ID=G-LGFBHYP6JC$/d' .env
 set -a; . ./.env; set +a
-[ -f /var/lib/ripraptor/dbip-country.mmdb ] || .venv/bin/python manage.py fetch_geoip || true
+[ -f /var/lib/ripraptor/dbip-country.mmdb ] || $STEP .venv/bin/python manage.py fetch_geoip || true
 chown -R ripraptor:ripraptor "$DIR" /var/lib/ripraptor
 
 # Scripts that ran our pages left out of people and clicks (catalogue/automated.py), now rather than at the hour, so
@@ -165,10 +177,10 @@ systemctl restart ripraptor
 # The cache folder outlives a restart, so the new code would read lists the old code pickled for up
 # to five minutes: a query per row for a field a migration added, or an error for one it now sets.
 # Empty it once the old workers have stopped; clearing before the restart would let them refill it.
-sudo -u ripraptor bash -c "cd $DIR && set -a && . ./.env && set +a && .venv/bin/python manage.py shell -c 'from django.core.cache import cache; cache.clear()'"
+sudo -u ripraptor bash -c "cd $DIR && set -a && . ./.env && set +a && $STEP .venv/bin/python manage.py shell -c 'from django.core.cache import cache; cache.clear()'"
 # Then build the lists the home, Deals and drops pages read, so the first visitors after a deploy do not wait
 # for them. A failure leaves them to be built by the first visitor, as before.
-sudo -u ripraptor bash -c "cd $DIR && set -a && . ./.env && set +a && .venv/bin/python manage.py warm_pages" || true
+sudo -u ripraptor bash -c "cd $DIR && set -a && . ./.env && set +a && $STEP .venv/bin/python manage.py warm_pages" || true
 # Cardmarket's catalogue and prices, once, when none are held yet, so matching can start without waiting for the
 # daily read at 6:44. A failure leaves it to that read.
 sudo -u ripraptor bash -c "cd $DIR && set -a && . ./.env && set +a && .venv/bin/python manage.py shell -c 'from catalogue.models import CardmarketProduct; raise SystemExit(0 if CardmarketProduct.objects.exists() else 1)' || timeout -k 30 900 .venv/bin/python manage.py import_cardmarket" || true

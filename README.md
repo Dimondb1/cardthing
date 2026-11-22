@@ -3029,12 +3029,50 @@ the console closed or reconnected, Ctrl+C. On 18 Nov 2026 an update cut
 short in between left it stopped overnight, with only the hourly fallback
 reading the shops.
 
-To stop it, start it or read its log on the server:
+**It starts itself again when left stopped** (`deploy/heal.sh`; the owner,
+22 Nov 2026, after it stayed stopped from 18:15 until the next morning:
+"This needs to self heal or recover or not break as much"). systemd restarts
+a reader that exits or whose heartbeat stops, but never one that was stopped
+on purpose, and an update stops it. The trap above cannot run when the
+update hangs or is killed outright. So `install.sh` installs a check of its
+own, `/usr/local/sbin/ripraptor-heal`, which root's cron
+(`/etc/cron.d/ripraptor-heal`) runs every five minutes: a reader found not
+running is started, and the import log says so ("heal: the background reader
+was not running (inactive); started it"). It depends on neither the update,
+the site nor the reader's code. It leaves the reader alone while it is
+running or systemd is already starting it, while an update is under way
+(`install.sh` touches `/run/ripraptor-updating` when it stops the reader and
+removes it on the way out; a mark over 20 minutes old is an update that died
+and no longer counts), and when the reader was switched off for good. So the
+longest an update can leave it stopped is about 25 minutes.
+
+- Every step `install.sh` runs while the reader is stopped has a time limit
+  (`$STEP`, 15 minutes): one that hangs is ended, which ends the script and
+  starts the reader on the way out.
+- A reader that starts ten minutes or more after its last heartbeat says how
+  long it was not running, on Crawl health's Last restart line and in its
+  log ("Started at 08:05 after 13 hours 50 minutes not running, since 21 Nov
+  18:15."), so an outage that mended itself is still seen. Its own restarts
+  (a stuck read, memory) are back within seconds and keep their own note.
+- `why_down.sh` section 5 says whether the safety net is installed, when it
+  last started the reader, an update's mark, and any update step or scheduled
+  command still running after 30 minutes.
+
+To stop it for a moment, start it or read its log on the server (stopped
+this way it comes back within five minutes):
 
 ```sh
 sudo systemctl stop ripraptor-worker
 sudo systemctl start ripraptor-worker
 journalctl -u ripraptor-worker -f
+```
+
+To keep it stopped, switch it off, and on again later. Pause all on the
+Crawl health page is the everyday way to stop its reads.
+
+```sh
+sudo systemctl disable --now ripraptor-worker
+sudo systemctl enable --now ripraptor-worker
 ```
 
 `run_worker --once` plans once, runs every job due in the calling thread

@@ -412,6 +412,19 @@ class Job:
         return self.read_began or self.started
 
 
+# A start this long after the last heartbeat follows an outage, which Crawl health then says. A restart of the
+# reader's own (a stuck read, memory) is back within seconds and keeps the note that says why.
+DOWN_NOTE = timedelta(minutes=10)
+
+
+def down_for(delta):
+    """How long, to the minute: "45 minutes", "13 hours 50 minutes", "2 days 3 hours"."""
+    total = max(1, int(delta.total_seconds() // 60))
+    days, hours, mins = total // 1440, (total % 1440) // 60, total % 60
+    parts = [(days, "day"), (hours, "hour")] if days else [(hours, "hour"), (mins, "minute")]
+    return " ".join(f"{number} {unit}{'' if number == 1 else 's'}" for number, unit in parts if number)
+
+
 def deadline_for(task):
     if task.kind == PROBE:
         return PROBE_DEADLINE
@@ -1160,7 +1173,16 @@ class Worker:
             except (KeyError, TypeError, ValueError):
                 continue
         closed += importers.close_abandoned_runs(now=now)
-        WorkerState.objects.filter(pk=1).update(in_flight=[], started_at=now, heartbeat_at=now, jobs_done=0)
+        fields = {"in_flight": [], "started_at": now, "heartbeat_at": now, "jobs_done": 0}
+        last = state.heartbeat_at
+        if last is not None and now - last >= DOWN_NOTE:
+            # Stopped and left stopped (an update cut short), or the server was off: say for how long, on Crawl health
+            # and in the log, so an outage that mended itself is still seen.
+            note = (f"Started at {crawl.clock(now, now)} after {down_for(now - last)} not running, "
+                    f"since {crawl.clock(last, now)}.")
+            fields["note"] = note[:300]
+            logger.warning("Background reader: %s", note)
+        WorkerState.objects.filter(pk=1).update(**fields)
         self.last_beat = now
         sd_notify("READY=1")
         return closed

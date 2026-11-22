@@ -1407,6 +1407,105 @@ class SharedDatabaseTests(TestCase):
             self.assertEqual(DailyPageView.objects.get(key="busy").hits, len(counted))
 
 
+TRAP = "trap 'rm -f /run/ripraptor-updating; systemctl start ripraptor-worker 2>/dev/null || true' EXIT"
+
+
+class HealTests(TestCase):
+    """deploy/heal.sh, run by root's cron every five minutes: the reader is started whenever it is found not running,
+    whatever stopped it, unless an update is under way or it was switched off for good. On 21 Nov 2026 it stayed
+    stopped from 18:15 until the owner looked the next morning: "This needs to self heal or recover or not break as
+    much"."""
+
+    def heal(self, state, enabled=True, mark=None, start_fails=False):
+        """Run the check against a pretend systemctl. Returns (the calls that change something, the log)."""
+        import shutil
+        import subprocess
+
+        if not shutil.which("bash"):
+            self.skipTest("no bash")
+        script = Path(__file__).resolve().parent.parent / "deploy" / "heal.sh"
+        with tempfile.TemporaryDirectory() as folder:
+            fake = Path(folder) / "systemctl"
+            fake.write_text(
+                "#!/bin/sh\n"
+                f'case "$1" in\n'
+                f'  show) echo "{state}" ;;\n'
+                f'  is-enabled) exit {0 if enabled else 1} ;;\n'
+                f'  start) echo "$@" >> {folder}/calls; exit {1 if start_fails else 0} ;;\n'
+                f'  *) echo "$@" >> {folder}/calls ;;\n'
+                "esac\n")
+            fake.chmod(0o755)
+            marker = Path(folder) / "updating"
+            if mark is not None:
+                marker.touch()
+                old = datetime.now().timestamp() - mark * 60
+                os.utime(marker, (old, old))
+            env = {**os.environ, "PATH": f"{folder}:{os.environ['PATH']}", "RIPRAPTOR_HEAL_MARK": str(marker),
+                   "RIPRAPTOR_HEAL_LOG": f"{folder}/log"}
+            done = subprocess.run(["bash", str(script)], env=env, capture_output=True, text=True, timeout=20)
+            self.assertEqual(done.returncode, 0, done.stderr)
+            calls = (Path(folder) / "calls").read_text().split("\n") if (Path(folder) / "calls").exists() else []
+            log = (Path(folder) / "log").read_text() if (Path(folder) / "log").exists() else ""
+            return [call for call in calls if call], log
+
+    def test_a_reader_found_stopped_or_failed_is_started_and_the_log_says_so(self):
+        for state in ("inactive", "failed"):
+            with self.subTest(state=state):
+                calls, log = self.heal(state)
+                self.assertEqual(calls, ["reset-failed ripraptor-worker", "start ripraptor-worker"])
+                self.assertIn(f"heal: the background reader was not running ({state}); started it", log)
+
+    def test_a_running_reader_or_one_systemd_is_already_starting_is_left_alone(self):
+        for state in ("active", "activating", "deactivating"):
+            with self.subTest(state=state):
+                self.assertEqual(self.heal(state), ([], ""))
+
+    def test_it_waits_while_an_update_is_under_way_but_not_for_one_that_died(self):
+        self.assertEqual(self.heal("inactive", mark=3), ([], ""))
+        calls, log = self.heal("inactive", mark=45)   # the update hung or was killed: its mark is old
+        self.assertEqual(calls[-1], "start ripraptor-worker")
+        self.assertIn("started it", log)
+
+    def test_a_reader_switched_off_for_good_stays_off(self):
+        self.assertEqual(self.heal("inactive", enabled=False), ([], ""))
+
+    def test_a_start_that_fails_is_logged_and_tried_again_next_time(self):
+        calls, log = self.heal("failed", start_fails=True)
+        self.assertEqual(calls[-1], "start ripraptor-worker")
+        self.assertIn("could not be started", log)
+
+
+class DownNoteTests(WorkerTestCase):
+    """A reader that starts after an outage says how long it was not running, on Crawl health and in its log, so an
+    outage that mended itself is still seen. Its own restarts (a stuck read, memory) keep the note that says why."""
+
+    def test_a_start_long_after_the_last_heartbeat_says_how_long_it_was_down(self):
+        now = self.clock()
+        WorkerState.objects.update_or_create(pk=1, defaults={
+            "heartbeat_at": now - timedelta(hours=13, minutes=50), "note": "An older note."})
+        with self.assertLogs("catalogue", level="WARNING") as logs:
+            self.make_worker().begin()
+        note = WorkerState.load().note
+        self.assertTrue(note.startswith("Started at "), note)
+        self.assertIn("after 13 hours 50 minutes not running, since ", note)
+        self.assertIn("Background reader: Started at", "\n".join(logs.output))
+
+    def test_a_restart_of_its_own_keeps_the_note_that_says_why(self):
+        now = self.clock()
+        WorkerState.objects.update_or_create(pk=1, defaults={
+            "heartbeat_at": now - timedelta(seconds=40), "note": "Read Harbour Games ran past its limit."})
+        self.make_worker().begin()
+        self.assertEqual(WorkerState.load().note, "Read Harbour Games ran past its limit.")
+
+    def test_how_long_in_words(self):
+        for delta, words in [(timedelta(minutes=45), "45 minutes"), (timedelta(hours=1), "1 hour"),
+                             (timedelta(hours=13, minutes=50), "13 hours 50 minutes"),
+                             (timedelta(days=2, hours=3, minutes=20), "2 days 3 hours"),
+                             (timedelta(seconds=5), "1 minute")]:
+            with self.subTest(words=words):
+                self.assertEqual(worker.down_for(delta), words)
+
+
 class UpdateRestartsTheReaderTests(TestCase):
     """deploy/install.sh stops the reader near its start and starts it at its end. On 18 Nov 2026 an update cut short
     in between left it stopped overnight; the owner: "Why did the crawl stop at night last night"."""
@@ -1417,10 +1516,35 @@ class UpdateRestartsTheReaderTests(TestCase):
     def test_the_way_out_starts_it_again_set_right_after_it_is_stopped(self):
         text = self.install()
         stop = text.index("systemctl stop ripraptor-worker")
-        trap = text.index("trap 'systemctl start ripraptor-worker 2>/dev/null || true' EXIT")
+        trap = text.index(TRAP)
         self.assertLess(stop, trap)
         self.assertNotIn("manage.py", text[stop:trap])   # nothing that could fail runs between them
         self.assertLess(trap, text.index("systemctl restart ripraptor-worker"))
+
+    def test_the_safety_net_and_the_update_mark_are_in_place_before_it_is_stopped(self):
+        text = self.install()
+        stop = text.index("systemctl stop ripraptor-worker")
+        for line in ("install -m 755 deploy/heal.sh /usr/local/sbin/ripraptor-heal",
+                     "'*/5 * * * * root /usr/local/sbin/ripraptor-heal' > /etc/cron.d/ripraptor-heal",
+                     "touch /run/ripraptor-updating"):
+            with self.subTest(line=line):
+                self.assertLess(text.index(line), stop)
+        # The mark is the one the check reads, and the way out takes it away.
+        heal = (Path(__file__).resolve().parent.parent / "deploy" / "heal.sh").read_text()
+        self.assertIn('MARK="${RIPRAPTOR_HEAL_MARK:-/run/ripraptor-updating}"', heal)
+        self.assertIn("rm -f /run/ripraptor-updating;", TRAP)
+
+    def test_every_step_while_it_is_stopped_has_a_time_limit(self):
+        # A step that hangs keeps the script, and so the way out that starts the reader, from ever being reached.
+        text = self.install()
+        stopped = text[text.index(TRAP):text.index("systemctl restart ripraptor-worker")]
+        steps = [line for line in stopped.splitlines() if "manage.py" in line and not line.lstrip().startswith("#")
+                 and "crontab" not in line and " * * " not in line]
+        self.assertGreater(len(steps), 10)
+        for line in steps:
+            with self.subTest(line=line[:90]):
+                self.assertRegex(line, r"\$STEP |timeout -k \d+ \d+ ")
+        self.assertIn('STEP="timeout -k 30 900"', stopped)
 
     def test_an_update_cut_short_by_an_error_or_a_closed_console_still_starts_it(self):
         import shutil
@@ -1430,15 +1554,18 @@ class UpdateRestartsTheReaderTests(TestCase):
 
         if not shutil.which("bash"):
             self.skipTest("no bash")
-        line = next(row for row in self.install().splitlines() if row.startswith("trap 'systemctl start ripraptor-worker"))
+        line = next(row for row in self.install().splitlines() if row == TRAP)
         with tempfile.TemporaryDirectory() as folder:
             fake = Path(folder) / "systemctl"
             fake.write_text(f'#!/bin/sh\necho "$@" >> {folder}/calls\n')
             fake.chmod(0o755)
             env = {**os.environ, "PATH": f"{folder}:{os.environ['PATH']}"}
             # A step that fails under set -e.
+            line = line.replace("/run/ripraptor-updating", f"{folder}/updating")
+            (Path(folder) / "updating").touch()
             subprocess.run(["bash", "-c", f"set -euo pipefail; systemctl stop ripraptor-worker; {line}; false; echo never"],
                            env=env, capture_output=True)
+            self.assertFalse((Path(folder) / "updating").exists())   # the mark goes on the way out
             self.assertEqual((Path(folder) / "calls").read_text().split("\n")[:2],
                              ["stop ripraptor-worker", "start ripraptor-worker"])
             # The console closed part way through: the shell is hung up on.

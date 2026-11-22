@@ -30,6 +30,11 @@ echo "page views that met a locked database: $(j -u ripraptor | grep -c 'databas
 h "5 Background reader and Caddy: stops, starts, kills"
 j -u ripraptor-worker | grep -E 'systemd\[1\]|Background reader started' | grep -v -E 'Consumed|Deactivated' | tail -n 6 | cut -c1-100 | show
 j -u caddy | grep 'systemd\[1\]' | grep -v -E 'Consumed|Deactivated' | tail -n 4 | cut -c1-100 | show
+# The reader's safety net (deploy/heal.sh): when it last started the reader, an update's mark, and anything an update
+# or the schedule started more than 30 minutes ago that is still going (a hung step keeps the reader stopped).
+echo "safety net: $([ -x /usr/local/sbin/ripraptor-heal ] && [ -f /etc/cron.d/ripraptor-heal ] && echo installed || echo missing), update mark: $(date -r /run/ripraptor-updating '+%a %d %b %H:%M' 2>/dev/null || echo none)"
+grep -h 'heal:' "$L" 2>/dev/null | tail -n 3 | cut -c1-100 | show
+ps -eo etimes=,etime=,args= 2>/dev/null | awk '1800 < $1' | grep -E '[b]ash -s |[m]anage.py' | grep -v run_worker | cut -c1-100 | head -n 4 | show
 h "6 Caddy could not reach the site (visitors got 502): busiest minutes, first and last"
 c=$(j -u caddy | grep -E 'dial tcp|"status":50[0-9]|upstream|reset by peer')
 if [ -z "$c" ]; then echo '(nothing)'; else

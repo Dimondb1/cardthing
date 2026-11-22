@@ -373,15 +373,31 @@ STORY_CHIPS = {"lowest": ("product.fair.verdict_lowest", BRAND_SOFT, BRAND_TEXT)
 SET_CODE = re.compile(r"\(([A-Za-z]{1,4}-?\d{1,3}[A-Za-z]?)\)")   # "(OP-11)" in a name
 
 
-def story_image(product, summary, store=None):
-    """The story's picture as PNG bytes, kept POST_SECONDS for the same price, as the post's is."""
+STORY_BADGE_MOST, STORY_LINE_MOST = 24, 40      # the owner's own words on a story (web/story_deals.py), at most
+
+
+def story_words(text, most):
+    """The owner's own words for a story's picture: one line, printable, at most ``most`` characters."""
+    words = ("".join(ch for ch in word if ch.isprintable()) for word in (text or "").split())
+    return " ".join(word for word in words if word)[:most].strip()
+
+
+def story_image(product, summary, store=None, badge="", line=""):
+    """The story's picture as PNG bytes, kept POST_SECONDS for the same price, as the post's is. ``badge`` and
+    ``line`` are the owner's own words for the chip on the photo and the line under the price (the Story deals page,
+    web/story_deals.py): each kept apart, so the product page's picture is never one of them."""
+    import hashlib
+
     from django.core.cache import cache
 
+    badge, line = story_words(badge, STORY_BADGE_MOST), story_words(line, STORY_LINE_MOST)
     key = post_image_key(product, summary, kind="story-image:v2")
+    if badge or line:
+        key += ":" + hashlib.sha256(f"{badge}\x00{line}".encode()).hexdigest()[:16]
     found = cache.get(key)
     if found is not None:
         return found
-    png = draw_story(product, summary, photo_bytes(product), store)
+    png = draw_story(product, summary, photo_bytes(product), store, badge=badge, line=line)
     cache.set(key, png, POST_SECONDS)
     return png
 
@@ -511,8 +527,10 @@ def story_facts(product, best, store=None):
     return facts
 
 
-def draw_story(product, summary, photo, store=None):
-    """The picture, as the marketing team's template (story_mock.png): see the notes above."""
+def draw_story(product, summary, photo, store=None, badge="", line=""):
+    """The picture, as the marketing team's template (story_mock.png): see the notes above. ``badge`` is the owner's
+    own words for the chip on the photo, in place of the Price check's, and ``line`` his own line under the price, in
+    place of what it is under the RRP (the Story deals page)."""
     from io import BytesIO
 
     from PIL import Image, ImageDraw
@@ -525,7 +543,11 @@ def draw_story(product, summary, photo, store=None):
     best = post_lead(product, summary)
     check = product.price_check if best is not None and best is summary.best else None
     chip = STORY_CHIPS.get(check.key) if check is not None else None
+    if badge:
+        chip = ("", BRAND_SOFT, BRAND_TEXT)
     saving = story_saving(product, best)
+    # Under the price: the owner's own line when he gave one, else what the price is under the RRP, when it is.
+    under = line or (copy.get("product.share.story_saving", store=store, saving=f"£{saving:,.2f}") if saving else "")
     facts = story_facts(product, best, store)
 
     # The name: the largest size that fits two lines, else the smallest, cut.
@@ -550,7 +572,7 @@ def draw_story(product, summary, photo, store=None):
 
     # Heights, top to bottom, and the well takes up what a long name or a saving needs.
     rest = (STORY_PAD_TOP + STORY_HEAD + 28 + 38 + len(names) * title_line
-            + (26 + price_font.size if best is not None else 0) + (14 + 50 if saving else 0)
+            + (26 + price_font.size if best is not None else 0) + (14 + 50 if under else 0)
             + 30 + len(facts) * STORY_ICON + (len(facts) - 1) * 18 + 40 + STORY_SEARCH + STORY_PAD)
     room = STORY_FOOT - STORY_TOP
     well_height = max(STORY_WELL_LEAST, min(STORY_WELL, room - rest))
@@ -588,8 +610,8 @@ def draw_story(product, summary, photo, store=None):
             paste_centred(story, grey, well)
     if chip is not None:
         key, ground, ink = chip
-        words = copy.get(key, store=store)
         chip_font = post_font(34, 800, 24)
+        words = fit_lines(draw, badge, chip_font, inner - 60 - 52, lines=1)[0] if badge else copy.get(key, store=store)
         chip_width = draw.textlength(words, font=chip_font) + 52
         box = (x + 30, y + 30, x + 30 + chip_width, y + 30 + 58)
         draw.rounded_rectangle(box, radius=29, fill=ground)
@@ -606,10 +628,12 @@ def draw_story(product, summary, photo, store=None):
         taken = tracked_text(draw, (x, baseline), price_words, price_font, PRICE, tracking)
         draw.text((x + taken + 22, baseline), after, font=after_font, fill=INK_MUTED, anchor="ls")
         y += price_font.size
-    if saving:
+    if under:
         y += 14
-        draw.text((x, y), copy.get("product.share.story_saving", store=store, saving=f"£{saving:,.2f}"),
-                  font=post_font(42, 700, 24), fill=PRICE)
+        under_font = post_font(42, 700, 24)
+        # A saving is green, as every saving on the site; the owner's own line is plain ink.
+        draw.text((x, y), fit_lines(draw, under, under_font, inner, lines=1)[0], font=under_font,
+                  fill=INK if line else PRICE)
         y += 50
 
     # The facts, each beside its icon.

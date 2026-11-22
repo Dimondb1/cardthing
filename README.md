@@ -5917,7 +5917,7 @@ categorisation") is laid out in three parts:
   Merge two products, Products, Sets, Your data in Excel (owner only).
   **Shops**: Crawl health, Shops, Add shops, Shop delivery, Shops asking to
   be listed, Shop outreach, eBay health, Amazon. **Site**: Site look, Drop
-  spotlight, Partners, Seasonal themes, Site text, Refer a friend (while it
+  spotlight, Partners, Seasonal themes, Story deals, Site text, Refer a friend (while it
   runs). **Settings**: Claude, Email sending, Sending shop emails, Visitor
   check. **Guides**: Guides, Fair Price Checker. One column on a phone, two
   on a tablet, three on a computer.
@@ -7381,6 +7381,35 @@ the Ask popup and the search bars); nothing new is kept:
 
 At most `CHECKED` products and requests are checked against the catalogue
 each time, so the page stays quick.
+
+**Story deals** (Admin, Site, `/admin/story-deals/`, `web/story_deals.py`;
+the owner, 22 Nov 2026: "I need a list of ebay products to add to my insta
+stories easily ... a one tap carousel of great deals where I can customise
+the advert slightly if I need to"). Products in stock whose cheapest
+delivered price is an eBay seller's (or any seller's, with Every seller) and
+whose Price check says Good price or Lowest yet, the lowest yet first, at
+most 30. A doubtful price is never offered. Each is a card in a row that
+swipes sideways, with the story picture the product page's Share to story
+makes (`share.story_image`), the price, the eBay seller and their feedback,
+and when it was checked.
+
+- **Share to story** hands the picture to the phone's share sheet, where
+  Instagram offers Stories, and copies the product's link for the story's
+  link sticker (`story-deals.js`; a web page cannot fill the sticker in). The
+  link is tagged `utm_source=instagram_story`, `utm_campaign=story_deals`.
+  Each picture is fetched as its card loads, so the sheet opens at once on a
+  tap. Without script the button saves the picture and the link is there to
+  copy.
+- **The advert can be changed a little**: the words on the photo's badge (24
+  characters at most, in place of the Price check's) and a line of the
+  owner's own under the price (40, in place of what it is under the RRP).
+  The picture follows as they are typed; without script Update the picture
+  reloads the page. They are his words, drawn as typed; the price, the shops
+  compared and the checked time stay the site's own. The product page's own
+  story picture is never one with his words on it (kept apart in the cache).
+- Staff only, never for editors, never cached or indexed; the picture
+  (`/admin/story-deals/<slug>/story.png`) too. The same queries however many
+  deals.
 
 **What people ask** (Admin, `/admin/people-ask/`, `web/people_ask.py`; the
 owner, 20 Nov 2026, planning how RipRaptor becomes the UK price benchmark:

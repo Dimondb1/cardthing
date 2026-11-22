@@ -1,0 +1,58 @@
+{% extends "admin/base_site.html" %}
+{% load static ripraptor %}
+{% block title %}Story deals | {{ site_title }}{% endblock %}
+{% block extrahead %}{{ block.super }}<meta name="robots" content="noindex, nofollow"><script nonce="{{ csp_nonce }}" src="{% static 'js/story-deals.js' %}" defer></script>{% endblock %}
+{% block extrastyle %}{{ block.super }}<style>
+  .story-deals { display: grid; gap: 16px; max-width: 72rem; }
+  .story-deals p { margin: 0; }
+  .story-deals .note, .story-deals .muted { color: var(--body-quiet-color); }
+  .story-deals .sources { display: flex; gap: 14px; flex-wrap: wrap; }
+  .story-deals .sources strong { font-weight: 600; }
+  /* The row of deals: it swipes sideways and stops on each card. */
+  .deals { list-style: none; margin: 0; padding: 0 0 10px; display: flex; gap: 14px; overflow-x: auto; scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch; }
+  .deal { flex: 0 0 min(82vw, 300px); scroll-snap-align: center; display: grid; gap: 10px; align-content: start; padding: 10px; border: 1px solid var(--hairline-color); border-radius: 10px; }
+  .deal__picture { display: block; width: 100%; height: auto; aspect-ratio: 9 / 16; border-radius: 8px; background: var(--darkened-bg); }
+  .deal h2 { margin: 0; font-size: 1em; overflow-wrap: anywhere; }
+  .deal__facts { font-size: 0.9em; }
+  /* Spelled a.deal__share:link so the admin's own link colour, which is the button's ground, does not win. */
+  .story-deals a.deal__share:link, .story-deals a.deal__share:visited { display: block; padding: 12px 10px; border-radius: 8px; background: var(--button-bg); color: var(--button-fg); font-weight: 600; text-align: center; text-decoration: none; }
+  .story-deals a.deal__share:hover, .story-deals a.deal__share:focus-visible { background: var(--button-hover-bg); color: var(--button-fg); }
+  .deal form { display: grid; gap: 6px; }
+  .deal label { display: grid; gap: 2px; font-size: 0.85em; color: var(--body-quiet-color); }
+  .deal input[type="text"] { width: 100%; box-sizing: border-box; }
+  .deal__link { display: flex; gap: 6px; }
+  .deal__link input { flex: 1; min-width: 0; font-size: 0.8em; }
+  .deal__said { min-height: 1.3em; font-size: 0.9em; }
+</style>{% endblock %}
+{% block breadcrumbs %}<div class="breadcrumbs"><a href="{% url 'admin:index' %}">Home</a> &rsaquo; Story deals</div>{% endblock %}
+{% block content %}
+<div class="story-deals">
+  <p class="sources">{% for key, label in sources %}{% if key == source %}<strong>{{ label }}</strong>{% else %}<a href="?from={{ key }}">{{ label }}</a>{% endif %}{% endfor %}</p>
+  <p>{{ cards|length }} deal{{ cards|length|pluralize }} ready for a story: in stock, {% if source == "ebay" %}cheapest at an eBay seller{% else %}at any seller{% endif %}, and a Good price or the Lowest yet on the Price check. Swipe through them.</p>
+  <p class="note">Share to story sends the picture to your phone's share sheet and copies the product's link. In Instagram choose Stories, add a link sticker and paste. Only you see this page.</p>
+
+  {% if cards %}
+  <ol class="deals" data-deals data-making="Making the picture." data-shared="Link copied. In Instagram, add a link sticker and paste it." data-saved="Picture saved and link copied. Add both to your story." data-saved-only="Picture saved." data-copied="Link copied." data-failed="The picture could not be made. Try again.">
+    {% for card in cards %}{% with product=card.product lead=card.lead %}
+    <li class="deal" id="deal-{{ product.slug }}" data-deal data-picture="{{ card.picture }}" data-file="{{ card.file }}">
+      <img class="deal__picture" src="{{ card.shown }}" alt="Story picture: {{ product.name }}" width="270" height="480" loading="lazy" data-deal-picture>
+      <a class="deal__share" href="{{ card.shown }}" download="{{ card.file }}" data-deal-share data-link="{{ card.link }}">Share to story</a>
+      <p class="deal__said" data-deal-said aria-live="polite"></p>
+      <h2><a href="{{ product.get_absolute_url }}" target="_blank" rel="noopener">{{ product.name }}</a></h2>
+      <p class="deal__facts">{{ lead.shown_price|gbp }} delivered &middot; {{ lead.retailer.name }}{% if lead.seller_name %}: {{ lead.seller_name }}{% if lead.seller_feedback is not None %} ({{ lead.seller_feedback }}%{% if lead.seller_ratings %} of {{ lead.seller_ratings }}{% endif %}){% endif %}{% endif %}{% if lead.seller_note %} &middot; {{ lead.get_seller_note_display }}{% endif %}</p>
+      <p class="deal__facts muted">{{ card.check }}{% if card.saving %} &middot; {{ card.saving }}{% endif %} &middot; checked {{ lead.last_checked|ago }}</p>
+      <form method="get" action="#deal-{{ product.slug }}" data-deal-form>
+        <input type="hidden" name="from" value="{{ source }}"><input type="hidden" name="p" value="{{ product.slug }}">
+        <label>Badge on the photo<input type="text" name="badge" value="{{ card.badge }}" maxlength="{{ badge_most }}" placeholder="{{ card.check }}" autocomplete="off"></label>
+        <label>Your line under the price<input type="text" name="line" value="{{ card.line }}" maxlength="{{ line_most }}" placeholder="{{ card.saving|default:'Optional' }}" autocomplete="off"></label>
+        <button type="submit">Update the picture</button>
+      </form>
+      <p class="deal__link"><input type="text" value="{{ card.link }}" readonly aria-label="Link for the story's link sticker" data-deal-link><button type="button" data-deal-copy hidden>Copy link</button></p>
+    </li>
+    {% endwith %}{% endfor %}
+  </ol>
+  {% else %}
+  <p>No deals to post now{% if source == "ebay" %}: no product in stock is cheapest at an eBay seller with a Good price or the Lowest yet. <a href="?from=all">See every seller</a>{% endif %}.</p>
+  {% endif %}
+</div>
+{% endblock %}

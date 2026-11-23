@@ -24,6 +24,7 @@ SEASON_DIR = Path(settings.BASE_DIR) / "web" / "templates" / "web" / "includes" 
 CSS = (Path(settings.BASE_DIR) / "web" / "static" / "css" / "site.css").read_text(encoding="utf-8")
 TOKENS = (Path(settings.BASE_DIR) / "web" / "static" / "css" / "tokens.css").read_text(encoding="utf-8")
 CHRISTMAS_DAY = date(2026, 12, 25)
+HALLOWEEN = date(2026, 10, 31)
 BETWEEN = date(2026, 11, 2)
 
 
@@ -71,9 +72,9 @@ class SwitchTests(TestCase):
 
     def test_a_theme_dresses_the_site_by_itself_during_its_dates(self):
         seasons.remember()   # never opened in Admin: on, as the owner asked
-        html = self.home(CHRISTMAS_DAY)
-        self.assertIn('data-season="christmas"', html)
-        self.assertIn('id="season-garland-christmas"', html)
+        html = self.home(HALLOWEEN)
+        self.assertIn('data-season="halloween"', html)
+        self.assertIn('id="season-garland-halloween"', html)
         # The hat sits inside the logo's link, drawn in the logo's own units, and every piece is hidden from
         # screen readers.
         wordmark = html[html.index('<a class="wordmark"'):html.index("</a>", html.index('<a class="wordmark"'))]
@@ -83,15 +84,17 @@ class SwitchTests(TestCase):
         self.assertEqual(html.count('class="season-scene season-scene--'), 2)
         for svg in re.findall(r"<svg class=\"season-[^>]*>", html):
             self.assertIn('aria-hidden="true"', svg)
-        # The product page wears the hat and the lights, not the home page's pictures.
-        with on_day(CHRISTMAS_DAY):
+        # The product page wears the hat and the decorations, not the home page's pictures.
+        with on_day(HALLOWEEN):
             page = self.client.get(self.product.get_absolute_url()).content.decode()
         self.assertIn('class="season-hat"', page)
+        self.assertIn("season-garland", page)
         self.assertNotIn("season-scenes", page)
         # Between seasons the site has its usual look.
         html = self.home(BETWEEN)
         self.assertNotIn("data-season", html)
         self.assertNotIn("season-", html)
+        self.assertNotIn("gifts", html)
 
     def test_the_owners_switch_turns_every_theme_off_and_on_at_once(self):
         row = SeasonalThemes.load()
@@ -194,9 +197,14 @@ class AdminTests(TestCase):
 class ArtworkTests(TestCase):
     def test_every_theme_has_its_hat_decorations_and_pictures(self):
         for theme in seasons.THEMES:
-            for part in ("hat", "garland", "scene"):
+            for part in seasons.ART:
                 with self.subTest(theme=theme.key, part=part):
-                    self.assertTrue((SEASON_DIR / f"{theme.key}_{part}.html").exists())
+                    drawn = (SEASON_DIR / f"{theme.key}_{part}.html").exists()
+                    self.assertEqual(drawn, part in theme.art)
+                    self.assertEqual(getattr(theme, part), f"web/includes/season/{theme.key}_{part}.html" if drawn else "")
+        # Christmas is the wrap: the hat stays, the lights and the pictures are gone.
+        self.assertEqual(seasons.BY_KEY["christmas"].art, ("hat",))
+        self.assertTrue(all(theme.art == seasons.ART for theme in seasons.THEMES if theme.key != "christmas"))
 
     def test_every_colour_is_a_token(self):
         used = set()
@@ -212,3 +220,162 @@ class ArtworkTests(TestCase):
         block = CSS[CSS.index("/* Seasonal themes"):CSS.index("/* The drop spotlight")]
         self.assertNotIn("@keyframes", block)
         self.assertNotIn("animation", block)
+
+
+class ChristmasTests(TestCase):
+    """Christmas, as the owner asked on 23 Nov 2026: "not just adding some bullshit lights like we've done
+    originally". The site is wrapped as a foil booster pack, and the home page helps a present buyer."""
+
+    def setUp(self):
+        cache.clear()
+        self.addCleanup(cache.clear)
+        game = make_game()
+        self.product = make_product(make_set(game), name="Surging Sparks Booster Box", product_type="booster_box")
+        make_listing(self.product, make_retailer("Harbour Games"), price="87.00")
+        self.pack = make_product(make_set(game, name="Journey Together", slug="journey-together", code="JTG"),
+                                 name="Journey Together Booster Pack", product_type="booster_pack")
+        make_listing(self.pack, make_retailer("Northgate Cards"), price="4.25")
+
+    def home(self, day=date(2026, 12, 5), **params):
+        with on_day(day):
+            seasons.remember()
+            return self.client.get(reverse("web:home"), params).content.decode()
+
+    def test_the_site_is_wrapped_with_no_lights_and_no_pictures(self):
+        html = self.home()
+        self.assertIn('data-season="christmas"', html)
+        self.assertIn('class="season-hat"', html)
+        self.assertNotIn("season-garland", html)
+        self.assertNotIn("season-scene", html)
+        # The phone browser's own bar takes the wrap's colour: one tag, which the look scripts leave alone.
+        wrap = re.search(r"  --season-wrap: (#[0-9a-f]{6});", TOKENS).group(1)
+        self.assertEqual(seasons.BY_KEY["christmas"].bar, wrap)
+        self.assertEqual(re.findall(r'<meta name="theme-color"[^>]*>', html), [f'<meta name="theme-color" content="{wrap}">'])
+        self.assertIn("""querySelectorAll('meta[name="theme-color"][media]')""", html)
+        script = (Path(settings.BASE_DIR) / "web" / "static" / "js" / "site.js").read_text(encoding="utf-8")
+        self.assertIn("""querySelectorAll('meta[name="theme-color"][media]')""", script)
+        # Any other day the bar is the page's own colour, light or dark.
+        with on_day(BETWEEN):
+            usual = self.client.get(reverse("web:home")).content.decode()
+        self.assertEqual(len(re.findall(r'<meta name="theme-color"[^>]*media=', usual)), 2)
+        # The visitor check is a plain page whatever the season.
+        check = (Path(settings.BASE_DIR) / "web" / "templates" / "web" / "botcheck.html").read_text(encoding="utf-8")
+        self.assertIn('{% include "web/includes/theme_head.html" with season=None %}', check)
+
+    def test_the_wrap_is_drawn_from_tokens_only_where_the_dark_colours_are_known(self):
+        block = CSS[CSS.index("/* The Christmas wrap."):CSS.index("/* Gifts by budget")]
+        inside = block[block.index("@supports (color: light-dark(black, white)) {"):]
+        # Outside the test for the dark colours: only the room for the hat. An older browser keeps its header.
+        outside = block[:block.index("@supports")]
+        self.assertNotIn("--season-wrap", outside.split("*/")[-1])
+        self.assertIn('[data-season="christmas"] :is(.masthead, .hero, .site-footer) { color-scheme: dark; background-color: var(--season-wrap); }', inside)
+        # What belongs to the page keeps the page's look, light or dark or the visitor's choice.
+        self.assertIn('[data-season="christmas"] :is(.masthead__search, .hero__search, .nav-games__menu) { color-scheme: var(--page-scheme); }', inside)
+        for line in ("  :root { --page-scheme: light dark; }", '  :root[data-theme="light"] { color-scheme: light; --page-scheme: light; }',
+                     '  :root[data-theme="dark"] { color-scheme: dark; --page-scheme: dark; }'):
+            self.assertIn(line, TOKENS)
+        # The header's own edge gives way to the headline's on the usual home page, and the footer's is turned over.
+        self.assertIn('[data-season="christmas"]:has(.page > .hero) .masthead::after { content: none; }', inside)
+        self.assertIn('[data-season="christmas"] .site-footer::after { top: auto; bottom: 100%; transform: scaleY(-1); }', inside)
+        # No colour or size is written here (a mask's shape aside), and nothing moves.
+        plain = re.sub(r'url\("data:image/svg\+xml,[^"]*"\)|@media \([^)]*\)', "", block)   # and a breakpoint
+        self.assertNotRegex(plain, r"#[0-9a-fA-F]{3,8}\b|rgba?\(|\d+px|\d+rem")
+        self.assertNotIn("animation", block)
+        self.assertNotIn("@keyframes", block)
+        for token in ("--season-wrap", "--season-wrap-ridge", "--season-spark", "--season-spark-quiet", "--season-crimp",
+                      "--season-crimp-tooth", "--season-crimp-ridge", "--season-print"):
+            self.assertIn(f"  {token}:", TOKENS)
+            self.assertIn(f"var({token})", block)
+        # Midnight blue and gold: no red or green is added beside the prices.
+        self.assertNotRegex(block, r"--season-(red|pine)|--color-(price|more)")
+
+    def test_gifts_by_budget_opens_the_price_lists_that_have_something_in_stock(self):
+        html = self.home()
+        self.assertIn('<h2 id="gifts-title" class="section-head__title">Gifts by budget</h2>', html)
+        tiles = re.findall(r'<a class="gifts__tile" href="([^"]+)"><span class="gifts__band">([^<]+)</span>'
+                           r'<span class="gifts__suits">([^<]+)</span></a>', html)
+        # A pack at 4.25 and a box at 87.00: those two budgets, and no tile for a budget with nothing in stock.
+        self.assertEqual(tiles, [("/search/?price=0-10&amp;in_stock=on", "Under £10", "Stocking fillers"),
+                                 ("/search/?price=50-100&amp;in_stock=on", "£50 to £100", "Big presents")])
+        page = self.client.get("/search/?price=0-10&in_stock=on").content.decode()
+        self.assertIn(self.pack.name, page)
+        self.assertNotIn(self.product.name, page)
+        # Before the budgets have been counted (a staff preview out of season), every tile is there.
+        cache.delete(seasons.GIFTS_KEY)
+        self.assertEqual(len(re.findall(r'class="gifts__tile"', self.client_home_as_is())), 4)
+        self.assertEqual([band for band, _ in seasons.GIFT_BANDS], ["0-10", "10-25", "25-50", "50-100"])
+        from web.views import PRICE_BANDS
+        self.assertLessEqual({band for band, _ in seasons.GIFT_BANDS}, set(dict(PRICE_BANDS)))
+
+    def client_home_as_is(self):
+        with on_day(date(2026, 12, 5)):
+            return self.client.get(reverse("web:home")).content.decode()
+
+    def test_the_tiles_are_on_every_home_page_layout_and_nowhere_else(self):
+        self.home()
+        self.client.force_login(get_user_model().objects.create_user("owner", password="pw", is_staff=True))
+        for name in ("classic", "feed", "compact"):
+            with self.subTest(look=name), on_day(date(2026, 12, 5)):
+                html = self.client.get(reverse("web:home"), {"look": name}).content.decode()
+                self.assertEqual(html.count('id="gifts-title"'), 1)
+                self.assertIn("Royal Mail", html)
+        with on_day(date(2026, 12, 5)):
+            for url in (self.product.get_absolute_url(), reverse("web:deals"), reverse("web:search")):
+                self.assertNotIn("gifts", self.client.get(url).content.decode(), url)
+        # Staff looking at another theme, or at Christmas out of season, see what that day's visitors would.
+        with on_day(BETWEEN):
+            self.assertNotIn("gifts", self.client.get(reverse("web:home"), {"theme": "halloween"}).content.decode())
+            preview = self.client.get(reverse("web:home"), {"theme": "christmas"}).content.decode()
+        self.assertIn('id="gifts-title"', preview)
+
+    def test_royal_mails_next_last_posting_day_and_then_none(self):
+        said = {
+            date(2026, 12, 1): "Royal Mail&#x27;s last posting day for 2nd Class is Fri\xa018\xa0Dec. Shops need time to pack, so order sooner.",
+            date(2026, 12, 18): "for 2nd Class is Fri\xa018\xa0Dec.",
+            date(2026, 12, 19): "for Tracked 48 is Sat\xa019\xa0Dec.",
+            date(2026, 12, 20): "for 1st Class and Tracked 24 is Mon\xa021\xa0Dec.",
+            date(2026, 12, 23): "for Special Delivery Guaranteed is Wed\xa023\xa0Dec.",
+        }
+        for day, words in said.items():
+            with self.subTest(day=day):
+                self.assertIn(words, self.home(day))
+        # After the last day there is no line, and the tiles stay.
+        late = self.home(date(2026, 12, 24))
+        self.assertNotIn("Royal Mail", late)
+        self.assertIn('id="gifts-title"', late)
+        # Days are never guessed: a year whose list has not been added shows none.
+        self.assertIsNone(seasons.last_post(date(2027, 12, 5)))
+        self.assertNotIn("Royal Mail", self.home(date(2027, 12, 5)))
+        for year, days in seasons.LAST_POST.items():
+            self.assertEqual([day for _, day in days], sorted(day for _, day in days))
+            self.assertTrue(all(day.year == year and day.month == 12 and day.day < 25 for _, day in days))
+
+    def test_the_home_page_reads_the_budgets_from_the_cache_alone(self):
+        def count(day):
+            with on_day(day), CaptureQueriesContext(connection) as queries:
+                self.client.get(reverse("web:home"))
+            return len(queries)
+
+        self.home()            # the switch and the budgets are kept, the cached lists built
+        count(BETWEEN)
+        self.assertEqual(count(date(2026, 12, 5)), count(BETWEEN))
+        # The budgets are counted with the switch, in one query, and only at Christmas.
+        with on_day(date(2026, 12, 5)), CaptureQueriesContext(connection) as queries:
+            seasons.remember()
+        self.assertEqual(len(queries), 2)
+        self.assertEqual(cache.get(seasons.GIFTS_KEY), ["0-10", "50-100"])
+        cache.delete(seasons.GIFTS_KEY)
+        with on_day(BETWEEN), CaptureQueriesContext(connection) as queries:
+            seasons.remember()
+        self.assertEqual(len(queries), 1)
+        self.assertIsNone(cache.get(seasons.GIFTS_KEY))
+
+    def test_the_christmas_home_page_keeps_the_house_style(self):
+        from web.tests import CopyStyleTests
+
+        html = self.home()
+        words = re.sub(r"<[^>]*>", " ", html)
+        self.assertNotIn("!", words)
+        self.assertNotIn("\u2014", html)
+        for phrase in CopyStyleTests.BANNED:
+            self.assertNotIn(phrase, html.lower())

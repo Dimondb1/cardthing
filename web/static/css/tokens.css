@@ -194,6 +194,13 @@
   --season-sand: #f3dfb0;
   --season-sand-deep: #d9b878;
   --season-glint: rgb(255 255 255 / 0.55);   /* the shine on a bulb, a lens, a foil pack */
+  /* Christmas (site.css, the Christmas wrap): the header and footer wrapped as a foil booster pack. Midnight blue,
+     so the brand's orange stays the one bright colour and no red or green is added beside the prices. The same
+     in the light and the dark look. --season-wrap is also the phone browser's bar (web/seasons.py, the bar). */
+  --season-wrap: #16224a;          /* the foil */
+  --season-wrap-ridge: #25357a;    /* the pressed lines of the pack's crimped edge */
+  --season-spark: rgb(242 182 50 / 0.17);         /* the gold sparkle printed on the foil, quiet behind words */
+  --season-spark-quiet: rgb(242 182 50 / 0.08);   /* and quieter still behind the footer's small print */
 
   /* Shadows -------------------------------------------------------------- */
   --shadow-card: 0 1px 2px rgb(31 36 48 / 0.04), 0 2px 8px rgb(31 36 48 / 0.04);
@@ -255,6 +262,10 @@
   --partner-clear: 1.25rem;         /* the clear space round a logo, 20px: over the 5mm brands usually ask for */
   --season-garland: 1.75rem;       /* the seasonal decorations along the top of every page (web/seasons.py) */
   --season-scene: 12rem;            /* each seasonal picture beside the home page's headline on wide screens */
+  --season-crimp: 0.9375rem;        /* Christmas: the pack's crimped edge under the header, pressed band and teeth together */
+  --season-crimp-tooth: 0.75rem;    /* one tooth of that edge, as wide as this */
+  --season-crimp-ridge: 0.3125rem;  /* one pressed line of it and the gap to the next */
+  --season-print: 10rem;            /* one repeat of the sparkle print on the foil: wide, so it scatters and no grid shows */
   --masthead-search: 2.5rem;        /* the header search box: compact, still a full finger wide */
   --masthead-logo: 1.75rem;         /* the header logo's height on phones */
   --masthead-logo-wide: 2rem;       /* the same on tablets and desktops */
@@ -581,6 +592,9 @@
     --ask-bubble-shadow: 0 0.25rem 0.625rem light-dark(rgb(31 36 48 / 0.22), rgb(0 0 0 / 0.5));
     --season-flake: light-dark(#c7d3e3, #5b6677);        /* snowflakes in the air, quiet on either page */
   }
-  :root[data-theme="light"] { color-scheme: light; }
-  :root[data-theme="dark"] { color-scheme: dark; }
+  /* --page-scheme is the page's own look as a value, for a part that sits inside a part with its own look (the
+     Christmas wrap is always dark) yet belongs to the page: a search box's results, a menu. */
+  :root { --page-scheme: light dark; }
+  :root[data-theme="light"] { color-scheme: light; --page-scheme: light; }
+  :root[data-theme="dark"] { color-scheme: dark; --page-scheme: dark; }
 }

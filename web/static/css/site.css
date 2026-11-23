@@ -630,7 +630,8 @@ a, button, summary, select, input, label { touch-action: manipulation; }
 /* Seasonal themes (web/seasons.py) ----------------------------------------------------------------------------
    While a theme is on, its decorations hang along the top of every page, the raptor in the logo wears its hat, and
    on wide screens its pictures stand either side of the home page's headline. All of it is still: decoration, so
-   nothing moves. Every colour is a --season-* token or the brand's own, and none of it is near a price. */
+   nothing moves. Every colour is a --season-* token or the brand's own, and none of it is near a price. Christmas
+   has no decorations or pictures: it wraps the header and footer instead (the Christmas wrap, below). */
 [data-season] .masthead { position: relative; padding-top: var(--season-garland); }
 .season-garland { position: absolute; top: 0; left: 0; display: block; width: 100%; height: var(--season-garland); pointer-events: none; }
 [data-season] .wordmark { position: relative; }
@@ -646,6 +647,70 @@ a, button, summary, select, input, label { touch-action: manipulation; }
   .season-scene--left { left: 0; }
   .season-scene--right { right: 0; }
 }
+/* The Christmas wrap. At Christmas the site is wrapped as a foil booster pack: the header, the home page's
+   headline with it, and the footer turn midnight blue (--season-wrap) with a faint gold sparkle printed on, and
+   the wrap ends in a pack's crimped edge, a pressed band over a row of teeth. Orange stays the one bright colour;
+   no red or green is added, as those mean dearer and cheapest here. Everything inside the wrap takes its dark
+   colours (color-scheme: dark, tokens.css), and what belongs to the page rather than the wrap, a search box with
+   its results and the games menu, keeps the page's own look (--page-scheme). Only a browser that knows those
+   colours is given the wrap (the test below names two colours, it sets none); an older one keeps the usual
+   header with the hat. The print and the teeth are shapes cut from a token's colour (masks), so no colour is
+   written here. */
+/* Room above the logo for the hat's tip, which rises a third of the logo's height, now there are no lights to
+   clear: a little, and more for the home page's large logo on a wide screen. */
+[data-season="christmas"] .masthead { padding-top: var(--space-2); }
+@media (min-width: 48rem) { [data-season="christmas"] .masthead--home { padding-top: var(--space-4); } }
+@supports (color: light-dark(black, white)) {
+  [data-season="christmas"] :is(.masthead, .hero, .site-footer) { color-scheme: dark; background-color: var(--season-wrap); }
+  [data-season="christmas"] :is(.hero, .site-footer) { position: relative; isolation: isolate; }
+  [data-season="christmas"] :is(.masthead__search, .hero__search, .nav-games__menu) { color-scheme: var(--page-scheme); }
+  /* Words that only inherit their colour were given it by the page: say it again here, so it is worked out in
+     this part's own look. (The footer names its own.) */
+  [data-season="christmas"] :is(.masthead, .hero, .masthead__search, .hero__search, .nav-games__menu) { color: var(--color-ink); }
+  /* The sparkle print, behind everything the wrap holds. */
+  [data-season="christmas"] :is(.masthead, .hero, .site-footer)::before {
+    content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none; background: var(--season-spark);
+    -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 160 160'%3E%3Cpath d='M24 10Q24 20 34 20Q24 20 24 30Q24 20 14 20Q24 20 24 10zM92 7Q92 12 97 12Q92 12 92 17Q92 12 87 12Q92 12 92 7zM134 43Q134 50 141 50Q134 50 134 57Q134 50 127 50Q134 50 134 43zM58 61Q58 66 63 66Q58 66 58 71Q58 66 53 66Q58 66 58 61zM106 98Q106 108 116 108Q106 108 106 118Q106 108 96 108Q106 108 106 98zM20 109Q20 114 25 114Q20 114 20 119Q20 114 15 114Q20 114 20 109zM64 135Q64 142 71 142Q64 142 64 149Q64 142 57 142Q64 142 64 135zM146 131Q146 136 151 136Q146 136 146 141Q146 136 141 136Q146 136 146 131z'/%3E%3Ccircle cx='70' cy='30' r='1.5'/%3E%3Ccircle cx='36' cy='80' r='1.5'/%3E%3Ccircle cx='128' cy='88' r='1.5'/%3E%3Ccircle cx='90' cy='152' r='1.5'/%3E%3C/svg%3E") 0 0 / var(--season-print) var(--season-print);
+    mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 160 160'%3E%3Cpath d='M24 10Q24 20 34 20Q24 20 24 30Q24 20 14 20Q24 20 24 10zM92 7Q92 12 97 12Q92 12 92 17Q92 12 87 12Q92 12 92 7zM134 43Q134 50 141 50Q134 50 134 57Q134 50 127 50Q134 50 134 43zM58 61Q58 66 63 66Q58 66 58 71Q58 66 53 66Q58 66 58 61zM106 98Q106 108 116 108Q106 108 106 118Q106 108 96 108Q106 108 106 98zM20 109Q20 114 25 114Q20 114 20 119Q20 114 15 114Q20 114 20 109zM64 135Q64 142 71 142Q64 142 64 149Q64 142 57 142Q64 142 64 135zM146 131Q146 136 151 136Q146 136 146 141Q146 136 141 136Q146 136 146 131z'/%3E%3Ccircle cx='70' cy='30' r='1.5'/%3E%3Ccircle cx='36' cy='80' r='1.5'/%3E%3Ccircle cx='128' cy='88' r='1.5'/%3E%3Ccircle cx='90' cy='152' r='1.5'/%3E%3C/svg%3E") 0 0 / var(--season-print) var(--season-print);
+  }
+  /* The crimped edge the wrap ends in: the pressed band is the wrap's own colour with its lines drawn across,
+     and one mask keeps the band whole and cuts the teeth under it. */
+  [data-season="christmas"] :is(.masthead, .hero, .site-footer)::after {
+    content: ""; position: absolute; top: 100%; left: 0; width: 100%; height: var(--season-crimp); pointer-events: none;
+    background: repeating-linear-gradient(90deg, var(--season-wrap-ridge) 0 calc(var(--season-crimp-ridge) * 0.4), transparent 0 var(--season-crimp-ridge)) top / 100% 56% no-repeat, var(--season-wrap);
+    -webkit-mask: linear-gradient(var(--season-wrap), var(--season-wrap)) top / 100% 62% no-repeat, url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 6' preserveAspectRatio='none'%3E%3Cpath d='M0 0h12L6 6z'/%3E%3C/svg%3E") bottom left / var(--season-crimp-tooth) 40% repeat-x;
+    mask: linear-gradient(var(--season-wrap), var(--season-wrap)) top / 100% 62% no-repeat, url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 6' preserveAspectRatio='none'%3E%3Cpath d='M0 0h12L6 6z'/%3E%3C/svg%3E") bottom left / var(--season-crimp-tooth) 40% repeat-x;
+  }
+  [data-season="christmas"] .masthead { margin-bottom: var(--season-crimp); }
+  /* The usual home page: its headline and search box are wrapped with the header, edge to edge of the screen
+     whatever the page's width (the wrap's colour is carried sideways as a border image, which takes no room and
+     makes nothing scroll), and the crimped edge comes after them. */
+  [data-season="christmas"]:has(.page > .hero) .masthead { margin-bottom: 0; }
+  [data-season="christmas"]:has(.page > .hero) .masthead::after { content: none; }
+  [data-season="christmas"] .hero { padding-bottom: var(--space-5); margin-bottom: var(--season-crimp); border-image: conic-gradient(var(--season-wrap) 0 0) fill 0 / 0 / 0 100vmax; }
+  [data-season="christmas"] .hero::before, [data-season="christmas"] .hero::after { left: calc(50% - 50vw); width: 100vw; }
+  /* The foot of the pack: the same edge the other way up, and a quieter print behind the small print. */
+  [data-season="christmas"] .site-footer { margin-top: var(--season-crimp); border-top: 0; }
+  [data-season="christmas"] .site-footer::before { background: var(--season-spark-quiet); }
+  [data-season="christmas"] .site-footer::after { top: auto; bottom: 100%; transform: scaleY(-1); }
+}
+/* Gifts by budget (Christmas, a home page: includes/season/christmas_gifts.html). A tile for each budget, two
+   across on a phone and four from a tablet up, each the price list of what is in stock, and under them Royal
+   Mail's next last posting day. Cards as everywhere else, no decoration. */
+.gifts__row { list-style: none; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2); }
+.gifts__tile {
+  display: grid; gap: var(--space-1); height: 100%; padding: var(--space-3) var(--space-4);
+  border: var(--border-width) solid var(--color-brand-line); border-radius: var(--radius-card);
+  background: var(--color-paper); color: var(--color-ink); text-decoration: none;
+  transition: transform var(--motion-normal) var(--ease-out), border-color var(--motion-normal);
+}
+@media (hover: hover) { .gifts__tile:hover { transform: translateY(var(--lift)); border-color: var(--color-brand); } }
+.gifts__tile:active { transform: scale(0.99); }
+.gifts__band { font-weight: var(--weight-heading); line-height: var(--leading-snug); white-space: nowrap; }
+.gifts__suits { font-size: var(--text-sm); color: var(--color-ink-muted); }
+.gifts__post { margin-top: var(--space-3); font-size: var(--text-sm); color: var(--color-ink-muted); }
+.feed-look .gifts { margin-bottom: var(--space-4); }   /* the feed's and the compact layout's next row starts closer than a section does */
+@media (min-width: 48rem) { .gifts__row { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-3); } }
 .s-red { fill: var(--season-red); }
 .s-red-shade { fill: var(--season-red-shade); }
 .s-pine { fill: var(--season-pine); }

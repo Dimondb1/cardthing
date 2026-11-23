@@ -28,6 +28,7 @@
     <button class="button dt-browse__go" type="submit">{% copy "compact.desk.show" %}</button>
   </form>
 </section>
+{% if season.key == "christmas" %}{% include "web/includes/season/christmas_gifts.html" %}{% endif %}
 {% include "web/includes/compact_strip.html" %}
 {% if sets %}
 <section class="cx-section dt-sets" aria-labelledby="cx-sets-title" data-desk-tabs>

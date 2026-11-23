@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1">
   <title>{% if away %}{% copy "botcheck.away_title" %}{% else %}{% copy "botcheck.title" %}{% endif %} | {{ site_name }}</title>
   <meta name="robots" content="noindex, nofollow">
-  {% include "web/includes/theme_head.html" %}
+  {# This page is never wrapped by a seasonal theme, so the browser's bar keeps the page's own colour. #}{% include "web/includes/theme_head.html" with season=None %}
   <link rel="icon" href="{% static 'img/favicon.png' %}" type="image/png">
   <link rel="stylesheet" href="{% static 'css/tokens.css' %}">
   <link rel="stylesheet" href="{% static 'css/site.css' %}">

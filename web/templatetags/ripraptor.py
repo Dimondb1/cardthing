@@ -142,6 +142,29 @@ def reddit_text(context, cheapest):
 
 
 @register.simple_tag(takes_context=True)
+def season_gifts(context):
+    """Christmas on a home page (web/seasons.py): {"tiles": [{band, label, key}], "post": {service, day} or None}
+    for Gifts by budget and Royal Mail's next last posting day, from the cache and the clock alone. None at any
+    other time."""
+    from django.utils.formats import date_format
+
+    from web import seasons
+    from web.views import PRICE_BANDS
+
+    season = context.get("season")
+    if season is None or season.key != "christmas":
+        return None
+    labels = dict(PRICE_BANDS)
+    post = seasons.last_post()
+    return {
+        "tiles": [{"band": band, "label": labels[band], "key": f"home.gifts.{suits}"}
+                  for band, suits in seasons.gift_bands()],
+        # The day is written here, its words held together so "Fri 18 Dec" is never broken over two lines.
+        "post": {"service": post[0], "day": date_format(post[1], "D j M").replace(" ", "\u00a0")} if post else None,
+    }
+
+
+@register.simple_tag(takes_context=True)
 def page_key(context):
     """The word for this page that clicks and Compare taps are saved under (catalogue/clicks.PAGES), or ""."""
     from catalogue.clicks import PAGES

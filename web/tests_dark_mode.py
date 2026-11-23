@@ -21,6 +21,7 @@ def tokens():
     for name, value in TOKEN.findall(text[:start]):
         base[name] = " ".join(value.split("/*")[0].split())
     dark = dict((name, " ".join(value.split("/*")[0].split())) for name, value in TOKEN.findall(text[start:]))
+    dark.pop("--page-scheme", None)   # not a colour: the page's own look as a value (the Christmas wrap's islands)
     return base, dark
 
 
@@ -63,8 +64,8 @@ class TokenTests(TestCase):
         text = (CSS / "tokens.css").read_text()
         block = text[text.index("@supports (color: light-dark(#000, #fff))"):]
         self.assertIn("color-scheme: light dark;", block)
-        self.assertIn(':root[data-theme="light"] { color-scheme: light; }', block)
-        self.assertIn(':root[data-theme="dark"] { color-scheme: dark; }', block)
+        self.assertIn(':root[data-theme="light"] { color-scheme: light; --page-scheme: light; }', block)
+        self.assertIn(':root[data-theme="dark"] { color-scheme: dark; --page-scheme: dark; }', block)
         # Nothing dark is said outside the block a browser without light-dark() skips.
         self.assertNotIn("light-dark(", text[:text.index("@supports (color: light-dark(#000, #fff))")].split("*/")[-1])
         self.assertIn('@property --color-well { syntax: "<color>"; inherits: true;', text)

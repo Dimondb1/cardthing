@@ -4149,8 +4149,8 @@ with nothing else to do:
 
 While a theme is on, the raptor in the logo wears its hat on every page (a
 Santa hat, a witch's hat, the top of its eggshell, sunglasses), its
-decorations hang along the top of every page (fairy lights, bats and
-pumpkins, painted eggs, bunting) and, on screens 74rem (1184px) and wider, its
+decorations hang along the top of every page (bats and pumpkins, painted
+eggs, bunting) and, on screens 74rem (1184px) and wider, its
 pictures stand either side of the home page's headline. The artwork is drawn
 as vector art in `web/templates/web/includes/season/` (one file each for the
 hat, the decorations and the pictures), every colour a `--season-*` token in
@@ -4159,6 +4159,51 @@ dearer. None of it moves and none of it has words. Unticking On gives the usual
 look all year. The Admin page lists each theme's next dates, soonest first,
 with **See it now**: a link that shows that theme on any page, only to people
 signed in to Admin (`?theme=christmas`, `halloween`, `easter` or `summer`).
+
+### Christmas
+
+Christmas is a look of its own, not decorations (the owner, 23 Nov 2026, of
+the fairy lights it first had: "not just adding some bullshit lights"). The
+site is wrapped as a foil booster pack:
+
+- The header, the usual home page's headline and search box with it, and the
+  footer turn midnight blue (`--season-wrap`) with a faint gold sparkle
+  printed on. Each ends in a pack's crimped edge, a pressed band over a row
+  of teeth. The raptor keeps its Santa hat. There are no lights, no pictures
+  and no snow, and nothing moves.
+- Orange stays the one bright colour. No red or green is added, because here
+  they mean dearer and cheapest.
+- It is the same in the light and the dark look. Inside the wrap everything
+  takes its dark colours (`color-scheme: dark`); what belongs to the page, a
+  search box with its results and the Games menu, keeps the page's own look
+  (`--page-scheme` in `tokens.css`).
+- On a phone the browser's own bar turns the same blue (`bar` on the theme in
+  `web/seasons.py`, which a test holds equal to `--season-wrap`).
+- It is all CSS (`site.css`, "The Christmas wrap"): the print and the teeth
+  are shapes cut from a token's colour, so there is no artwork file and no
+  extra request. A browser too old for the dark colours keeps the usual
+  header with the hat.
+
+While it is on, every home page layout also shows **Gifts by budget**
+(`includes/season/christmas_gifts.html`):
+
+- Four tiles, Under £10, £10 to £25, £25 to £50 and £50 to £100, each
+  opening the price list the site already has for that band with only what is
+  in stock (`/search/?price=10-25&in_stock=on`). No new page or address. A
+  budget with nothing in stock has no tile: the budgets are counted with the
+  switch every five minutes (`seasons.stocked_bands`, one query, only at
+  Christmas) and read from the cache, so the home page gains no query.
+- One line under them with Royal Mail's next last posting day, for example
+  "Royal Mail's last posting day for 2nd Class is Fri 18 Dec. Shops need time
+  to pack, so order sooner." The days are in `LAST_POST` in `web/seasons.py`,
+  copied from the Post Office's published list (postoffice.co.uk, last
+  posting dates). They are days for posting, not any shop's last day for
+  orders, which is why the second sentence is there. The line moves to the
+  next service as each day passes and goes after the last. **Each year, add
+  that year's days to `LAST_POST` once the Post Office publishes them**; a
+  year that is not there shows no line, never a guess.
+
+The words are in Admin, Site text, under Home (`home.gifts.*`).
 
 The switch is read from the shared cache, so no page gains a query: it is put
 there when it is saved and by `warm_pages` every five minutes. Game and set

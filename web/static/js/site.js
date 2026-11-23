@@ -494,7 +494,8 @@ document.addEventListener("ripraptor:content", (event) => {
       // The browser's own bars and form controls follow the choice too.
       const scheme = document.querySelector('meta[name="color-scheme"]');
       if (scheme) scheme.setAttribute("content", choice || "light dark");
-      document.querySelectorAll('meta[name="theme-color"]').forEach((meta) => {
+      // (A seasonal theme that colours the header has one tag with no media, which stays as it is.)
+      document.querySelectorAll('meta[name="theme-color"][media]').forEach((meta) => {
         const system = (meta.getAttribute("media") || "").includes("dark") ? "dark" : "light";
         meta.setAttribute("content", bars[choice || system]);
       });

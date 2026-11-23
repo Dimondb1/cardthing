@@ -1,0 +1,14 @@
+{% load sitecopy ripraptor %}{# Christmas, a home page (web/seasons.py): Gifts by budget, each tile one of the price lists the site already has with only what is in stock, and Royal Mail's next last posting day. Read from the cache and the clock alone, so the page gains no query; a budget with nothing in stock has no tile. #}
+{% season_gifts as gifts %}
+{% if gifts.tiles or gifts.post %}
+<section class="home-section gifts" aria-labelledby="gifts-title">
+  <div class="section-head"><h2 id="gifts-title" class="section-head__title">{% copy "home.gifts.title" %}</h2></div>
+  {% if gifts.tiles %}
+  <ul class="gifts__row">
+    {% for tile in gifts.tiles %}<li><a class="gifts__tile" href="{% url 'web:search' %}?price={{ tile.band }}&amp;in_stock=on"><span class="gifts__band">{{ tile.label }}</span><span class="gifts__suits">{% copy tile.key %}</span></a></li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+  {% if gifts.post %}<p class="gifts__post">{% copy "home.gifts.post" service=gifts.post.service day=gifts.post.day %}</p>{% endif %}
+</section>
+{% endif %}

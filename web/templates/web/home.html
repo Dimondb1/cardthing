@@ -10,8 +10,9 @@
   <div class="hero__search">
     {% include "web/includes/search_form.html" with variant="large" button_key="home.search.button" placeholder_key="home.search.placeholder" field_id="home-q" live=True %}
   </div>
-  {% if season %}<div class="season-scenes">{% include season.scene %}</div>{% endif %}
+  {% if season.scene %}<div class="season-scenes">{% include season.scene %}</div>{% endif %}
 </section>
+{% if season.key == "christmas" %}{% include "web/includes/season/christmas_gifts.html" %}{% endif %}
 
 {% if games %}
 {# The games first, straight under the search (the owner, 2 Nov 2026: "i want the games back up the top again replacing the jump buttons"): each tile opens its game's page. #}

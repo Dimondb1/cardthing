@@ -13,6 +13,7 @@
 {% include "web/includes/feed_dock.html" %}
 {# A type tile's list takes this region's place (browse.js), the dock and the partners staying put; Back brings the feed again. #}
 <div data-browse>
+{% if season.key == "christmas" %}{% include "web/includes/season/christmas_gifts.html" %}{% endif %}
 {% include "web/includes/feed_top.html" %}
 </div>
 

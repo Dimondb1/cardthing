@@ -348,6 +348,25 @@ ENTRIES = [
         "Heading above the game tiles under the home page search box, and the label before the game links "
         "when a search finds nothing.",
     ),
+    Entry("home.gifts.title", H, "Christmas: gifts heading", "Gifts by budget",
+          "Heading above the budget tiles on the home page while the Christmas theme is on. Each tile opens a "
+          "price list of what is in stock."),
+    Entry("home.gifts.fillers", T, "Christmas: under £10", "Stocking fillers",
+          "Under the Under £10 tile: what that budget suits."),
+    Entry("home.gifts.small", T, "Christmas: £10 to £25", "Small gifts",
+          "Under the £10 to £25 tile: what that budget suits."),
+    Entry("home.gifts.main", T, "Christmas: £25 to £50", "Main presents",
+          "Under the £25 to £50 tile: what that budget suits."),
+    Entry("home.gifts.big", T, "Christmas: £50 to £100", "Big presents",
+          "Under the £50 to £100 tile: what that budget suits."),
+    Entry(
+        "home.gifts.post", T, "Christmas: last posting day",
+        "Royal Mail's last posting day for {service} is {day}. Shops need time to pack, so order sooner.",
+        "Under the budget tiles until the last posting day has passed. {service} and {day} are Royal Mail's next "
+        "last recommended posting day for UK delivery by Christmas, from the Post Office's published list. It is "
+        "a day for posting, not a shop's last day for orders, so keep the second sentence. Leave empty to hide it.",
+        optional=True, placeholders=("service", "day"),
+    ),
     Entry(
         "home.card.compare", B, "Card button",
         "Compare prices",

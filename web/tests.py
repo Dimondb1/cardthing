@@ -1130,6 +1130,31 @@ class HomeScreenTests(PageTestCase):
         self.assertIn("<td>Added it</td><td class=\"n\">1</td>", page)
         self.assertNotIn("<td>Home screen</td>", page)
 
+    def test_it_asks_again_once_the_app_is_removed_and_the_footer_offers_it_any_time(self):
+        """The owner, 23 Nov 2026: the site "didn't ask me to install the app after I had uninstalled it". "Installed"
+        was kept for good; now Chrome's own offer to install (made only when the app is not on the phone) forgets it,
+        Not now waits 30 days instead of for ever, and Get the app in the footer asks whenever wanted."""
+        from django.contrib.staticfiles import finders
+
+        home = self.client.get(reverse("web:home")).content.decode()
+        footer = home[home.index('<footer class="site-footer">'):]
+        self.assertIn('<button type="button" class="site-footer__choice" data-install-open hidden>Get the app</button>', footer)
+        script = open(finders.find("js/install.js"), encoding="utf-8").read()
+        # Opened from the icon: remembered as installed, and neither the card nor the link shows.
+        self.assertIn('if (standalone) {\n    set(STATE, "installed");', script)
+        # Chrome offers to install only when the app is not on the device: an "installed" from before is forgotten.
+        self.assertIn("if (installed()) forget(STATE);", script)
+        # Not now waits 30 days; an old "done" (kept for both answers until now) counts as no answer.
+        self.assertIn("const WAIT_DAYS = 30;", script)
+        self.assertIn('const notNow = () => { set(STATE, `not-now:${today}`); hide(); note("dismissed"); };', script)
+        self.assertIn("/^not-now:(\\d{4}-\\d{2}-\\d{2})$/", script)
+        self.assertNotIn('"done"', script.split("function offer()")[1])
+        # The card asks by itself only on a phone after a few pages; the link is there wherever the site can be added.
+        self.assertIn('pages >= ASK_AFTER && matchMedia("(max-width: 47.99rem)").matches && !installed() && !waiting()', script)
+        self.assertIn("if (link) link.hidden = false;\n    if (due()) show(false);", script)
+        self.assertIn('link.addEventListener("click", () => show(true));', script)   # an iPhone: the card with the Share steps
+        self.assertIn('if (link) link.addEventListener("click", ask);', script)        # Android and computers: Chrome's question
+
     def test_manifest_names_the_site_and_its_icons(self):
         import json as json_module
 

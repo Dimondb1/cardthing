@@ -5967,11 +5967,31 @@ nothing is stored.
 On a phone, after the third page in that browser, a small card offers to
 add the site to the home screen (`web/static/js/install.js`). Android
 Chrome supplies its install prompt; iPhone Safari has none, so there the
-card explains Share, then Add to Home Screen. Answered either way, or
-once the site is installed, it never shows again in that browser. Four
-events are counted with no record of who, through `/api/note/`: shown,
-added, dismissed, and opened from the icon (once per browser per day).
-Insights shows them under "Home screen".
+card explains Share, then Add to Home Screen. **Get the app** in the footer
+offers the same whenever the site can be added and is not already, on any
+screen: on Android and a computer it asks Chrome's install question, on an
+iPhone it opens the card with the Share steps. Four events are counted with
+no record of who, through `/api/note/`: shown, added, dismissed, and opened
+from the icon (once per browser per day). Insights shows them under "Home
+screen".
+
+What the browser remembers (`ripraptor.install` in local storage), since
+the owner found on 23 Nov 2026 that the site "didn't ask me to install the
+app after I had uninstalled it":
+
+- **installed**, once the site is opened from its icon or added. The card
+  and the link stay away. On Android, Chrome offers to install only while
+  the app is not on the phone, so when it offers again (the app was
+  removed) "installed" is forgotten and the card can ask again.
+- **not-now and the date**, after Not now or a no to Chrome's question.
+  The card waits 30 days before it asks again; the footer link is still
+  there.
+- Anything else, including the "done" an earlier version kept for every
+  answer, counts as no answer yet, so everyone gets one fresh offer.
+
+An iPhone keeps a home screen app's storage apart from Safari's, so Safari
+never knows the site was added: there the link stays in the footer and the
+card asks again 30 days after Not now.
 
 **The app's opening.** Opened from its icon, the phone first shows its own
 launch screen (the icon on white; the manifest cannot give it a dark one).

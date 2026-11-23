@@ -189,15 +189,20 @@ ENTRIES = [
     Entry(
         "site.install.android", T, "Home screen offer (Android)",
         "Keep RipRaptor on your home screen. It opens like an app, with no browser bar.",
-        "The card shown once on an Android phone after a few pages.",
+        "The card shown on an Android phone after a few pages, until the site is added or Not now is pressed.",
     ),
     Entry(
         "site.install.ios", T, "Home screen offer (iPhone)",
         "Keep RipRaptor on your home screen: tap Share, then Add to Home Screen.",
-        "The card shown once on an iPhone after a few pages. Safari has no install button, so this explains the menu.",
+        "The card shown on an iPhone after a few pages, and from the footer's Get the app link. Safari has no install "
+        "button, so this explains the menu.",
     ),
     Entry("site.install.add", B, "Add to home screen button", "Add to home screen", "On the card, Android only."),
-    Entry("site.install.dismiss", B, "Not now button", "Not now", "On the card. Pressing it means the card never shows again in that browser."),
+    Entry("site.install.dismiss", B, "Not now button", "Not now",
+          "On the card. Pressing it means the card waits 30 days before it offers again in that browser."),
+    Entry("site.nav.install", B, "Get the app link", "Get the app",
+          "Footer button, shown only where the browser can add the site to the home screen and it is not added already. "
+          "On Android it asks to install; on an iPhone it opens the card that explains Share, then Add to Home Screen."),
     Entry("site.consent.label", T, "Analytics card name", "Analytics cookies", "Name of the analytics card for screen readers."),
     Entry(
         "site.consent.text", T, "Analytics question",

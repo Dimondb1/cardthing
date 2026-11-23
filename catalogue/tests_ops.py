@@ -108,11 +108,23 @@ class InstallStepTests(TestCase):
     def test_it_parses(self):
         subprocess.run(["bash", "-n", str(DEPLOY / "install.sh")], check=True)
 
-    def test_security_updates_install_themselves(self):
+    def test_ubuntus_updates_install_themselves_and_restart_the_server_at_night_when_needed(self):
         text = (DEPLOY / "install.sh").read_text()
         self.assertIn("apt-get install -y -qq unattended-upgrades", text)
         self.assertIn('APT::Periodic::Unattended-Upgrade "1";', text)
-        self.assertNotIn("Automatic-Reboot", text)
+        # Ordinary fixes as well as security ones, added to Ubuntu's own list rather than replacing it.
+        self.assertIn('Unattended-Upgrade::Allowed-Origins:: "${distro_id}:${distro_codename}-updates";', text)
+        self.assertIn('Unattended-Upgrade::Automatic-Reboot "true";', text)
+        self.assertIn('Unattended-Upgrade::Automatic-Reboot-Time "02:40";', text)
+        self.assertIn("OnCalendar=*-*-* 02:10", text)
+        self.assertLess(text.index("OnCalendar=\n"), text.index("OnCalendar=*-*-* 02:10"))   # Ubuntu's 06:00 cleared
+        # Nothing long runs over the restart: no daily or weekly job starts from 00:41 to 03:29 beyond the hourly ones.
+        for schedule, command in install_cron():
+            minute, hour = schedule.split()[:2]
+            if hour != "*" and "/" not in hour:
+                started = [(int(h), int(m)) for h in hour.split(",") for m in minute.split(",")]
+                with self.subTest(command=command.split("manage.py ")[1].split()[0]):
+                    self.assertFalse([at for at in started if (0, 41) <= at <= (3, 29)])
 
     def test_the_firewall_lets_ssh_in_before_it_goes_on(self):
         text = (DEPLOY / "install.sh").read_text()

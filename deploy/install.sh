@@ -20,14 +20,32 @@ rm -f /etc/apt/sources.list.d/caddy-stable.list
 apt-get update -qq
 apt-get install -y -qq git python3 python3-venv python3-pip curl caddy >/dev/null
 
-# Security fixes for Ubuntu's own software install themselves each day (unattended-upgrades, security
-# updates only), so a hole found in the system is closed without anyone logging in. It never restarts
-# the server: a kernel fix waits for the next reboot.
+# Ubuntu's own updates install themselves each night (unattended-upgrades): its security fixes and its
+# ordinary fixes (-updates), so a hole found in the system is closed without anyone logging in and the
+# ordinary ones do not pile up. They install at 02:10 and, only when one needs it (a kernel fix), the
+# server restarts at 02:40, about a minute offline, the site and the reader starting again by themselves.
+# The owner, 23 Nov 2026, with 23 updates waiting and a restart pending: "All updates + night restart".
+# 02:40 is the quietest minute of the crontab: after the backup (00:40), before the delivery checks
+# (03:30 on Sundays, 04:30 daily, up to 50 minutes each). The server keeps UTC.
 apt-get install -y -qq unattended-upgrades >/dev/null
 cat > /etc/apt/apt.conf.d/20auto-upgrades <<'APT'
 APT::Periodic::Update-Package-Lists "1";
 APT::Periodic::Unattended-Upgrade "1";
 APT
+cat > /etc/apt/apt.conf.d/52ripraptor-upgrades <<'APT'
+Unattended-Upgrade::Allowed-Origins:: "${distro_id}:${distro_codename}-updates";
+Unattended-Upgrade::Automatic-Reboot "true";
+Unattended-Upgrade::Automatic-Reboot-Time "02:40";
+APT
+mkdir -p /etc/systemd/system/apt-daily-upgrade.timer.d
+cat > /etc/systemd/system/apt-daily-upgrade.timer.d/ripraptor.conf <<'TIMER'
+[Timer]
+OnCalendar=
+OnCalendar=*-*-* 02:10
+RandomizedDelaySec=0
+TIMER
+systemctl daemon-reload 2>/dev/null || true
+systemctl restart apt-daily-upgrade.timer 2>/dev/null || true
 systemctl enable -q --now unattended-upgrades 2>/dev/null || true
 
 # Firewall: from outside, only the web (80, and 443 over TCP and UDP for HTTP/3) and SSH answer. The site

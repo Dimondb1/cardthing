@@ -12,6 +12,13 @@
           <li><a class="social__link" href="https://discord.gg/5YKc77s4d7" target="_blank" rel="noopener">{% include "web/includes/social/discord.svg" %}<span class="visually-hidden">RipRaptor on Discord (opens in a new tab)</span></a></li>
         </ul>
       </div>
+      {# Light or dark (tokens.css): shown by site.js where the browser can do it; without script the page follows the device. #}
+      <div class="theme-choice" role="group" aria-label="{% copy 'site.theme.label' %}" data-theme-choice hidden>
+        <span class="theme-choice__label">{% copy "site.theme.label" %}</span>
+        <button type="button" class="theme-choice__option" data-theme-set="" aria-pressed="true">{% copy "site.theme.auto" %}</button>
+        <button type="button" class="theme-choice__option" data-theme-set="light" aria-pressed="false">{% copy "site.theme.light" %}</button>
+        <button type="button" class="theme-choice__option" data-theme-set="dark" aria-pressed="false">{% copy "site.theme.dark" %}</button>
+      </div>
     </div>
     <nav class="site-footer__nav" aria-label="Footer">
       <a href="{% url 'web:about' %}">{% copy "site.nav.about" %}</a>

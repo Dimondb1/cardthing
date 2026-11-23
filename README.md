@@ -2377,6 +2377,35 @@ registry, or if any default contains an em dash or an exclamation mark.
 Every colour, size, radius and spacing value is a CSS custom property in
 `web/static/css/tokens.css`. `site.css` uses nothing else.
 
+**Dark mode** (the owner, 23 Nov 2026: "make sure it doesn't leave shit
+looking products ... make sure it looks amazing"). The last block of
+`tokens.css` gives every colour token a second value with
+`light-dark(light, dark)`. The page follows the phone or computer by itself
+(`color-scheme: light dark`), with script on or off. The footer's Appearance
+choice (Match my device, Light, Dark; `site.js`) overrides it either way: the
+choice is kept in the browser as `ripraptor.theme` and put on `<html>` as
+`data-theme` by the small script in the head (`includes/theme_head.html`)
+before the first paint, so no page flashes the other look. A browser too old
+for `light-dark()` skips the block and stays light, and is never shown the
+choice.
+
+- To change a dark colour, change the second value of its token. The first
+  value is the light look and must match the token's value further up
+  (`web/tests_dark_mode.py` fails when they differ, and when a dark word
+  colour falls under 4.5:1 on the dark page).
+- **Product photos stay on a light ground.** Shops' photos have white
+  backgrounds, which the picture wells blend away (`mix-blend-mode:
+  multiply`); on a dark well that blend turns a photo to mud. So every well
+  a photo sits in takes `--color-well` (light in both modes, a shade softer
+  in the dark) and is marked `color-scheme: light` in `site.css`, which keeps
+  everything drawn on it light too. A new place that shows a product photo
+  must be added to that rule; the test checks every blended well is in it.
+- The ink panels (the drop spotlight, the watchlist poster, Amazon's button)
+  and the orange deals poster are marked light for the same reason: they are
+  dark or orange with their own words in both modes.
+- The share pictures, emails and Django Admin are not part of it: Admin has
+  its own dark mode.
+
 | To                           | Change |
 |------------------------------|--------|
 | Reduce the corner radius     | `--radius`, `--radius-tag` |

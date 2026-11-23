@@ -16,7 +16,7 @@
   <meta property="og:image" content="{% if meta_image %}{{ meta_image }}{% else %}{{ request.scheme }}://{{ request.get_host }}{% static 'img/share.png' %}{% endif %}">
   <meta name="twitter:card" content="summary_large_image">
   {% if structured_json %}<script type="application/ld+json">{{ structured_json|safe }}</script>{% endif %}
-  <meta name="theme-color" content="#ffffff">
+  {% include "web/includes/theme_head.html" %}
   <!-- Awin publisher verification: RipRaptor -->
   <meta name="impact-site-verification" value="fb2ca9a2-0f96-46ce-b287-b35517e23ca5">
   {% if google_verification %}<meta name="google-site-verification" content="{{ google_verification }}">{% endif %}

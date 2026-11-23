@@ -467,3 +467,38 @@ document.addEventListener("ripraptor:content", (event) => {
   const count = found ? parseInt(found[1], 10) : 0;
   document.querySelectorAll("[data-list-count]").forEach((el) => { el.textContent = count > 0 ? `(${count})` : ""; });
 })();
+
+// Light or dark (tokens.css, Dark mode). The page follows the device by itself; this shows the choice in the footer
+// and keeps it in this browser (ripraptor.theme), where the small script in the head reads it before the first
+// paint. A browser too old for the dark colours never sees the choice.
+{
+  const box = document.querySelector("[data-theme-choice]");
+  if (box && window.CSS && CSS.supports && CSS.supports("color", "light-dark(#000, #fff)")) {
+    const KEY = "ripraptor.theme";
+    const root = document.documentElement;
+    const bars = { light: "#ffffff", dark: "#14161c" };
+    const show = () => {
+      const chosen = root.dataset.theme || "";
+      box.querySelectorAll("[data-theme-set]").forEach((button) => {
+        button.setAttribute("aria-pressed", String(button.dataset.themeSet === chosen));
+      });
+    };
+    box.hidden = false;
+    show();
+    box.addEventListener("click", (event) => {
+      const button = event.target.closest("[data-theme-set]");
+      if (!button) return;
+      const choice = button.dataset.themeSet;
+      if (choice) root.dataset.theme = choice; else delete root.dataset.theme;
+      try { if (choice) localStorage.setItem(KEY, choice); else localStorage.removeItem(KEY); } catch (e) { /* private mode */ }
+      // The browser's own bars and form controls follow the choice too.
+      const scheme = document.querySelector('meta[name="color-scheme"]');
+      if (scheme) scheme.setAttribute("content", choice || "light dark");
+      document.querySelectorAll('meta[name="theme-color"]').forEach((meta) => {
+        const system = (meta.getAttribute("media") || "").includes("dark") ? "dark" : "light";
+        meta.setAttribute("content", bars[choice || system]);
+      });
+      show();
+    });
+  }
+}

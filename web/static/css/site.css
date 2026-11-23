@@ -234,12 +234,22 @@ a, button, summary, select, input, label { touch-action: manipulation; }
 
 /* Product images */
 .product-image {
-  display: grid; place-items: center; aspect-ratio: 1; background: var(--color-shelf);
+  display: grid; place-items: center; aspect-ratio: 1; background: var(--color-well);
   border-radius: var(--radius); color: var(--color-ink-subtle); overflow: hidden;
 }
 .product-image img { width: 100%; height: 100%; object-fit: contain; padding: 6%; mix-blend-mode: multiply; opacity: 0.85; transition: opacity var(--motion-normal); }
 .product-image img.is-loaded, .product-image img[data-loaded] { opacity: 1; }
 .product-image .placeholder { width: 46%; height: 46%; color: var(--color-placeholder); }
+/* Picture wells stay light in dark mode (tokens.css, Dark mode): shops' photos have white backgrounds, which the
+   wells blend away, and on a dark well that blend turns a photo to mud. Marked light, everything drawn on a well
+   (the outline when there is no photo, a badge on the photo, a partner's logo) keeps its light colours too. */
+.product-image, .product-media, .swipe__image, .feed-tile__well, .feed-card__well, .find__picture,
+.cx-sethead__pic, .cx-deal__pic, .cx-set__pic, .partners__link, .spotlight__thumb { color-scheme: light; }
+/* The ink panels (the drop spotlight, the watchlist poster, Amazon's button, the dark badge preview) are dark with
+   white words in both modes: left to follow the page they would turn into white slabs on a dark one. */
+.spotlight__panel, .poster--watch, .amazon-cta, .badge-offer__preview--dark { color-scheme: light; }
+/* The deals poster is the brand's orange with ink words in both modes: light words on orange are 2.7:1. */
+.poster--deals { color-scheme: light; }
 .placeholder__face, .placeholder__top, .placeholder__side { fill: var(--color-paper); }
 .placeholder__side { fill: var(--color-line-soft); }
 .product-image--thumb { width: 3rem; border-radius: var(--radius-sm); }
@@ -464,6 +474,12 @@ a, button, summary, select, input, label { touch-action: manipulation; }
 .site-footer__nav { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-5); }
 .site-footer__nav a { display: inline-block; padding-block: var(--space-1); color: var(--color-ink); font-weight: var(--weight-strong); }
 .site-footer__line a { display: inline; padding-block: var(--space-1); }   /* inline: the tap area grows, the line spacing does not */
+/* Light or dark: the choice in the footer (site.js), the chosen one in the brand's soft orange as a chosen chip is. */
+.theme-choice { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin-top: var(--space-4); }
+.theme-choice[hidden] { display: none; }
+.theme-choice__label { flex: 0 0 100%; font-weight: var(--weight-strong); color: var(--color-ink); }   /* the label over the three, so they share a row on a phone */
+.theme-choice__option { padding: var(--space-1) var(--space-3); border: var(--border-width) solid var(--color-line-strong); border-radius: var(--radius-pill); background: none; color: var(--color-ink); font: inherit; font-weight: var(--weight-medium); cursor: pointer; }
+.theme-choice__option[aria-pressed="true"] { background: var(--color-brand-soft); border-color: var(--color-brand); color: var(--color-brand-text); }
 .site-footer__choice { padding: var(--space-1) 0; border: 0; background: none; color: var(--color-ink); font: inherit; font-weight: var(--weight-strong); cursor: pointer; }
 @media (min-width: 48rem) {
   .site-footer__inner { max-width: calc(var(--page-width) + 2 * var(--gutter-wide)); padding-inline: var(--gutter-wide); }
@@ -1237,7 +1253,7 @@ a, button, summary, select, input, label { touch-action: manipulation; }
 .product-facts { font-size: var(--text-sm); color: var(--color-ink-muted); }
 /* The same product in another language: a quiet line under the facts, its links the site's usual orange. */
 .product-versions { font-size: var(--text-sm); color: var(--color-ink-muted); }
-.product-media { grid-area: media; position: relative; display: grid; place-items: center; border-radius: var(--radius-card); background: var(--color-shelf); overflow: hidden; }
+.product-media { grid-area: media; position: relative; display: grid; place-items: center; border-radius: var(--radius-card); background: var(--color-well); overflow: hidden; }
 @media (max-width: 59.99rem) {
   /* The picture's well gives up the room a long name, the delivery note and Ask Rip's questions take, so the price
      and Buy now stay on the first screen; never shorter than --product-media-least. */
@@ -1698,7 +1714,7 @@ a, button, summary, select, input, label { touch-action: manipulation; }
 .offer--cheapest { background: var(--color-price-soft); }
 .offer__retailer { grid-area: retailer; display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-2); min-width: 0; }
 .offer__name { font-weight: var(--weight-strong); }
-.offer__flag { padding: 0.1em 0.5em; border-radius: var(--radius-pill); background: var(--color-price); color: #fff; font-size: var(--text-xs); font-weight: var(--weight-strong); line-height: 1.4; }
+.offer__flag { padding: 0.1em 0.5em; border-radius: var(--radius-pill); background: var(--color-price); color: var(--color-price-ink); font-size: var(--text-xs); font-weight: var(--weight-strong); line-height: 1.4; }
 .offer__stock { grid-area: stock; display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-2); }
 /* Report: a quiet link in each shop's row; its form opens under the price list (includes/report_form.html). */
 /* What eBay says of an eBay row's item or seller ("Top Rated Plus"): plain words, never coloured. */
@@ -2174,7 +2190,7 @@ a, button, summary, select, input, label { touch-action: manipulation; }
 .swipe--fly { transition: transform var(--motion-normal) linear; }
 .swipe--leaving { pointer-events: none; }
 .swipe__top { display: grid; grid-template-rows: minmax(3rem, 1fr) auto auto; gap: var(--space-2); min-height: 0; overflow: hidden; }
-.swipe__image { position: relative; display: grid; place-items: center; min-height: 3rem; border-radius: var(--radius); background: var(--color-shelf); overflow: hidden; }
+.swipe__image { position: relative; display: grid; place-items: center; min-height: 3rem; border-radius: var(--radius); background: var(--color-well); overflow: hidden; }
 @media (max-height: 40rem) { .swipe__meta { display: none; } .swipe__name { font-size: var(--text-base); } }
 /* Absolute so the picture is sized to the box the grid gives it, never the other way round. */
 .swipe__image img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; padding: 4%; box-sizing: border-box; mix-blend-mode: multiply; pointer-events: none; opacity: 0.85; transition: opacity var(--motion-normal); }
@@ -2683,7 +2699,7 @@ li + li > .checker__option { border-top: var(--border-width) solid var(--color-l
 .feed__tiles { margin-top: var(--space-4); }
 .feed-tile { width: var(--feed-tile); }
 .feed-tile__link { display: flex; flex-direction: column; align-items: center; gap: var(--space-2); color: inherit; text-decoration: none; border-radius: var(--radius-tile); }
-.feed-tile__well { display: flex; align-items: center; justify-content: center; width: var(--feed-tile); height: var(--feed-tile); border-radius: var(--radius-tile); background: var(--color-shelf); overflow: hidden; }
+.feed-tile__well { display: flex; align-items: center; justify-content: center; width: var(--feed-tile); height: var(--feed-tile); border-radius: var(--radius-tile); background: var(--color-well); overflow: hidden; }
 /* The picture fills its well, a breath from the edge (the usual padding of a product picture is dropped here: on a tile it
    left a quarter of the well empty) and keeps its own proportions, so a box takes the well's width and a pack its height. */
 .feed-tile__well .product-image { display: block; width: var(--feed-tile); height: var(--feed-tile); line-height: 0; }
@@ -2801,7 +2817,7 @@ li + li > .checker__option { border-top: var(--border-width) solid var(--color-l
 }
 @media (hover: hover) { .feed-card__link:hover { transform: translateY(var(--lift)); box-shadow: var(--shadow-hover); } }
 .feed-card__link:active { transform: scale(0.99); }
-.feed-card__well { position: relative; display: flex; align-items: center; justify-content: center; height: var(--feed-card-well); background: var(--color-shelf); }
+.feed-card__well { position: relative; display: flex; align-items: center; justify-content: center; height: var(--feed-card-well); background: var(--color-well); }
 .feed-card__well .product-image { display: block; width: 100%; height: var(--feed-card-well); line-height: 0; }
 /* The Price check's own verdict as a chip in the picture's corner: Lowest yet in the brand's soft orange, Good price green. */
 .feed-chip { position: absolute; z-index: 1; top: var(--space-2); left: var(--space-2); padding: var(--space-1) var(--space-2); border-radius: var(--radius-pill); background: var(--color-price-soft); color: var(--color-price); font-size: var(--text-2xs); font-weight: var(--weight-heading); line-height: 1.3; }
@@ -3198,7 +3214,7 @@ li + li > .checker__option { border-top: var(--border-width) solid var(--color-l
 .cx-set { display: grid; grid-template-columns: var(--cx-set-pic) minmax(0, 1fr); align-items: center; gap: var(--space-2); padding: var(--space-2); border: var(--border-width) solid var(--color-line); border-radius: var(--radius-card); background: var(--color-paper); color: var(--color-ink); text-decoration: none; transition: border-color var(--motion-fast) var(--ease-standard); }
 .cx-set:hover { border-color: var(--color-brand); }
 .cx-set__pic .product-image { width: var(--cx-set-pic); border-radius: var(--radius-sm); }
-.cx-set__pic:empty { display: block; aspect-ratio: 1; border-radius: var(--radius-sm); background: var(--color-shelf); }
+.cx-set__pic:empty { display: block; aspect-ratio: 1; border-radius: var(--radius-sm); background: var(--color-well); }
 .cx-set__body { display: grid; gap: var(--space-1); min-width: 0; }
 .cx-set__name { font-size: var(--text-sm); font-weight: var(--weight-strong); line-height: var(--leading-snug); }
 .cx-set__game { font-size: var(--text-xs); color: var(--color-ink-subtle); }
@@ -3217,7 +3233,7 @@ li + li > .checker__option { border-top: var(--border-width) solid var(--color-l
 .cx-back a { color: var(--color-ink-muted); text-decoration: none; }
 .cx-back a:hover { color: var(--color-ink); text-decoration: underline; }
 .cx-sethead { display: grid; grid-template-columns: var(--cx-sethead-pic) minmax(0, 1fr); align-items: center; gap: var(--space-3); margin-bottom: var(--space-3); }
-.cx-sethead__pic { display: block; width: var(--cx-sethead-pic); aspect-ratio: 4 / 3; border-radius: var(--radius); background: var(--color-shelf); overflow: hidden; }
+.cx-sethead__pic { display: block; width: var(--cx-sethead-pic); aspect-ratio: 4 / 3; border-radius: var(--radius); background: var(--color-well); overflow: hidden; }
 .cx-sethead__pic .product-image { width: 100%; height: 100%; aspect-ratio: auto; background: none; }
 .cx-sethead__title { margin: 0; font-size: var(--text-xl); line-height: var(--leading-tight); }
 .cx-sethead__meta, .cx-sethead__facts { margin: var(--space-1) 0 0; font-size: var(--text-xs); color: var(--color-ink-muted); }
@@ -3355,7 +3371,7 @@ li + li > .checker__option { border-top: var(--border-width) solid var(--color-l
   .cx-strip__row > li:nth-child(n + 7) { display: none; }
   .cx-deal { display: flex; flex-direction: column; align-items: stretch; gap: 0; padding: 0; overflow: hidden; border-radius: var(--radius-card); background: var(--color-paper); transition: border-color var(--motion-fast) var(--ease-standard), box-shadow var(--motion-fast) var(--ease-standard); }
   .cx-deal:hover { box-shadow: var(--shadow-hover); }
-  .cx-deal__pic { display: block; height: var(--desk-deal-well); background: var(--color-shelf); }
+  .cx-deal__pic { display: block; height: var(--desk-deal-well); background: var(--color-well); }
   .cx-deal .product-image, .cx-set__pic .product-image { display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; aspect-ratio: auto; border-radius: 0; }
   .cx-deal__body { display: flex; flex: 1; flex-direction: column; gap: var(--space-1); padding: var(--space-3) var(--space-4) var(--space-4); }
   .cx-deal__where { display: block; order: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--text-xs); color: var(--color-ink-subtle); }
@@ -3384,7 +3400,7 @@ li + li > .checker__option { border-top: var(--border-width) solid var(--color-l
   .dt-panel--all .cx-sets > li:nth-child(n + 13) { display: none; }
   .cx-set { gap: 0; height: 100%; padding: 0; overflow: hidden; transition: border-color var(--motion-fast) var(--ease-standard), box-shadow var(--motion-fast) var(--ease-standard); }
   .cx-set:hover { box-shadow: var(--shadow-hover); }
-  .cx-set__pic { display: block; height: var(--desk-set-well); background: var(--color-shelf); }
+  .cx-set__pic { display: block; height: var(--desk-set-well); background: var(--color-well); }
   .cx-set__pic:empty { width: 100%; height: 100%; aspect-ratio: auto; border-radius: 0; }
   .cx-set__body { padding: var(--space-3) var(--space-4) var(--space-4); }
   .dt-more { display: block; margin: var(--space-4) 0 0; text-align: center; }

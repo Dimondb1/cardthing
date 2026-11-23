@@ -512,3 +512,75 @@
   --rip-listening-jaw: 3deg;
   --rip-bubble-tail: 0.7rem;       /* the speech bubble's point */
 }
+
+/* Dark mode -------------------------------------------------------------------------------------------------------
+   The owner, 23 Nov 2026: "Could we add a dark mode ... make sure it doesn't leave shit looking products ... make
+   sure it looks amazing". Every colour on the site is a token above, so the dark look is these tokens given a
+   second value: light-dark(the light value, the dark value). The page follows the phone or computer
+   (color-scheme: light dark), and the choice in the footer overrides that either way (data-theme on <html>, kept in
+   the browser by site.js and set before the first paint by the small script in the head). A browser too old for
+   light-dark() skips this whole block and keeps the light look.
+
+   The dark palette is the ink's own blue-grey taken down to near black, with the brand's orange unchanged on
+   buttons and the logo, and the orange, green and red used for words lifted until each is 4.5:1 or more on the dark
+   page: green still means cheapest and red dearer.
+
+   Product photos are the one thing that stays light. Shops' photos have white backgrounds, which the wells blend
+   away (mix-blend-mode: multiply on --color-shelf); on a dark well that same blend turns a photo to mud. So a
+   picture well keeps a light ground in both modes (--color-well: a shade softer in the dark so it does not glare),
+   and is marked color-scheme: light in site.css, so everything drawn on it (the outline when there is no photo, a
+   badge on the photo) keeps its light colours too. --color-well is registered as a colour so that it is worked out
+   on the page, not inside the well, where it would come out as the light value. */
+@property --color-well { syntax: "<color>"; inherits: true; initial-value: #f6f6f8; }
+:root { --color-well: #f6f6f8; --color-price-ink: #ffffff; }
+@supports (color: light-dark(#000, #fff)) {
+  :root {
+    color-scheme: light dark;
+    --color-well: light-dark(#f6f6f8, #e6e8ee);
+    --color-ink: light-dark(#1f2430, #eef0f4);
+    --color-ink-muted: light-dark(#545b68, #b4bac6);
+    --color-ink-subtle: light-dark(#667085, #98a0b0);   /* 6.6:1 on the dark page */
+    --color-paper: light-dark(#ffffff, #14161c);
+    --color-shelf: light-dark(#f6f6f8, #1d2028);
+    --color-line: light-dark(#e6e8ec, #2b2f3a);
+    --color-line-soft: light-dark(#eef0f3, #22252e);
+    --color-line-strong: light-dark(#cfd4dc, #3d4350);
+    --color-placeholder: light-dark(#c9cdd4, #4b515e);
+
+    /* The logo's and the buttons' orange is the same in both: white on it reads either way. Orange words are lifted. */
+    --color-brand-text: light-dark(#cc4410, #ff7d4d);    /* 7.3:1 on the dark page */
+    --color-brand-soft: light-dark(#fff1ea, #2a1b14);
+    --color-brand-line: light-dark(#ffd6c4, #54301f);
+    --color-brand-pill: light-dark(#ffdccb, #4a2a1b);
+
+    --color-price: light-dark(#107a32, #3fd07a);         /* 8.8:1 on the dark page */
+    --color-price-soft: light-dark(#e7f7ec, #12311f);
+    --color-price-ink: light-dark(#ffffff, #06240f);     /* words on a block of the price green */
+    --color-more: light-dark(#c9271b, #ff6f61);
+
+    --color-fair-bad-bg: light-dark(#fbf1d3, #33290a);
+    --color-fair-bad-ink: light-dark(#7d6000, #f1c74c);
+    --color-fair-good-rule: light-dark(#a9d8b7, #245a3b);
+    --color-fair-even-rule: light-dark(#cfd2d8, #3a3f4b);
+    --color-fair-bad-rule: light-dark(#e3c977, #6a5616);
+
+    --color-in-stock: light-dark(#107a32, #3fd07a);
+    --color-preorder: light-dark(#b25e00, #f2a24e);
+    --color-out: light-dark(#7a8190, #8e96a6);
+
+    --color-focus: light-dark(#1f2430, #ffffff);
+    --color-backdrop: light-dark(rgb(31 36 48 / 0.45), rgb(0 0 0 / 0.62));
+
+    /* Shadows barely show on a dark page, where the lines do their work, so they are deeper there. */
+    --shadow-sheet: 0 -4px 24px light-dark(rgb(31 36 48 / 0.16), rgb(0 0 0 / 0.5));
+    --shadow-card: 0 1px 2px light-dark(rgb(31 36 48 / 0.04), rgb(0 0 0 / 0.3)), 0 2px 8px light-dark(rgb(31 36 48 / 0.04), rgb(0 0 0 / 0.24));
+    --shadow-input: 0 1px 2px light-dark(rgb(31 36 48 / 0.05), rgb(0 0 0 / 0.3));
+    --shadow-search: 0 2px 10px light-dark(rgb(31 36 48 / 0.08), rgb(0 0 0 / 0.4));
+    --shadow-hover: 0 2px 4px light-dark(rgb(31 36 48 / 0.05), rgb(0 0 0 / 0.3)), 0 10px 24px light-dark(rgb(31 36 48 / 0.09), rgb(0 0 0 / 0.4));
+    --shadow-lift: 0 12px 32px light-dark(rgb(31 36 48 / 0.14), rgb(0 0 0 / 0.55)), 0 2px 6px light-dark(rgb(31 36 48 / 0.06), rgb(0 0 0 / 0.3));
+    --ask-bubble-shadow: 0 0.25rem 0.625rem light-dark(rgb(31 36 48 / 0.22), rgb(0 0 0 / 0.5));
+    --season-flake: light-dark(#c7d3e3, #5b6677);        /* snowflakes in the air, quiet on either page */
+  }
+  :root[data-theme="light"] { color-scheme: light; }
+  :root[data-theme="dark"] { color-scheme: dark; }
+}

@@ -209,6 +209,12 @@ ENTRIES = [
     Entry("site.consent.more", B, "Analytics details link", "How we use it", "Link on the analytics card to the data section of the terms page."),
     Entry("site.consent.allow", B, "Allow analytics button", "Allow analytics", "On the analytics card. Loads Google Analytics."),
     Entry("site.consent.refuse", B, "Refuse analytics button", "No analytics", "On the analytics card. Google Analytics never loads."),
+    Entry("site.theme.label", T, "Light or dark: label", "Appearance",
+          "In the footer, before the choice of a light or dark look."),
+    Entry("site.theme.auto", B, "Light or dark: follow the device", "Match my device",
+          "Footer button: the site is light or dark as the phone or computer is."),
+    Entry("site.theme.light", B, "Light or dark: light", "Light", "Footer button: the site stays light."),
+    Entry("site.theme.dark", B, "Light or dark: dark", "Dark", "Footer button: the site stays dark."),
     Entry(
         "site.nav.consent", B, "Analytics choice link",
         "Analytics cookies",
@@ -2734,7 +2740,7 @@ ENTRIES = [
           "A price more than 15% over the RRP is never called fair, whatever else it is measured against.",
           "At the foot of the price check sheet when the product has an RRP."),
     Entry("product.fair.how", T, "Price check: how to read it",
-          "More bars mean a better price. Green is a good price, grey is about usual, dark yellow is dearer than "
+          "More bars mean a better price. Green is a good price, grey is about usual, yellow is dearer than "
           "usual.",
           "Under the verdict in the price check sheet, for anyone new to it.", optional=True),
     Entry("product.fair.basis", T, "Price check: basis",
@@ -4273,7 +4279,8 @@ ENTRIES = [
     Entry(
         "terms.data.body", P, "Data explanation",
         "RipRaptor does not ask you to create an account. Products you save, products you view, games you browse "
-        "and searches you make are kept in your browser, not by us, and you can clear them from the home page. We "
+        "and searches you make are kept in your browser, not by us, and you can clear them from the home page. "
+        "Your choice of a light or dark look is kept there too. We "
         "count visits and clicks to shops without recording who you are: our counts hold only the day, your "
         "country, the kind of device and the site that sent you. To protect the site from automated traffic we "
         "keep your internet address for up to 30 minutes after the last page you open, then delete it; it never "

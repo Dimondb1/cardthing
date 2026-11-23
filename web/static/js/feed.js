@@ -332,4 +332,42 @@
       document.addEventListener("ripraptor:content", function () { setTimeout(showCues, 0); });
     });
   })();
+
+  // The search box's hint, where the box is too narrow to show it whole (a phone: "Search any pro..."): it glides along
+  // to its end and back, so it can be read (the owner, 23 Nov 2026: "make the message scroll so you can read it. The
+  // fact it's cut off is ... annoying"). Shown while the box is empty, never over what is typed or heard. The box keeps
+  // its own hint for screen readers. Laid over the box rather than wrapped round it: voice search writes into the
+  // form round the box (ask-input.js). Not with reduced motion: the hint then ends in an ellipsis, as without script.
+  (function () {
+    var form = document.querySelector(".feed-search");
+    var field = form && form.querySelector("input[type=search]");
+    var glide = form && form.querySelector(".feed-search__glide");
+    if (!field || !glide || reduced) return;
+    var words = glide.firstElementChild;
+    var fit = function () {
+      var style = window.getComputedStyle(field);
+      var left = parseFloat(style.paddingLeft) || 0;
+      var room = field.clientWidth - left - (parseFloat(style.paddingRight) || 0);
+      if (!field.offsetParent || room <= 0) { glide.hidden = true; form.classList.remove("has-glide"); return; }
+      glide.style.left = field.offsetLeft + left + "px";
+      glide.style.top = field.offsetTop + "px";
+      glide.style.height = field.offsetHeight + "px";
+      glide.style.width = room + "px";
+      glide.hidden = false;
+      glide.style.display = "flex";   // measured as shown, whatever the box holds now
+      var over = words.offsetWidth - room;
+      glide.style.display = "";
+      if (over > 1) {
+        glide.style.setProperty("--glide-shift", -Math.ceil(over + 2) + "px");
+        form.classList.add("has-glide");
+      } else {
+        glide.hidden = true;
+        form.classList.remove("has-glide");
+      }
+    };
+    fit();
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(fit);
+    if (window.ResizeObserver) new ResizeObserver(fit).observe(field);
+    else window.addEventListener("resize", fit);
+  })();
 })();

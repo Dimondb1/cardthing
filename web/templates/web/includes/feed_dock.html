@@ -7,6 +7,8 @@
       <svg class="feed-ic" aria-hidden="true" focusable="false"><use href="#rr-search"/></svg>
       <label class="visually-hidden" for="feed-q">{{ feed.search_hint }}</label>
       <input id="feed-q" name="q" type="search" placeholder="{{ feed.search_hint }}" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="search" maxlength="100" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="feed-q-results">
+      {# The hint again, for feed.js to glide along to its end and back where the box is too narrow to show it whole (a phone). Hidden without script, where the box's own hint ends in an ellipsis. #}
+      <span class="feed-search__glide" aria-hidden="true" hidden><span>{{ feed.search_hint }}</span></span>
       {% if feed.game %}<input type="hidden" name="game" value="{{ feed.game.slug }}">{% endif %}
       <input type="hidden" name="via" value="box">
       <span class="visually-hidden" role="status" data-voice-status hidden></span>

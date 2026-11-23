@@ -7076,6 +7076,15 @@ should show where a tap goes.
 and a microphone to the search box where the browser can listen (Chrome on
 a phone), which searches for what was said. The dock's search box shows
 results as you type by the header's own script (`site.js`), above the box.
+Its hint, "Search any product", is given the room Chrome keeps for the
+invisible clear button while the box is empty, so it fits whole at 384px;
+on a narrower phone (360px, 375px) `feed.js` glides it to its end and back
+(6 seconds each way, with a rest at each end, only by transform), so it can
+be read (the owner, 23 Nov 2026: "make the message scroll so you can read
+it"). It glides only while the box is empty and not listening, and not at
+all with reduced motion, where it ends in an ellipsis as without script.
+This is the one animation longer than 400ms, at the owner's request
+(`--motion-glide`).
 Switching games is a normal page load; in Chrome the feed pages opt in to a
 cross-document view transition (the dock stays, the chosen pill glides) and
 fetch a game's page as the finger lands on it (speculation rules), so it

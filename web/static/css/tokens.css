@@ -217,6 +217,9 @@
   --motion-fast: 140ms;      /* presses, hovers, focus */
   --motion-normal: 220ms;    /* panels, reveals, price changes */
   --motion-slow: 340ms;      /* cards leaving the deck, entrances */
+  /* The search hint gliding to its end and back on a phone (feed.js): one way, with a rest at each end. Longer than
+     the 400ms rule on purpose, at the owner's request (23 Nov 2026): words moving faster cannot be read. */
+  --motion-glide: 6s;
   --launch-split: 400ms;     /* the app's opening: the two halves parting, the longest movement allowed */
   --launch-most: 3s;         /* and if the page never says it is ready, it opens by itself after this */
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);      /* entrances and movement */

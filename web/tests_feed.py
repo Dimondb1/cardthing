@@ -234,6 +234,9 @@ class HomeFeedTests(FeedCase):
         self.assertIn(f'<form class="feed-search" action="{reverse("web:voice_search")}" method="get" role="search" '
                       f'data-plain-search="{reverse("web:search")}" ', dock)
         self.assertIn('placeholder="Search any product"', dock)
+        # The hint again, for feed.js to glide where the box is too narrow for it (the owner, 23 Nov 2026: "make the
+        # message scroll so you can read it"): hidden from screen readers, who hear the box's own, and without script.
+        self.assertIn('<span class="feed-search__glide" aria-hidden="true" hidden><span>Search any product</span></span>', dock)
         # The arrows on the dock's edge, for feed.js to show on a phone: down to the next heading, up to the one before.
         # The owner, 6 Nov 2026: "pop the user down to the next heading and then maybe an up one to pop them back up".
         self.assertIn('<div class="feed-dock__cues"><button class="feed-dock__cue feed-dock__cue--up" type="button" hidden '

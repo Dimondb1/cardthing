@@ -3013,6 +3013,19 @@ li + li > .checker__option { border-top: var(--border-width) solid var(--color-l
 @media (prefers-reduced-motion: reduce) { .feed-dock__cue--down.is-new, .feed-dock__where.is-new { animation: none; } }
 /* The search box's hint ends in an ellipsis where the box is narrower than the words, rather than cutting a word in half. */
 .feed-search input { text-overflow: ellipsis; }
+/* Chrome keeps the clear button's room while the box is empty, though the button is invisible: the hint gets it instead
+   (on a phone 384 pixels wide it then fits whole). On its own line, so a browser without the pseudo-element keeps the rest. */
+.feed-search input:placeholder-shown::-webkit-search-cancel-button { display: none; }
+/* Where it is narrower, with script and motion, the hint glides to its end and back instead (feed.js sets where it sits
+   and how far it goes): over the box, only while the box is empty and not listening or searching, the box's own hint
+   hidden under it. Only transform moves. */
+.feed-search__glide { position: absolute; z-index: 1; display: flex; align-items: center; overflow: hidden; pointer-events: none; color: var(--color-ink-muted); font-size: var(--text-base); font-weight: var(--weight-medium); white-space: nowrap; }
+.feed-search__glide[hidden], .feed-search input:not(:placeholder-shown) ~ .feed-search__glide,
+.feed-search.is-listening .feed-search__glide, .feed-search.is-searching .feed-search__glide, .feed-search.is-voicing .feed-search__glide { display: none; }
+.feed-search__glide > span { flex: none; animation: feed-glide var(--motion-glide) var(--ease-standard) infinite alternate; }
+.feed-search.has-glide:not(.is-listening):not(.is-searching) input::placeholder { color: transparent; }
+@keyframes feed-glide { 0%, 20% { transform: translateX(0); } 80%, 100% { transform: translateX(var(--glide-shift, 0)); } }
+@media (prefers-reduced-motion: reduce) { .feed-search__glide { display: none; } .feed-search.has-glide:not(.is-listening):not(.is-searching) input::placeholder { color: var(--color-ink-muted); } }
 /* Results as you type open above the search box, clear of the keyboard; the header's search has its own on a wide screen. */
 .feed-dock .live { position: absolute; z-index: 1; left: var(--space-3); right: var(--space-3); bottom: calc(100% + var(--space-2)); margin: 0; max-height: 60vh; overflow: auto; }
 /* Switching games: the pill answers the press at once; in Chrome the page cross-fades into the next while the dock stays put

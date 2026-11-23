@@ -15,7 +15,7 @@ from django.db.models import Count, F, Max, Q, Sum
 from django.utils import timezone
 
 from . import checks, geo
-from .importers import STOPPED, section_handles
+from .importers import SHOP_CLOSED, STOPPED, section_handles
 from . import online
 from .pricing import drop_if_locked, retry_locked
 from .models import (
@@ -549,7 +549,8 @@ def section_shops():
     """Shops read from some of their collections rather than the whole shop (Zatu): which collections,
     how many of their products we list, and how many found outside those collections are read one by one."""
     shops = list(
-        Retailer.objects.filter(is_active=True, source_type=Retailer.Source.SHOPIFY).exclude(collection="").order_by("name")
+        Retailer.objects.filter(is_active=True, source_type=Retailer.Source.SHOPIFY)
+        .exclude(collection="", auto_collection="").order_by("name")
     )
     ids = [retailer.pk for retailer in shops]
     listed = dict(
@@ -783,7 +784,9 @@ def reading_state(retailer, now, error_shown=False):
     The error that started a wait is left out when the latest run's error is already shown beside it.
     """
     if retailer.reading_paused:
-        return "Paused"
+        return f"Paused: {retailer.paused_note}" if retailer.paused_note else "Paused"
+    if retailer.backoff_until and retailer.backoff_until > now and retailer.last_error.startswith(SHOP_CLOSED):
+        return f"{SHOP_CLOSED}, looked at again {clock(retailer.backoff_until, now)}"
     if retailer.backoff_until and retailer.backoff_until > now:
         line = f"Backing off until {clock(retailer.backoff_until, now)} after {plural(retailer.error_streak, 'error', 'errors')}"
         return f"{line}: {retailer.last_error[:160]}" if retailer.last_error and not error_shown else line

@@ -463,6 +463,24 @@ class DeadlineTests(WorkerTestCase):
         self.assertEqual((cut.error, ancient.error, hand_run.finished_at), (STOPPED, STOPPED, None))
         state = WorkerState.objects.get()
         self.assertEqual((state.in_flight, state.started_at), ([], self.clock()))
+        # The shop whose read was cut short is read first, as a stop that could hand it back would have made it.
+        shop.refresh_from_db(), other.refresh_from_db()
+        self.assertEqual(shop.next_read_at, self.clock())
+        self.assertNotEqual(other.next_read_at, self.clock())
+
+    def test_a_stop_on_a_busy_database_leaves_the_runs_to_the_next_start_without_an_error(self):
+        """The owner's log, 23 Nov 2026: a red "database is locked" after each update, a read still writing as the
+        reader was stopped. The next start closes those runs and reads their shops first, so it is only a note."""
+        from django.db import OperationalError
+
+        reader = self.make_worker()
+        with mock.patch.object(reader, "hand_back", side_effect=OperationalError("database is locked")), \
+                mock.patch.object(worker.os, "_exit") as ended, mock.patch.object(worker, "sd_notify"), \
+                self.assertLogs("catalogue.worker", level="WARNING") as said:
+            reader.stop()
+        ended.assert_called_once_with(0)
+        self.assertEqual([record.levelname for record in said.records], ["WARNING"])
+        self.assertIn("left for the next start to close (database is locked)", said.output[0])
 
 
 class RunWorkerOnceTests(WorkerTestCase):

@@ -57,7 +57,7 @@ from datetime import datetime, timedelta
 
 from django.conf import settings
 from django.core.cache import cache
-from django.db import connections
+from django.db import OperationalError, connections
 from django.db.models import Q
 from django.utils import timezone
 
@@ -910,7 +910,9 @@ class Worker:
         now = self.clock()
         seconds = max(0.0, (now - job.started).total_seconds())
         ok = crawl.finish_read(shop, run, began, seconds, since=job.started, now=now)
-        if not ok:
+        if not ok and run.error.startswith(importers.SHOP_CLOSED):
+            logger.warning("%s: %s; looked at again tomorrow", shop, importers.SHOP_CLOSED)
+        elif not ok:
             logger.error("%s: %s", shop, run.error)
         elif shop.source_type == Retailer.Source.EBAY:
             logger.info("eBay: this hour's search finished in %d minutes: %d products searched, %d listings updated",
@@ -1170,11 +1172,15 @@ class Worker:
         for entry in state.in_flight or []:
             try:
                 since = datetime.fromisoformat(entry["since"])
-                closed += ImportRun.objects.filter(
+                cut = ImportRun.objects.filter(
                     retailer_id=entry["retailer"], finished_at__isnull=True, started_at__gte=since
                 ).update(finished_at=now, error=importers.STOPPED)
             except (KeyError, TypeError, ValueError):
                 continue
+            if cut:
+                # A read the last process could not hand back as it stopped (stop): its shop is read first.
+                Retailer.objects.filter(pk=entry["retailer"]).update(next_read_at=now)
+            closed += cut
         closed += importers.close_abandoned_runs(now=now)
         fields = {"in_flight": [], "started_at": now, "heartbeat_at": now, "jobs_done": 0}
         last = state.heartbeat_at
@@ -1364,6 +1370,11 @@ class Worker:
             reads = [job for job in self.running.values() if job.task.kind == SHOP_READ]
         try:
             self.hand_back(reads, now)
+        except OperationalError as exc:
+            # A read still writing holds the database (an update stopped the reader mid-read): the next start closes
+            # these runs and reads their shops first (begin), so nothing is lost. The owner's log, 23 Nov 2026,
+            # showed this as a red "database is locked" after each update.
+            logger.warning("The runs in flight are left for the next start to close (%s)", exc)
         except Exception:  # noqa: BLE001
             logger.exception("Could not close the runs in flight")
         # The pool's threads may be in the middle of a long read; they are not waited for.

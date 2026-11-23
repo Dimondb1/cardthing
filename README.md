@@ -92,6 +92,22 @@ top-5000-trading-card-games football`: a check of all of Zatu on 13 Oct 2026
 found 49 buyable card products outside `trading-card-games` alone, among
 them the Topps football tins, and none worth having outside these three.
 
+Shopify lists at most 100 pages of 250 products (25,000) in a shop's
+`/products.json`; page 101 answers HTTP 400. A shop with more (Japan2UK,
+Total Cards) is read whole once; when that read meets the limit, the reader
+picks the shop's sealed sections from its `/collections.json` list and reads
+by them from the next read. A section is kept when its handle or title names
+a sealed product type (booster box, elite trainer box, tin, bundle and so on,
+or "sealed" or "pre-order") and names one of our games or no game at all;
+one named for singles, sleeves, playmats, other accessories or another game
+(One Piece, Digimon) is left. Empty sections are skipped and the biggest 60
+kept. They are shown under "sealed sections picked by the reader" on the
+shop's Prices in Admin, picked again every seven days, and read with the
+shop's newest two pages, as for owner-set collections. Every product of
+ours already listed from the shop outside those sections is read on its own,
+so nothing known drops out. "Shopify collections" set by the owner always
+wins: the picked sections are then not read.
+
 A shop that sells one game and leaves it out of its product names (Clifford
 TCG, a Pokémon shop: "Surging Sparks Booster Box", with no game in the
 name, type, vendor or tags either) has "game when the name does not say"
@@ -2805,7 +2821,18 @@ shop's page in Admin > Retailers:
   run carries on with the next shop. One read that works clears both.
 - **Reading paused** keeps the shop out of every scheduled read and out of
   the ten-minute stock checks. Reading it by name (`import_prices <slug>`)
-  still works.
+  still works. **Why reading is paused** is a note beside it.
+  `setup_shops` pauses a shop listed in its `PAUSE` once, with the note, and
+  never again: Goblin Gaming, paused on 23 Nov 2026 because its Cloudflare
+  check sometimes blocks the reads. Untick Reading paused to try it again.
+- **Closed for now**: a Shopify shop whose website is behind its password
+  page answers HTTP 401. That read takes the shop's prices off the site
+  (marked out of stock, checked now) and the shop is looked at again in 24
+  hours, without counting as a failing shop: no growing wait, no daily
+  warning, the log says so once as a warning. Its Crawl health row says
+  "Closed for now: the shop's website is behind its password page, looked
+  at again" with the time, and a paused shop's row shows its note. The
+  first read that works once it reopens brings the prices back.
 
 The background reader reads each shop when its next read comes. When it is
 not running, the hourly cron runs `import_prices --due`. A shop's next read is counted
@@ -3032,7 +3059,10 @@ the shop waits before it is asked again), closes its run with "Stopped
 before it finished.", closes the other reads in flight and makes those
 shops due again at once, and ends the process; systemd starts a new one
 ten seconds later, and on start the reader closes the runs it had in flight
-and any older than three hours. It writes a heartbeat every 30 seconds to
+and any older than three hours, and makes the shops of the runs it had in
+flight due at once. A stop (an update restarts the reader) hands back the
+reads in flight; when a read is still writing and the database is busy, the
+log notes that the next start closes them, as a warning, not an error. It writes a heartbeat every 30 seconds to
 the database (Crawl health reads it) and to systemd's watchdog, which
 restarts it after three minutes without one. It is capped at 32% of the
 server's memory (`MemoryMax`: about 300 MB on a "1 GB" server, 600 MB on a

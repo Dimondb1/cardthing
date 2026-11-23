@@ -365,6 +365,15 @@ AFFILIATE = {
 # found 49 buyable card products outside trading-card-games: 46 in its broader "All Trading Card Games"
 # collection and the football cards in "Football". New products filed anywhere else are caught by the
 # read of the shop's newest products (importers.shopify_offers).
+# Shops whose reading is paused for the owner, once: kept in the shop's "why reading is paused", so a shop the owner
+# unpauses in Admin is never paused again by a later update. The owner, 23 Nov 2026, of Goblin Gaming's site showing
+# Cloudflare's "Just a moment" check instead of its products now and then: "Pause Goblin Gaming". Its check is never
+# worked round; Admin, Shops, untick Reading paused to try it again.
+PAUSE = {
+    "goblin-gaming": "Paused on 23 Nov 2026 at the owner's request: the shop's Cloudflare check sometimes blocks "
+                     "RipRaptor's reads. Untick Reading paused to try again.",
+}
+
 COLLECTIONS = {
     "zatu-games": "trading-card-games top-5000-trading-card-games football",
     # Its sealed products by game; the singles sit in collections of their own. These held 401 of the
@@ -476,6 +485,9 @@ class Command(BaseCommand):
                 if up_to and existing.delivery_cost_up_to is None:
                     existing.delivery_cost_up_to = Decimal(up_to)
                     changed.append("delivery_cost_up_to")
+                if PAUSE.get(slug) and not existing.paused_note:
+                    existing.reading_paused, existing.paused_note = True, PAUSE[slug]
+                    changed += ["reading_paused", "paused_note"]
                 if changed:
                     existing.save(update_fields=changed)
                 if {"delivery_cost", "delivery_cost_up_to"} & set(changed):

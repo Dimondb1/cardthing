@@ -135,7 +135,12 @@ def finish_read(item, run, began, seconds, since=None, now=None):
     # The owner may have changed the cadence while the shop was being read.
     item.refresh_from_db(fields=["read_every_minutes", "error_streak", "failing_since"])
     if run.error:
-        item.read_failed(now, http_status(run.error), run.error)
+        from .importers import SHOP_CLOSED
+
+        if run.error.startswith(SHOP_CLOSED):
+            item.closed_for_now(now, run.error)
+        else:
+            item.read_failed(now, http_status(run.error), run.error)
         return False
     if run.started_at < began:
         item.read_ok(now, 0, ok_at=run.finished_at, since=since)

@@ -624,8 +624,105 @@ MAX_EXTRA_PRODUCTS = 300
 
 
 def section_handles(retailer):
-    """The Shopify collections a shop is read from, in order, or [] for the whole shop."""
-    return [h for h in re.split(r"[\s,]+", retailer.collection or "") if h]
+    """The Shopify collections a shop is read from, in order, or [] for the whole shop: the owner's (Shopify
+    collections), else the sealed sections the reader picked (sealed sections picked by the reader)."""
+    own = [h for h in re.split(r"[\s,]+", retailer.collection or "") if h]
+    return own or [h for h in (getattr(retailer, "auto_collection", "") or "").split() if h]
+
+
+# Shopify lists a shop's products 250 a page, the newest first, and no further than page SHOPIFY_PAGE_LIMIT: asked
+# for the page after, it answers 400. A shop with more (a singles shop of 100,000 cards) is read from its sealed
+# sections instead (sealed_sections), picked from its own collection list once a whole read shows it is past the
+# limit, picked again every AUTO_SECTIONS_EVERY, at most AUTO_SECTIONS_MOST of them, the biggest first. With them
+# the shop's newest products are read as for any shop read by its collections, and every product of ours already
+# listed there that sits outside them is read on its own, so nothing known drops out of sight. The owner's log, 23
+# Nov 2026: twelve shops stopping at page 101, their older sealed stock never seen; the owner: "Read their sealed
+# sections".
+SHOPIFY_PAGE_LIMIT = 100
+AUTO_SECTIONS_EVERY = timedelta(days=7)
+AUTO_SECTIONS_MOST = 60
+SECTION_LIST_PAGES = 8   # pages of 250 collections looked through when picking
+# A section of accessories, singles or anything else that is not a sealed product, whatever else its name says.
+NOT_SEALED = re.compile(
+    r"\b(?:singles?|sleeves?|play ?mats?|binders?|deck ?box(?:es)?|top ?loaders?|storage|dice|accessor(?:y|ies)|"
+    r"graded|slabs?|grading|frames?|acrylic|protectors?|empty|figures?|plush|apparel|clothing|books?|puzzles?|"
+    r"board ?games?|warhammer|paints?|miniatures?|lego)\b", re.I)
+# Words that only fill a section's name: what is left once these and the sealed words are gone names something else.
+SECTION_FILLER = re.compile(
+    r"\b(?:tcg|ccg|trading|card|cards|game|games|english|japanese|korean|chinese|all|new|the|and|of|products?|range|"
+    r"uk|latest|items?|stock|in|released?|releases|coming|soon|sale|offers?|\d+)\b", re.I)
+
+
+def section_words():
+    """(sealed, our games, other games): patterns for a section's name, from the importer's own product types and
+    game words (catalogue/classify.py), our games being those the site lists."""
+    from .classify import TYPES
+    from .models import Game
+
+    def pattern(words):
+        words = sorted({w.strip() for w in words if w.strip()}, key=len, reverse=True)
+        return re.compile(r"(?<![a-z])(?:" + "|".join(re.escape(w) for w in words) + r")(?:e?s)?(?![a-z])", re.I)
+
+    sealed = pattern([word for _kind, words in TYPES for word in words]
+                     + ["sealed", "pre order", "preorder", "pre-order", "pre release", "prerelease", "elite trainer"])
+    listed = set(Game.objects.filter(is_active=True).values_list("slug", flat=True))
+    ours = [word for slug, _name, _short, words in GAMES if slug in listed for word in words]
+    theirs = [word for slug, _name, _short, words in GAMES if slug not in listed for word in words]
+    return sealed, pattern(ours) if ours else None, pattern(theirs) if theirs else None
+
+
+def sealed_section(handle, title, words):
+    """Whether a Shopify collection, by its handle and title, holds sealed products of a game the site lists: named
+    for a sealed kind (booster box, elite trainer box, bundle, tin, pre-order and so on), not for accessories or
+    singles, and naming one of our games or no game at all ("booster-boxes")."""
+    sealed, ours, theirs = words
+    text = f"{title} {handle.replace('-', ' ')}".lower()
+    if NOT_SEALED.search(text) or not sealed.search(text):
+        return False
+    if ours is not None and ours.search(text):
+        return True
+    if theirs is not None and theirs.search(text):
+        return False
+    return not SECTION_FILLER.sub(" ", sealed.sub(" ", handle.replace("-", " ").lower())).split()
+
+
+def sealed_sections(base, fetch=fetch, pause=0.0):
+    """The handles of a Shopify shop's sealed sections (sealed_section), the biggest first, at most
+    AUTO_SECTIONS_MOST: [] when it lists none or gives no collection list."""
+    listed = []
+    for page in range(1, SECTION_LIST_PAGES + 1):
+        if page > 1 and pause:
+            time.sleep(pause)
+        try:
+            found = json.loads(fetch(f"{base}/collections.json?limit=250&page={page}")).get("collections") or []
+        except (ImportError_, json.JSONDecodeError, AttributeError):
+            break
+        listed += [c for c in found if isinstance(c, dict)]
+        if len(found) < 250:
+            break
+    words = section_words()
+    chosen = {}
+    for collection in listed:
+        handle, count = collection.get("handle") or "", collection.get("products_count")
+        if handle and count != 0 and sealed_section(handle, collection.get("title") or "", words):
+            chosen.setdefault(handle, count if isinstance(count, int) else 0)
+    return [handle for handle, _count in sorted(chosen.items(), key=lambda row: -row[1])][:AUTO_SECTIONS_MOST]
+
+
+def keep_sections(retailer, handles, now=None):
+    """Keep the sealed sections picked for ``retailer`` (empty: read the whole shop again)."""
+    text = " ".join(handles)
+    now = now or timezone.now()
+    type(retailer).objects.filter(pk=retailer.pk).update(auto_collection=text, auto_collection_at=now)
+    retailer.auto_collection, retailer.auto_collection_at = text, now
+
+
+def known_handles(retailer):
+    """The product handles of the shop's listings in stock or on pre-order, from their links."""
+    from .models import Listing
+
+    urls = Listing.objects.filter(retailer=retailer, is_active=True, availability__in=Listing.BUYABLE).values_list("url", flat=True)
+    return [found.group(1) for found in (re.search(r"/products/([^/?#]+)", url or "") for url in urls) if found]
 
 
 def shopify_pages(listing, fetch=fetch, pause=0.0, max_pages=MAX_SHOPIFY_PAGES, short=None):
@@ -717,10 +814,24 @@ def shopify_offers(retailer, fetch=fetch, pause=0.0, short=None):
                 offer.deal = offer_deal(offer, deals.get(handle))
             yield offer
 
+    own = bool((retailer.collection or "").strip())
     sections = section_handles(retailer)
+    picked_long_ago = (retailer.auto_collection_at is None
+                       or timezone.now() - retailer.auto_collection_at >= AUTO_SECTIONS_EVERY)
+    if sections and not own and picked_long_ago:
+        # The sealed sections picked a week ago or more: picked again, as the shop adds sections for new sets.
+        sections = sealed_sections(base, fetch=fetch, pause=pause) or sections
+        keep_sections(retailer, sections)
     if not sections:
-        for product in shopify_pages(f"{base}/products.json", fetch, pause, short=short):
+        missed = short if short is not None else []
+        for product in shopify_pages(f"{base}/products.json", fetch, pause, short=missed):
             yield from offers_of(product)
+        if any(reason.startswith(f"page {SHOPIFY_PAGE_LIMIT + 1} of {base}/products.json") for reason in missed):
+            picked = sealed_sections(base, fetch=fetch, pause=pause)
+            if picked:
+                keep_sections(retailer, picked)
+                logger.warning("%s: more products than Shopify lists (%d pages); read from %d sealed sections from the "
+                               "next read", retailer.name, SHOPIFY_PAGE_LIMIT, len(picked))
         return
     # A shop that sells far more than cards (Zatu: board games, puzzles, books) is read from its card
     # collections, so the thousands of other products never reach the matcher. A product in two of them
@@ -735,6 +846,10 @@ def shopify_offers(retailer, fetch=fetch, pause=0.0, short=None):
             yield from offers_of(product)
     in_sections = set(seen)
     kept = [h for h in (retailer.extra_products or "").split() if h not in in_sections]
+    if not own:
+        # Read by the sections the reader picked: every product of ours already listed outside them is read on its own,
+        # so nothing known drops out of sight when a shop is first read this way.
+        kept = [h for h in known_handles(retailer) if h not in in_sections and h not in kept] + kept
     extras = list(dict.fromkeys(kept))
     # The shop's newest products: one of ours filed outside the card collections joins the extras.
     try:
@@ -2431,6 +2546,18 @@ def run_import(retailer, feed_path=None, fetch=None, page_pause=0.0):
     return run
 
 
+# A Shopify shop closed behind its password page ("The store is temporarily unavailable"): Shopify answers its
+# product list with 401. Its prices come off the site at once (nobody is sent to a shop they cannot buy from), it is
+# read again a day later rather than every few minutes (Retailer.closed_for_now), and a read that works brings it
+# back. The owner's log, 23 Nov 2026: Tayler TCG and Tier Zero Games failing on every read and pre-order check.
+SHOP_CLOSED = "Closed for now: the shop's website is behind its password page"
+
+
+def closed_behind_password(retailer, error):
+    """Whether a failed read says the Shopify shop is closed behind its password page (Shopify's 401)."""
+    return retailer.source_type == Retailer.Source.SHOPIFY and "HTTP Error 401" in str(error)
+
+
 def _run_import(run, retailer, feed_path, fetch, page_pause):
     fetch = retailer_fetch(retailer, fetch)
     short = []   # pages of the shop that could not be read, filled in as the offers come
@@ -2486,8 +2613,14 @@ def _run_import(run, retailer, feed_path, fetch, page_pause):
         run.listings_updated = updated
         run.unmatched = unmatched_text(unmatched)
     except (ImportError_, OSError) as exc:
-        run.error = str(exc)
-        logger.error("Import for %s failed: %s", retailer, exc)
+        if closed_behind_password(retailer, exc):
+            run.error = f"{SHOP_CLOSED} ({exc})"[:500]
+            shut = Listing.objects.filter(retailer=retailer, is_active=True, availability__in=Listing.BUYABLE).update(
+                availability=Listing.Availability.OUT_OF_STOCK, last_checked=timezone.now())
+            logger.warning("%s: %s; its %d prices are off the site until it reopens", retailer, SHOP_CLOSED, shut)
+        else:
+            run.error = str(exc)
+            logger.error("Import for %s failed: %s", retailer, exc)
     run.finished_at = timezone.now()
     run.save()
     from .signals import clear_list_caches

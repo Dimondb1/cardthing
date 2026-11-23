@@ -583,6 +583,19 @@ class Retailer(models.Model):
         "\"Surging Sparks Booster Box\" does: a product whose name, type and tags name no game is read as this "
         "game's. Leave blank for a shop that sells more than one game.",
     )
+    # A Shopify shop with more products than Shopify lists (25,000, the newest first) is read from its sealed sections
+    # instead, picked by the reader from the shop's own collection list (importers.sealed_sections). The owner, 23 Nov
+    # 2026, of twelve card shops whose older sealed stock was never seen: "Read their sealed sections".
+    auto_collection = models.TextField(
+        "sealed sections picked by the reader",
+        blank=True,
+        help_text="Shopify only, filled in by reads: for a shop with more than 25,000 products, which Shopify will "
+        "not list in full, the sealed sections the reader found in the shop's collection list (booster boxes, elite "
+        "trainer boxes, bundles, tins, pre-orders and so on), read instead of the whole shop with its newest "
+        "products. Picked again every week. Shopify collections above, when set, are read instead. Empty it to "
+        "have them picked again at the next read.",
+    )
+    auto_collection_at = models.DateTimeField("sealed sections picked", null=True, blank=True)
     extra_products = models.TextField(
         "products read one by one",
         blank=True,
@@ -618,6 +631,13 @@ class Retailer(models.Model):
     # once a shop has kept failing for a day. Cleared by a read that works.
     failing_since = models.DateTimeField("failing since", null=True, blank=True)
     reading_paused = models.BooleanField("reading paused", default=False)
+    paused_note = models.CharField(
+        "why reading is paused",
+        max_length=300,
+        blank=True,
+        help_text="Why the shop's reading was paused for you, when it was not paused here: kept after it is unpaused, "
+        "so it is never paused again for the same reason.",
+    )
     # The pre-order pulse (importers.poll_collections): when the shop's collection list was last looked at,
     # and whether it has one. A Shopify shop without /collections.json is looked at once a week.
     collections_polled_at = models.DateTimeField("collections last looked at", null=True, blank=True)
@@ -632,6 +652,8 @@ class Retailer(models.Model):
     BACKOFF_FIRST = timedelta(minutes=5)
     BACKOFF_LONGEST = timedelta(hours=6)
     BACKOFF_TOO_MANY = timedelta(minutes=30)
+    # A shop closed behind its password page is looked at again a day later (closed_for_now).
+    CLOSED_WAIT = timedelta(hours=24)
 
     class Meta:
         ordering = ["name"]
@@ -715,6 +737,16 @@ class Retailer(models.Model):
             "error_streak", "backoff_until", "failing_since", "last_error", "last_ok_at", "last_read_seconds",
             "next_read_at",
         ])
+
+    def closed_for_now(self, now, error):
+        """Record a shop closed behind its password page (importers.SHOP_CLOSED): read again CLOSED_WAIT later, its
+        pre-orders and single listings left alone until then, and not counted as failing, so the owner is not told
+        each day of a shop that has simply shut. A read that works clears it."""
+        self.backoff_until = self.next_read_at = now + self.CLOSED_WAIT
+        self.error_streak = 0
+        self.failing_since = None
+        self.last_error = error[:300]
+        self.save(update_fields=["backoff_until", "next_read_at", "error_streak", "failing_since", "last_error"])
 
     def read_failed(self, now, status=None, error=""):
         """Record a failed read and wait longer after each one in a row."""

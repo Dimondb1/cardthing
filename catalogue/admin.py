@@ -276,7 +276,7 @@ class RetailerAdmin(admin.ModelAdmin):
     # How often each shop is read can be changed straight from the list. The rest of the reading record is
     # written by the reads themselves.
     list_editable = ("read_every_minutes",)
-    readonly_fields = ("next_read_at", "last_read_seconds", "last_ok_at", "last_error", "error_streak",
+    readonly_fields = ("auto_collection_at", "next_read_at", "last_read_seconds", "last_ok_at", "last_error", "error_streak",
                        "backoff_until", "reading_paused", "collections_polled_at", "collections_ok")
     list_filter = ("is_active", "source_type")
     search_fields = ("name", "website")
@@ -284,14 +284,15 @@ class RetailerAdmin(admin.ModelAdmin):
     fieldsets = (
         (None, {"fields": ("name", "slug", "website", "is_active")}),
         ("Delivery", {"fields": ("delivery_cost", "delivery_cost_up_to", "free_delivery_over", "delivery_note")}),
-        ("Prices", {"fields": ("source_type", "source_url", "collection", "default_game", "extra_products", "session_url"),
+        ("Prices", {"fields": ("source_type", "source_url", "collection", "auto_collection", "auto_collection_at",
+                               "default_game", "extra_products", "session_url"),
                     "description": "Run <code>python manage.py import_prices</code> to fetch prices "
                                    "from this source. A shop product is matched to ours by barcode, or by "
                                    "the link of a listing you add by hand under the product (any price; "
                                    "the import corrects it). Unmatched shop products are listed on each "
                                    "price import with their links."}),
         ("Reading", {"fields": ("read_every_minutes", "next_read_at", "last_read_seconds", "last_ok_at",
-                                "error_streak", "backoff_until", "last_error", "reading_paused",
+                                "error_streak", "backoff_until", "last_error", "reading_paused", "paused_note",
                                 "collections_polled_at", "collections_ok")}),
         ("Links", {"fields": ("affiliate_url_template",)}),
         ("Discount code", {"fields": ("discount_code", "discount_terms", "discount_ends"),

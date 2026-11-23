@@ -4100,9 +4100,11 @@ def manifest(request):
 
 @require_GET
 def admin_manifest(request):
-    """The admin as its own home screen app: opens on the admin home, stays inside /admin/, and offers the
-    owner's daily pages as shortcuts. Public, like any manifest: the browser fetches it without a login, and
-    every page it names still asks for one."""
+    """The admin as its own home screen app: opens on the admin home and offers the owner's daily pages as
+    shortcuts. Its scope is the whole site, not /admin/ alone: the owner goes from Admin to public pages all day
+    (View site, a product, a theme's See it now), and outside an app's scope Android Chrome puts its own bar
+    across the top (a cross, the page's title and the address), which he asked to lose on 23 Nov 2026. Public,
+    like any manifest: the browser fetches it without a login, and every admin page it names still asks for one."""
     shortcuts = [
         ("Things to check", "Checks", reverse("checks")),
         ("Messages", "Messages", reverse("admin:inbox_conversation_changelist") + "?unread__exact=1"),
@@ -4116,7 +4118,7 @@ def admin_manifest(request):
         "short_name": "RR admin",
         "description": f"Run {settings.RIPRAPTOR_SITE_NAME}: things to check, messages, shops and insights.",
         "start_url": reverse("admin:index"),
-        "scope": reverse("admin:index"),
+        "scope": "/",
         "display": "standalone",
         "background_color": "#1f2430",
         "theme_color": "#417690",   # the admin header, so the status bar runs into it

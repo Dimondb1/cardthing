@@ -627,6 +627,56 @@ a, button, summary, select, input, label { touch-action: manipulation; }
 .poster--watch .poster__text { font-size: var(--text-base); }
 .poster--watch .poster__mark { --mark-size: var(--mark-poster-sm); left: -20%; color: var(--color-brand); }
 
+/* The app's opening ---------------------------------------------------------------------------------------------
+   Opened from its home screen icon, the phone first shows its own launch screen: the raptor on the page's colour.
+   The first page carries on from it (the head script in includes/launch_head.html marks <html> once a launch): the
+   same raptor on the same ground, he bites, an orange tear runs out from him to both edges, and the ground parts
+   along it, the top half leaving upwards and the bottom half downwards, over the page already drawn beneath
+   (the tear and both halves share one row of teeth). The reason is continuity: the app
+   opens in one movement instead of a blank screen cutting to a page. The bite is --launch-hold and each
+   movement after it --motion-slow or less, so the whole is under 600ms; only transform and opacity change. Never
+   in a browser tab (a visitor from a search wants the price), never on the swipe page, and with reduced motion
+   there is no opening at all. The halves take no taps: the page under them works from the first moment. Each
+   half is the page's colour cut to shape by a mask (the two rows of teeth fit each other), so no colour is
+   written here. site.js takes the pieces away once they have gone. */
+@media (prefers-reduced-motion: no-preference) {
+  .is-launching::before, .is-launching::after {
+    content: ""; position: fixed; left: 0; right: 0; z-index: 40; pointer-events: none; background: var(--color-paper);
+    animation: launch-up var(--motion-slow) var(--ease-standard) var(--launch-hold) forwards;
+  }
+  .is-launching::before {
+    top: 0; height: calc(50% + var(--launch-tooth));
+    -webkit-mask: linear-gradient(var(--color-paper), var(--color-paper)) top / 100% calc(100% - var(--launch-tooth) + var(--border-width)) no-repeat, url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 6' preserveAspectRatio='none'%3E%3Cpath d='M0 0h12L6 6z'/%3E%3C/svg%3E") bottom left / calc(var(--launch-tooth) * 2) var(--launch-tooth) repeat-x;
+    mask: linear-gradient(var(--color-paper), var(--color-paper)) top / 100% calc(100% - var(--launch-tooth) + var(--border-width)) no-repeat, url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 6' preserveAspectRatio='none'%3E%3Cpath d='M0 0h12L6 6z'/%3E%3C/svg%3E") bottom left / calc(var(--launch-tooth) * 2) var(--launch-tooth) repeat-x;
+  }
+  .is-launching::after {
+    top: calc(50% - 2 * var(--border-width)); bottom: 0; animation-name: launch-down;
+    -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 6' preserveAspectRatio='none'%3E%3Cpath d='M0 0L6 6H0zM12 0v6H6z'/%3E%3C/svg%3E") top left / calc(var(--launch-tooth) * 2) var(--launch-tooth) repeat-x, linear-gradient(var(--color-paper), var(--color-paper)) bottom / 100% calc(100% - var(--launch-tooth) + var(--border-width)) no-repeat;
+    mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 6' preserveAspectRatio='none'%3E%3Cpath d='M0 0L6 6H0zM12 0v6H6z'/%3E%3C/svg%3E") top left / calc(var(--launch-tooth) * 2) var(--launch-tooth) repeat-x, linear-gradient(var(--color-paper), var(--color-paper)) bottom / 100% calc(100% - var(--launch-tooth) + var(--border-width)) no-repeat;
+  }
+  /* The tear: a line of the brand's orange along the teeth, drawn out from the middle as the bite ends and gone
+     as the halves part. A quarter taller than a tooth, so the line has its thickness. */
+  .is-launching body::after {
+    content: ""; position: fixed; z-index: 41; left: 0; right: 0; top: calc(50% - var(--launch-tooth) / 8); height: calc(var(--launch-tooth) * 1.25); pointer-events: none;
+    background: var(--color-brand);
+    -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 7.5' preserveAspectRatio='none'%3E%3Cpath d='M0 0L6 6 12 0V1.5L6 7.5 0 1.5z'/%3E%3C/svg%3E") top left / calc(var(--launch-tooth) * 2) 100% repeat-x;
+    mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 7.5' preserveAspectRatio='none'%3E%3Cpath d='M0 0L6 6 12 0V1.5L6 7.5 0 1.5z'/%3E%3C/svg%3E") top left / calc(var(--launch-tooth) * 2) 100% repeat-x;
+    animation: launch-rip var(--motion-fast) var(--ease-out) calc(var(--launch-hold) - var(--motion-fast)) both, launch-fade var(--motion-normal) var(--ease-standard) var(--launch-hold) forwards;
+  }
+  .is-launching body::before {
+    content: ""; position: fixed; z-index: 42; top: 50%; left: 50%; pointer-events: none;
+    width: var(--mark-launch); height: calc(var(--mark-launch) / (var(--mark-ratio)));
+    margin: calc(var(--mark-launch) / (var(--mark-ratio)) / -2) 0 0 calc(var(--mark-launch) / -2);
+    background: var(--color-brand); -webkit-mask: url("../img/raptor.png") center / contain no-repeat; mask: url("../img/raptor.png") center / contain no-repeat;
+    animation: chomp var(--launch-hold) var(--ease-standard), launch-out var(--motion-fast) var(--ease-standard) var(--launch-hold) forwards;
+  }
+}
+@keyframes launch-up { to { transform: translateY(-100%); } }
+@keyframes launch-down { to { transform: translateY(100%); } }
+@keyframes launch-out { to { opacity: 0; transform: scale(1.15); } }
+@keyframes launch-rip { from { transform: scaleX(0); } }
+@keyframes launch-fade { to { opacity: 0; } }
+
 /* Seasonal themes (web/seasons.py) ----------------------------------------------------------------------------
    While a theme is on, its decorations hang along the top of every page, the raptor in the logo wears its hat, and
    on wide screens its pictures stand either side of the home page's headline. All of it is still: decoration, so

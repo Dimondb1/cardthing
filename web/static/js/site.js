@@ -503,3 +503,14 @@ document.addEventListener("ripraptor:content", (event) => {
     });
   }
 }
+
+// The app's opening (site.css, The app's opening; the head script marks <html>): once the halves have gone, the
+// mark is taken off so nothing of it is left on the page. The long wait is for a browser that tells us nothing.
+{
+  const root = document.documentElement;
+  if (root.classList.contains("is-launching")) {
+    const done = () => root.classList.remove("is-launching");
+    root.addEventListener("animationend", (event) => { if (event.animationName === "launch-down") done(); });
+    setTimeout(done, 3000);
+  }
+}

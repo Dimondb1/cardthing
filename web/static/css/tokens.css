@@ -215,6 +215,7 @@
   --motion-fast: 140ms;      /* presses, hovers, focus */
   --motion-normal: 220ms;    /* panels, reveals, price changes */
   --motion-slow: 340ms;      /* cards leaving the deck, entrances */
+  --launch-hold: 240ms;      /* the app's opening: the raptor's bite, before the screen tears open (site.css) */
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);      /* entrances and movement */
   --ease-standard: cubic-bezier(0.2, 0, 0, 1);     /* buttons and small state changes */
   --opacity-waiting: 0.6;    /* a list on screen while the one replacing it is on its way */
@@ -225,6 +226,8 @@
   --mark-sm: 2.5rem;             /* the floor: under 40px the crest smudges, so the head is never a 1em icon */
   --mark-nav: 1.75rem;           /* the one exception: Rip's head as the Find with Rip icon in the header, beside the 1.5rem icons */
   --mark-md: 3.5rem;             /* empty states */
+  --mark-launch: 6rem;           /* the app's opening: about the size of the icon on the phone's own launch screen */
+  --launch-tooth: 0.75rem;       /* one tooth of the tear in the app's opening: this tall, twice as wide */
   --mark-poster: clamp(13rem, 6rem + 30vw, 30rem);  /* the head on a raptor panel, cropped by its edge (raptor-lg.png) */
   --mark-poster-sm: clamp(13rem, 7rem + 18vw, 24rem); /* the same on the shorter watchlist card */
   --mark-ratio: 417 / 400;       /* the image's own proportions, width to height */

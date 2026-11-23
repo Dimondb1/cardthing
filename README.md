@@ -5973,6 +5973,37 @@ events are counted with no record of who, through `/api/note/`: shown,
 added, dismissed, and opened from the icon (once per browser per day).
 Insights shows them under "Home screen".
 
+**The app's opening.** Opened from its icon, the phone first shows its own
+launch screen (the icon on white; the manifest cannot give it a dark one).
+The first page then carries on from it (the owner, 23 Nov 2026: "could we
+introduce a slicker intro animation"): the raptor sits on the page's colour,
+bites, an orange tear runs out from him to both edges and the screen parts
+along it, top half up and bottom half down, over the page already drawn
+beneath. About 0.6 seconds in all, only transform and opacity, and the page
+under it takes taps from the first moment.
+
+- It plays once a launch, only in the installed app (`display-mode`
+  standalone, minimal-ui or fullscreen, or an iPhone's home screen app). A
+  visitor in a browser tab never sees it: someone arriving from a search
+  wants the price. Never on the swipe page, and not at all with reduced
+  motion.
+- To see it in any browser, add `?intro=1` to an address
+  (`ripraptor.com/?intro=1`).
+- `includes/launch_head.html` is the small script in the head that marks
+  `<html>` before the first paint (the launch is remembered for the session
+  as `ripraptor.launched`); the pieces are in `site.css`, "The app's
+  opening"; `site.js` takes them away after. With JavaScript off there is no
+  opening.
+
+**A bar across the top of the app** (a cross, the page's title and the
+address) is Android Chrome saying the page is outside the installed app. It
+is not part of the site and no page can remove it. It shows when a page is
+opened from another app (a link tapped in a chat or an email opens in that
+app's own browser), or from an installed app whose scope does not cover the
+page. The public app covers the whole site. If it ever shows there, remove
+the icon and add it again from the home page, which renews what the phone
+holds about the app.
+
 ## Admin home
 
 The admin home (`web/templates/admin/ripraptor_index.html`; the owner, 18 Nov
@@ -6019,9 +6050,15 @@ Staff only, never for guide editors, never cached or indexed.
 
 The admin is a home screen app of its own, separate from the public one.
 `/admin/manifest.webmanifest` (a view, `admin_manifest`) names it "RipRaptor
-admin", gives it the raptor on a dark icon (`admin-icon-*.png`), starts it on
-the admin home and keeps it inside `/admin/`, so a link to a public page
-opens in the browser. A long press on the icon offers four shortcuts: Things
+admin", gives it the raptor on a dark icon (`admin-icon-*.png`) and starts it
+on the admin home. Its scope is the whole site, not `/admin/` alone (since 23
+Nov 2026): the owner goes from Admin to public pages all day, and outside an
+app's scope Android Chrome puts its own bar across the top, which he asked to
+lose. An app already on a phone picks the change up by itself within a day or
+so of being opened; removing the icon and adding it again from the admin home
+is immediate. With both apps on one phone, Android may ask which of the two a
+tapped RipRaptor link should open in. A long press on the icon offers four
+shortcuts: Things
 to check, Messages (unread), Crawl health and Insights. Every admin page,
 the login page included, links the manifest through
 `templates/admin/base_site.html` (the project templates folder, searched before

@@ -2739,7 +2739,9 @@ class AdminAppTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response["Content-Type"], "application/manifest+json")
         data = response.json()
-        self.assertEqual((data["id"], data["start_url"], data["scope"]), ("/admin/", "/admin/", "/admin/"))
+        # It opens on the admin home and covers the whole site: a public page opened from Admin stays in the app,
+        # with none of the browser's own bar across the top.
+        self.assertEqual((data["id"], data["start_url"], data["scope"]), ("/admin/", "/admin/", "/"))
         self.assertEqual(data["name"], "RipRaptor admin")
         self.assertEqual(data["display"], "standalone")
         self.assertEqual([s["url"] for s in data["shortcuts"]],

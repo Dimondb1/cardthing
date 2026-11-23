@@ -4074,6 +4074,13 @@ def remove_shop_thanks(request):
                                                             "noindex": True})
 
 
+# The phone's own launch screen when the site is opened from its icon (Android draws it from the manifest), and the
+# first colour of the site's opening after it (--launch-ground in tokens.css, site.css The app's opening), so one hands
+# over to the other with nothing to see. The site's dark page: the owner, 23 Nov 2026, wanted the launch screen to
+# "match the site: dark background". The icons on it have no background of their own, so no box shows round the raptor.
+LAUNCH_GROUND = "#14161c"
+
+
 @require_GET
 def manifest(request):
     """The web app manifest, so a phone can pin RipRaptor to its home screen. No service worker, no push."""
@@ -4085,8 +4092,8 @@ def manifest(request):
         "start_url": "/",
         "scope": "/",
         "display": "standalone",
-        "background_color": "#ffffff",
-        "theme_color": "#ffffff",
+        "background_color": LAUNCH_GROUND,
+        "theme_color": LAUNCH_GROUND,
         "icons": [
             {"src": static("img/icon-192.png"), "sizes": "192x192", "type": "image/png"},
             {"src": static("img/icon-512.png"), "sizes": "512x512", "type": "image/png"},

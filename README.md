@@ -5994,26 +5994,50 @@ never knows the site was added: there the link stays in the footer and the
 card asks again 30 days after Not now.
 
 **The app's opening.** Opened from its icon, the phone first shows its own
-launch screen (the icon on white; the manifest cannot give it a dark one).
-The first page then carries on from it (the owner, 23 Nov 2026: "could we
-introduce a slicker intro animation"): the raptor sits on the page's colour,
-bites, an orange tear runs out from him to both edges and the screen parts
-along it, top half up and bottom half down, over the page already drawn
-beneath. About 0.6 seconds in all, only transform and opacity, and the page
-under it takes taps from the first moment.
+launch screen: the raptor on `#14161c`, the site's dark page, from the
+manifest's `background_color` and `theme_color` (`LAUNCH_GROUND` in
+`web/views.py`, `--launch-ground` in `tokens.css`; a test holds them equal).
+The icons it uses (`icon-192.png`, `icon-512.png`) are the raptor in solid
+brand orange with no background, so no box shows round him; the home screen
+icon itself is the maskable one, unchanged. The launch screen is dark in
+either look, because the manifest cannot follow the device.
+
+The site carries on from it with nothing to see (the owner, 23 Nov 2026,
+of the first version: "a double splash with a blink and a size jump"):
+
+1. The first page starts as that same colour, with no raptor of its own,
+   so when the phone takes its launch screen away only the raptor goes.
+   The browser's bar takes the colour too.
+2. The page is drawn underneath until it is ready to be seen whole:
+   loaded, fonts in, the pictures on screen decoded, then 350ms for the
+   phone's launch screen to go (`site.js`).
+3. An orange tear runs out from the middle to both edges along a row of
+   teeth (340ms), a beat (140ms), then the screen splits along it: the
+   top half up, the bottom half down, each carrying its orange edge
+   (400ms), over the finished page. The browser's bar gets its own colour
+   back as they part.
+
+Each movement is 400ms or less and only transform and opacity change. On
+the preview server the page loaded at 0.6s, the tear started at 1.0s and
+the page was clear at 1.9s. If the page is not ready after 2.5 seconds it
+opens anyway, and if the script never runs at all the halves part by
+themselves after 3 seconds (`--launch-most`).
 
 - It plays once a launch, only in the installed app (`display-mode`
   standalone, minimal-ui or fullscreen, or an iPhone's home screen app). A
   visitor in a browser tab never sees it: someone arriving from a search
-  wants the price. Never on the swipe page, and not at all with reduced
+  wants the price. Never on the swipe page, and nothing at all with reduced
   motion.
 - To see it in any browser, add `?intro=1` to an address
   (`ripraptor.com/?intro=1`).
-- `includes/launch_head.html` is the small script in the head that marks
-  `<html>` before the first paint (the launch is remembered for the session
-  as `ripraptor.launched`); the pieces are in `site.css`, "The app's
-  opening"; `site.js` takes them away after. With JavaScript off there is no
-  opening.
+- The pieces: `includes/launch_head.html` (the small script in the head
+  that marks `<html>` before the first paint; the launch is remembered for
+  the session as `ripraptor.launched`), `includes/launch.html` (the two
+  halves and the line, first in the page), `site.css` "The app's opening",
+  and `site.js`, which starts it and takes it away after.
+- A phone that already has the app picks up the new launch colour and
+  icons when Chrome next updates it, which can take a day or so; removing
+  the icon and adding it again is immediate.
 
 **A bar across the top of the app** (a cross, the page's title and the
 address) is Android Chrome saying the page is outside the installed app. It

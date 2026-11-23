@@ -504,13 +504,35 @@ document.addEventListener("ripraptor:content", (event) => {
   }
 }
 
-// The app's opening (site.css, The app's opening; the head script marks <html>): once the halves have gone, the
-// mark is taken off so nothing of it is left on the page. The long wait is for a browser that tells us nothing.
+// The app's opening (site.css, The app's opening; the head script marks <html>). The page is covered by the launch
+// screen's colour until it is ready to be seen whole: loaded, with its fonts and the pictures on screen, then a pause
+// for the phone to take its own launch screen away. Then the tear runs and the halves part (is-launch-go). The
+// browser's bar gets its own colour back as they part, and the pieces are taken away once they have gone.
 {
   const root = document.documentElement;
   if (root.classList.contains("is-launching")) {
-    const done = () => root.classList.remove("is-launching");
-    root.addEventListener("animationend", (event) => { if (event.animationName === "launch-down") done(); });
-    setTimeout(done, 3000);
+    const SETTLE = 350;   // the phone's launch screen fades once the page has loaded
+    const MOST = 2500;    // the page is never covered longer than this waiting, loaded or not
+    let going = false;
+    const go = () => { if (!going) { going = true; root.classList.add("is-launch-go"); } };
+    const restore = () => document.querySelectorAll("meta[data-launch-was]").forEach((meta) => {
+      meta.setAttribute("content", meta.dataset.launchWas);
+      meta.removeAttribute("data-launch-was");
+    });
+    const done = () => { restore(); root.classList.remove("is-launching", "is-launch-go"); };
+    const loaded = new Promise((resolve) => {
+      if (document.readyState === "complete") resolve(); else addEventListener("load", resolve, { once: true });
+    });
+    const onScreen = () => Array.from(document.images)
+      .filter((img) => { const box = img.getBoundingClientRect(); return box.width > 0 && box.bottom > 0 && box.top < innerHeight; })
+      .map((img) => (img.decode ? img.decode().catch(() => {}) : null));
+    loaded
+      .then(() => Promise.all([document.fonts ? document.fonts.ready : null, ...onScreen()]))
+      .then(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))))
+      .then(() => setTimeout(go, SETTLE));
+    setTimeout(go, MOST);
+    root.addEventListener("animationstart", (event) => { if (/^launch-up/.test(event.animationName)) restore(); });
+    root.addEventListener("animationend", (event) => { if (/^launch-down/.test(event.animationName)) done(); });
+    setTimeout(done, MOST + 2000);
   }
 }

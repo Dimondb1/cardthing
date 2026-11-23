@@ -43,6 +43,7 @@
   {% if not private_link %}<script nonce="{{ csp_nonce }}" type="speculationrules">{"prerender": [{"where": {"and": [{"href_matches": "/*"}, {"not": {"href_matches": ["/go/*", "/admin/*", "/search/*", "/swipe/*", "/watchlist/*", "/shopping-list/*", "/alerts/*", "/contact/*", "/refer/*", "/r/*", "/list-your-shop/*", "/feeds/*", "/static/*", "/media/*", "/dashboard/*", "/api/*", "/guides/fair-price/*"]}}]}, "eagerness": "moderate"}]}</script>{% endif %}
 </head>
 <body class="{% block body_class %}{% endblock %}" data-page="{% page_key %}" data-note="{% url 'web:note_api' %}"{% if season %} data-season="{{ season.key }}"{% endif %}>
+  {% include "web/includes/launch.html" %}
   <a class="skip-link" href="#main">Skip to main content</a>
   {% include "web/includes/header.html" %}
   <main id="main" class="page {% block page_class %}{% endblock %}">

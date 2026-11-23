@@ -473,6 +473,33 @@ class ImportTests(TestCase):
             soon = (now + datetime.timedelta(minutes=20)).isoformat()
             self.assertEqual(ebay.hourly_searches(150, soon, now), 100)   # the last hour before the reset takes the rest
 
+    def test_a_late_read_takes_the_share_of_every_hour_it_missed(self):
+        """The owner's eBay log, 23 Nov 2026: hourly reads four hours apart, about 1,200 of the 4,800 searches spent,
+        and 1,663 of 2,076 eBay items in stock over a day old. A late read now spends what the missed ones would."""
+        now = timezone.now()
+        reset = (now + datetime.timedelta(hours=20, minutes=30)).isoformat().replace("+00:00", "Z")
+        hour = lambda hours: now - datetime.timedelta(hours=hours)   # noqa: E731
+        with override_settings(RIPRAPTOR_EBAY_DAILY_LIMIT=4800):
+            # 4,500 left over 21 hours is 211 an hour; 4,800 a day is at most 200 an hour.
+            self.assertEqual(ebay.hourly_searches(4500, reset, now, since=hour(1.1)), 200)          # on time: one hour's
+            self.assertEqual(ebay.hourly_searches(4500, reset, now, since=hour(1.45)), 200)         # a little late: still one
+            self.assertEqual(ebay.hourly_searches(4500, reset, now, since=hour(4)), 800)            # four hours: four hours'
+            self.assertEqual(ebay.hourly_searches(4500, reset, now, since=None), 200)               # never read: one hour's
+            self.assertEqual(ebay.hourly_searches(2000, reset, now, since=hour(4)), (2000 - ebay.KEEP_BACK) * 4 // 21)
+            # Never more than the day's limit an hour for each hour missed, nor more than is left.
+            self.assertEqual(ebay.hourly_searches(4950, "", now, since=hour(3)), 600)
+            soon = (now + datetime.timedelta(minutes=50)).isoformat()
+            self.assertEqual(ebay.hourly_searches(400, soon, now, since=hour(6)), 400 - ebay.KEEP_BACK)
+            self.assertEqual(ebay.hourly_searches(30, reset, now, since=hour(6)), 0)
+
+    def test_a_read_is_sized_from_the_last_good_read(self):
+        self.retailer.last_ok_at = timezone.now() - datetime.timedelta(hours=4)
+        self.retailer.save(update_fields=["last_ok_at"])
+        with mock.patch.object(ebay, "hourly_searches", return_value=0) as sized, \
+                mock.patch.object(ebay, "http", FakeApi([])):
+            list(ebay.iter_ebay_offers(self.retailer))
+        self.assertEqual(sized.call_args.kwargs["since"], self.retailer.last_ok_at)
+
     def test_old_empty_skip_runs_do_not_block_the_fetch(self):
         # What the server holds now: a stack of empty runs from hourly skips, the newest minutes old.
         for hours in (3, 2, 1):

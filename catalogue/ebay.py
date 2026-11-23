@@ -108,6 +108,11 @@ REFUSED_PAUSE = 6 * 60 * 60
 # for chosen partners), so a price is only kept up to date by searching for its product again, from the same daily
 # allowance as every other search (about 5,000). Every hourly read searches a slice: what is left above KEEP_BACK
 # shared evenly over the hours to eBay's reset, and never more than RIPRAPTOR_EBAY_DAILY_LIMIT spread over the day.
+# A read that comes late (the reader busy with shops, the import lock held) takes the share of every hour since the
+# last good one, so none of the day's searches goes unspent: on 23 Nov 2026 the reads came four hours apart and
+# spent about 1,200 of the 4,800, and 1,663 of the 2,076 eBay items in stock were over a day old (the owner: "Is
+# ebay updating enough?"). eBay's one-item lookup (getItem) is no way round the refusal: it counts against this same
+# allowance (the buy.browse resource), so every lookup would be a search fewer.
 # A product already on eBay is due again after KNOWN_EVERY, or POPULAR_EVERY when visitors look at it; the most
 # looked at go first, then the longest since searched. Products not on eBay get NEW_SHARE of each slice. The owner,
 # 16 Nov 2026, chose this over one search run a morning: "Spread out, show 24h".
@@ -971,10 +976,11 @@ def verdict(product, item, Offer, catalogue, specifics, shops):
     return offer, "a different product, a part or a multi-buy"
 
 
-def hourly_searches(searches_left, reset, now=None):
+def hourly_searches(searches_left, reset, now=None, since=None):
     """Searches one hourly read may spend: what is left above KEEP_BACK shared evenly over the hours to eBay's reset
     (each hour's read gets its share, the last one before the reset what remains), at most RIPRAPTOR_EBAY_DAILY_LIMIT
-    over the day. Unknown, it assumes a whole day is left."""
+    over the day. A read that comes more than an hour after the last good one (``since``) takes the share of each
+    hour since, so a late read spends what the reads it missed would have. Unknown, it assumes a whole day is left."""
     now = now or timezone.now()
     hours = 24
     try:
@@ -983,11 +989,15 @@ def hourly_searches(searches_left, reset, now=None):
         at = None
     if at is not None and at.tzinfo is not None and at > now:
         hours = max(1, min(24, -(-int((at - now).total_seconds()) // 3600)))
+    missed = 1
+    if since is not None:
+        missed = max(1, min(24, round((now - since).total_seconds() / 3600)))
     daily = getattr(settings, "RIPRAPTOR_EBAY_DAILY_LIMIT", 4800)
-    cap = -(-daily // 24)
+    cap = -(-daily // 24) * missed
     if searches_left is None:
         return cap
-    return max(0, min(cap, (searches_left - KEEP_BACK) // hours))
+    spare = searches_left - KEEP_BACK
+    return max(0, min(cap, spare * missed // hours, spare))
 
 
 def due_known(products, scores, now):
@@ -1044,7 +1054,7 @@ def iter_ebay_offers(retailer, limit=None, request=None, pause=None, run=None, c
     hourly = limit is None
     if hourly:
         # An hourly read: its share of what is left today. None left is not a failure: the next hour tries again.
-        limit = hourly_searches(searches_left, reset)
+        limit = hourly_searches(searches_left, reset, since=getattr(retailer, "last_ok_at", None))
         logger.info("eBay: %d searches for this hour, %s left today", limit,
                     "an unknown number" if searches_left is None else f"{searches_left:,}")
     else:

@@ -803,7 +803,17 @@ most `RIPRAPTOR_EBAY_DAILY_LIMIT` spread over the day): first the products
 already on eBay that are due (`ebay.due_known`: after 4 hours for one
 visitors look at, the most looked at first, otherwise after 20), then the
 rest with a fifth of the hour's searches, by barcode where we have one and
-otherwise by name. The search that found a product last time is tried first
+otherwise by name. Since 23 Nov 2026 (the owner's eBay log: reads four hours
+apart behind overdue shops, about 1,200 of the 4,800 searches spent, and
+1,663 of 2,076 eBay items in stock over a day old) eBay's read goes before
+every shop read in the background reader's queue, and a read that comes
+more than an hour after the last good one (`Retailer.last_ok_at`) takes the
+share of every hour since, never more than is left, so the day's searches
+are spent. eBay's one-item lookup is no way round its refusal of the bulk
+item lookup: it counts against the same allowance as the searches (the
+`buy.browse` resource), so each would be a search fewer. Only eBay can
+raise the allowance or open the bulk lookup (its Application Growth Check).
+The search that found a product last time is tried first
 (`Product.ebay_query`), so searching it again costs one search, not two or
 three. A run stops
 starting lookups after 45 minutes (`RUN_SECONDS` in `catalogue/ebay.py`) and

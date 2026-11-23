@@ -184,6 +184,17 @@ class PlanTests(WorkerTestCase):
         self.assertEqual(tasks[2].listings, [warm_listing.pk])
         self.assertEqual(len({t.retailer_id for t in tasks}), len(tasks))
 
+    def test_ebays_hourly_search_goes_before_shops_long_overdue(self):
+        """The owner's eBay log, 23 Nov 2026: "eBay read: due, no reading slot free", its hourly search four hours
+        apart behind shop reads. It is a few minutes an hour and the only way an eBay price is kept fresh."""
+        late = [self.shop(f"Late Shop {n}", next_read_at=self.clock() - timedelta(hours=5)) for n in range(3)]
+        market = self.shop("eBay", source_type=Retailer.Source.EBAY, source_url="",
+                           next_read_at=self.clock() - timedelta(minutes=2))
+        tasks = self.make_worker().plan(self.clock())
+        reads = [t.retailer_id for t in tasks if t.kind == worker.SHOP_READ]
+        self.assertEqual(reads[0], market.pk)
+        self.assertEqual(set(reads[1:]), {shop.pk for shop in late})
+
     def test_a_hot_listing_waits_ten_minutes_and_a_warm_one_an_hour(self):
         shop = self.shop("Shop")
         self.listing(self.product("hot-box", views=3), shop, 9)

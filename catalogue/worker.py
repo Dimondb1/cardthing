@@ -567,7 +567,10 @@ class Worker:
             overdue = minutes(now - shop.next_read_at) if shop.next_read_at else NEVER_READ_MINUTES
             reads.append(Task(SHOP_READ, shop.pk, shop.source_type, WEIGHTS[SHOP_READ] * max(1.0, overdue),
                               f"Read {shop.name}"[:120], last_read_seconds=shop.last_read_seconds))
-        reads.sort(key=lambda t: -t.priority)
+        # eBay's hourly search goes first: one read of a few minutes an hour, and with eBay refusing its item lookup,
+        # the only way an eBay price is kept fresh. Behind shops long overdue it waited about four hours at a time (the
+        # owner's eBay log, 23 Nov 2026: 1,663 of 2,076 eBay items in stock older than a day).
+        reads.sort(key=lambda t: (t.source_type != Retailer.Source.EBAY, -t.priority))
         # The reads there is room for now.
         chosen = []
         for task in reads:

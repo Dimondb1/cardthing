@@ -5097,13 +5097,11 @@ def crawl_page(request):
                 Retailer.objects.filter(is_active=True).exclude(source_type=Retailer.Source.MANUAL), pk=pk
             )
             if action == "read_now":
-                shop.next_read_at = timezone.now()
-                shop.backoff_until = None
-                shop.error_streak = 0
-                shop.save(update_fields=["next_read_at", "backoff_until", "error_streak"])
+                crawl.read_now(shop)
                 state = WorkerState.current()
                 if state is not None and state.alive():
-                    note = f"{shop.name} will be read within a few minutes."
+                    note = (f"{shop.name} is first in line and will be read within a few minutes, as soon as a "
+                            "reading slot is free.")
                 else:
                     note = f"{shop.name} will be read at the next hourly read."
                 if shop.reading_paused:
@@ -5124,10 +5122,19 @@ def crawl_page(request):
     last = crawl.last_finished()
     state = WorkerState.current()
     hot, warm = heat.tier_counts(heat.heat_scores(now))
+    everything_paused = crawl.all_paused(state)
+    rows = crawl.shops(now, state)
+    worker = crawl.worker_status(state, now)
+    verdict, why = crawl.verdict(rows, worker, everything_paused)
     context = {
         **admin.site.each_context(request), "title": "Crawl health",
-        "all_paused": crawl.all_paused(state), "last_finished": insights.clock(last, now) if last else None,
-        "shops": crawl.shops(now, state), "worker": crawl.worker_status(state, now), "hot": hot, "warm": warm,
+        # The owner, 24 Nov 2026: "Crawl health needs to be more simple ... visually show the ones that aren't going".
+        "verdict": verdict, "why": why, "lights": crawl.lights(rows),
+        "problems": [row for row in rows if row["light"] != crawl.OK],
+        "fine": [row for row in rows if row["light"] == crawl.OK],
+        "log": crawl.log_text(now, state, rows, worker, everything_paused),
+        "all_paused": everything_paused, "last_finished": insights.clock(last, now) if last else None,
+        "shops": rows, "worker": worker, "hot": hot, "warm": warm,
         "fast": crawl.fast_read(state, now), "fast_minutes": crawl.FAST_MINUTES, "fast_hours": crawl.FAST_HOURS,
         "ebay_usage": crawl.ebay_usage(state, now),
         # Whether a problem reaches the owner's phone, so a page with no way to set it up says so.

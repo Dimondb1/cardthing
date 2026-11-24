@@ -715,7 +715,7 @@ class CrawlPageWorkerTests(WorkerTestCase):
         WorkerState.objects.create(pk=1, heartbeat_at=timezone.now() - timedelta(minutes=2), started_at=timezone.now(),
                                    requests_last_hour=120, errors_last_hour=3, jobs_done=40, last_job="Read Shop")
         page = self.client.get(self.url)
-        self.assertContains(page, '<p class="ok" id="worker-line"><strong>Background reader running.</strong>')
+        self.assertContains(page, '<p class="good" id="worker-line"><strong>Background reader running.</strong>')
         self.assertContains(page, "In the last hour: 120 requests to shops, 3 errors.")
         self.assertNotContains(self.client.get(reverse("admin:index")), "Background reader stopped")
         WorkerState.objects.filter(pk=1).update(heartbeat_at=timezone.now() - timedelta(minutes=11))
@@ -727,7 +727,7 @@ class CrawlPageWorkerTests(WorkerTestCase):
         shop = self.shop("Shop")
         self.listing(self.product("hot-box", views=3), shop, 30)
         self.listing(self.product("warm-box"), shop, 30)
-        self.assertContains(self.client.get(self.url), "Checked every ten minutes: 1 product. Every hour: 1 product.")
+        self.assertContains(self.client.get(self.url), "checked one by one: 1 product every ten minutes, 1 every hour.")
         self.client.post(self.url, {"action": "pause_all"})
         self.assertTrue(WorkerState.objects.get().paused)
         self.assertEqual(self.make_worker().plan(self.clock()), [])
@@ -735,7 +735,7 @@ class CrawlPageWorkerTests(WorkerTestCase):
         self.assertFalse(WorkerState.objects.get().paused)
         WorkerState.objects.filter(pk=1).update(heartbeat_at=timezone.now())
         page = self.client.post(self.url, {"action": "read_now", "shop": shop.pk}, follow=True)
-        self.assertContains(page, "Shop will be read within a few minutes.")
+        self.assertContains(page, "Shop is first in line and will be read within a few minutes, as soon as a reading slot is free.")
 
 
 class VariantProbeTests(WorkerTestCase):

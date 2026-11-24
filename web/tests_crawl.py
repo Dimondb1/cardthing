@@ -85,8 +85,10 @@ class CrawlPageTests(TestCase):
         self.assertRedirects(page, self.url)
         self.assertContains(page, "Harbour Games will be read at the next hourly read.")
         self.shop.refresh_from_db()
-        self.assertLessEqual(self.shop.next_read_at, timezone.now())
-        self.assertGreaterEqual(self.shop.next_read_at, self.now)
+        # First in line: due longer than any shop already overdue (the owner, 24 Nov 2026: "nothing feels like it
+        # works": made due now, it went behind every shop waiting).
+        self.assertLessEqual(self.shop.next_read_at, timezone.now() - crawl.READ_NOW_AHEAD)
+        self.assertGreaterEqual(self.shop.next_read_at, self.now - crawl.READ_NOW_AHEAD)
         self.assertEqual((self.shop.backoff_until, self.shop.error_streak), (None, 0))
         self.assertEqual(self.run_due(due=True)[0], ["Harbour Games"])
 
@@ -199,7 +201,8 @@ class CrawlPageTests(TestCase):
         page = self.client.post(self.url, {"action": "pause_all"}, follow=True)
         self.assertRedirects(page, self.url)
         self.assertContains(page, "Reading is paused for every shop.")
-        self.assertContains(page, "Paused for every shop.")
+        self.assertContains(page, '<p class="verdict stopped" id="verdict"><b>Not reading</b>Pause all is on, so no shop '
+                                  "is read.")
         self.assertContains(page, 'value="Resume all"')
         self.assertTrue(crawl.all_paused())
         read, said = self.run_due(due=True)
@@ -274,7 +277,7 @@ class CrawlPageTests(TestCase):
         self.assertEqual(rows["Harbour Games"]["next_read"], "due now")
         page = self.client.get(self.url)
         self.assertContains(page, "took 85 s")
-        self.assertContains(page, "Errors in a row: 3.")
+        self.assertContains(page, "errors in a row: 3")
         self.assertContains(page, "HTTP Error 503: Service Unavailable")
         self.assertContains(page, "The last read finished at")
 
@@ -293,10 +296,11 @@ class CrawlPageTests(TestCase):
         self.assertEqual(Retailer.objects.count(), 49)
         with self.assertNumQueries(few):
             page = self.client.get(self.url)
-        self.assertContains(page, "Shops (49)")
+        self.assertContains(page, "Need a look (49)")
         # Session, user, the last finished read, the background reader's row, four for how hot each product
-        # is, the shops, and three to renew the admin sign-in (SESSION_SAVE_EVERY_REQUEST).
-        self.assertEqual(few, 12)
+        # is, the shops, the last hour's reads for the log, and three to renew the admin sign-in
+        # (SESSION_SAVE_EVERY_REQUEST).
+        self.assertEqual(few, 13)
 
     def test_copy_has_no_em_dashes_or_exclamation_marks(self):
         self.make_shop("Waiting Shop", backoff_until=self.now + timedelta(minutes=20), error_streak=1, last_error="Timed out")
@@ -446,3 +450,115 @@ class CrawlOrderTests(TestCase):
         make_retailer("Beta Cards", source_type=Retailer.Source.SHOPIFY, error_streak=1)
         names = [row["retailer"].name for row in crawl.shops(now)]
         self.assertEqual(names, ["Beta Cards", "Zebra Games", "Middle Cards", "Aardvark Cards"])
+
+
+class LightTests(TestCase):
+    """The owner, 24 Nov 2026: "Crawl health needs to be more simple as well all stores must update at least every
+    hour ... And visually show the ones that aren't going"."""
+
+    def setUp(self):
+        self.now = timezone.now()
+        self.client.force_login(get_user_model().objects.create_superuser("ben", "ben@example.com", "pw"))
+        self.url = reverse("crawl")
+
+    def shop(self, name, **kwargs):
+        kwargs.setdefault("source_type", Retailer.Source.SHOPIFY)
+        return make_retailer(name, **kwargs)
+
+    def alive(self):
+        WorkerState.objects.update_or_create(pk=1, defaults={"heartbeat_at": timezone.now()})
+
+    def test_each_shop_is_up_to_date_late_or_not_going(self):
+        self.shop("Fresh Cards", last_ok_at=self.now - timedelta(minutes=50),
+                  next_read_at=self.now + timedelta(minutes=10))
+        self.shop("Slow Cards", last_ok_at=self.now - timedelta(minutes=100), next_read_at=self.now - timedelta(minutes=40))
+        self.shop("Old Cards", last_ok_at=self.now - timedelta(hours=5), next_read_at=self.now - timedelta(hours=4))
+        self.shop("Broken Cards", last_ok_at=self.now - timedelta(minutes=20), error_streak=2,
+                  backoff_until=self.now + timedelta(minutes=30), last_error="HTTP Error 503")
+        self.shop("Held Cards", last_ok_at=self.now - timedelta(minutes=5), reading_paused=True)
+        self.shop("New Cards")
+        rows = {row["retailer"].name: row for row in crawl.shops(self.now)}
+        self.assertEqual({name: (row["light"], row["why"]) for name, row in rows.items()}, {
+            "Fresh Cards": ("ok", "Read 50\xa0minutes ago"),
+            "Slow Cards": ("late", "Read 1\xa0hour ago"),
+            "Old Cards": ("stopped", "Not read for 5\xa0hours"),
+            "Broken Cards": ("stopped", "Failing: waiting after 2 failed tries"),
+            "Held Cards": ("stopped", "Paused"),
+            "New Cards": ("stopped", "Never read"),
+        })
+        self.assertEqual(crawl.lights(rows.values()), {"ok": 1, "late": 1, "stopped": 4})
+        # Not going first (failing, then paused, then the rest), then late, then up to date.
+        self.assertEqual([row["retailer"].name for row in crawl.shops(self.now)],
+                         ["Broken Cards", "Held Cards", "New Cards", "Old Cards", "Slow Cards", "Fresh Cards"])
+
+    def test_a_shop_due_says_its_place_in_line_and_read_now_puts_it_first(self):
+        self.alive()
+        self.shop("Long Wait", last_ok_at=self.now - timedelta(hours=2), next_read_at=self.now - timedelta(hours=1))
+        self.shop("Short Wait", last_ok_at=self.now - timedelta(hours=2), next_read_at=self.now - timedelta(minutes=5))
+        later = self.shop("Later Cards", last_ok_at=self.now - timedelta(minutes=30),
+                          next_read_at=self.now + timedelta(minutes=30))
+        self.shop("eBay", source_type=Retailer.Source.EBAY, last_ok_at=self.now - timedelta(minutes=70),
+                  next_read_at=self.now - timedelta(minutes=1))
+        doing = {row["retailer"].name: row["doing"] for row in crawl.shops(self.now)}
+        self.assertEqual((doing["eBay"], doing["Long Wait"], doing["Short Wait"]), ("1st in line", "2nd in line",
+                                                                                  "3rd in line"))
+        self.assertTrue(doing["Later Cards"].startswith("Next read "))
+        page = self.client.post(self.url, {"action": "read_now", "shop": later.pk}, follow=True)
+        self.assertContains(page, "Later Cards is first in line and will be read within a few minutes")
+        doing = {row["retailer"].name: row["doing"] for row in crawl.shops(timezone.now())}
+        self.assertEqual((doing["eBay"], doing["Later Cards"], doing["Long Wait"]), ("1st in line", "2nd in line",
+                                                                                   "3rd in line"))
+        # The background reader takes it next after eBay's hourly search.
+        self.assertEqual([shop.name for shop in Retailer.due(timezone.now())][:2], ["eBay", "Later Cards"])
+        self.assertEqual(crawl.ordinal(11), "11th")
+        self.assertEqual(crawl.ordinal(22), "22nd")
+
+    def test_the_top_says_in_one_line_whether_every_shop_was_read_in_the_last_hour(self):
+        self.alive()
+        self.shop("Fresh Cards", last_ok_at=self.now - timedelta(minutes=10), next_read_at=self.now + timedelta(minutes=50))
+        page = self.client.get(self.url).content.decode()
+        self.assertIn('<p class="verdict ok" id="verdict"><b>All shops up to date</b>Every shop was read in the last '
+                      "hour.</p>", page)
+        self.assertIn('<li class="ok"><b><i class="dot" aria-hidden="true"></i>1</b><span>up to date</span></li>', page)
+        self.assertNotIn("Need a look", page)
+        self.assertIn('<details id="up-to-date" open>', page)
+        self.shop("Old Cards", last_ok_at=self.now - timedelta(hours=5))
+        page = self.client.get(self.url).content.decode()
+        self.assertIn("<b>Behind</b>1 shop was not read in the last hour.", page)
+        self.assertIn("Need a look (1)", page)
+        self.assertIn('<li class="item stopped" id="shop-old-cards">', page)
+        self.assertLess(page.index('id="shop-old-cards"'), page.index('id="shop-fresh-cards"'))
+        WorkerState.objects.filter(pk=1).update(heartbeat_at=timezone.now() - timedelta(hours=1))
+        self.assertIn("<b>Not reading</b>The background reader has stopped.", self.client.get(self.url).content.decode())
+
+    def test_every_shop_is_read_at_least_every_hour_whatever_its_setting(self):
+        shop = self.shop("Rare Cards", read_every_minutes=240)
+        self.assertEqual(shop.every_minutes, 60)
+        self.assertEqual(shop.cadence_for(self.now, 30), self.now + timedelta(minutes=60))
+        quick = self.shop("Quick Cards", read_every_minutes=45)
+        self.assertEqual(quick.every_minutes, 45)
+
+    def test_the_log_to_copy_says_where_the_reading_time_goes(self):
+        import html
+
+        self.alive()
+        self.shop("Fresh Cards", last_ok_at=self.now - timedelta(minutes=10), last_read_seconds=40)
+        self.shop("Web Cards", source_type=Retailer.Source.WEBSITE, last_ok_at=self.now - timedelta(hours=2),
+                  last_read_seconds=900, error_streak=1, last_error="HTTP Error 500")
+        ImportRun.objects.create(retailer=Retailer.objects.get(name="Fresh Cards"), finished_at=self.now)
+        page = self.client.get(self.url).content.decode()
+        start = page.index('<textarea id="crawl-log"')
+        text = html.unescape(page[page.index(">", start) + 1:page.index("</textarea>", start)])
+        self.assertTrue(text.startswith("RipRaptor crawl log, "))
+        self.assertIn("Verdict: behind. 1 shop was not read in the last hour.", text)
+        self.assertIn("up to date 1, late 0, not going 1", text)
+        self.assertIn("limits: 3 whole-shop reads at once, 2 of website shops, 3 requests a second in all", text)
+        self.assertIn("waiting for the import lock now: ", text)
+        self.assertIn("shopify: 1 shops, 1 timed, 40 s in all, slowest Fresh Cards 40 s", text)
+        self.assertIn("website: 1 shops, 1 timed, 900 s in all, slowest Web Cards 900 s", text)
+        self.assertIn("reading every shop once takes about 15 minutes of reading; the reader has 180 an hour (15 of "
+                      "120 for website shops)", text)
+        self.assertIn("READS IN THE LAST HOUR\nstarted 1, finished 1, failed 0", text)
+        self.assertIn("Web Cards | Not going | website | Its last read failed | ", text)
+        self.assertIn("| 900 s | 60 min | 1 | HTTP Error 500", text)
+        self.assertIn('data-copy-from="crawl-log"', page)

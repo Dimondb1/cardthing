@@ -108,6 +108,21 @@ def stop_fast():
     WorkerState.objects.filter(pk=1).update(fast_until=None)
 
 
+# Read now puts a shop first in line: its next read is set this far back, so it is the most overdue shop and the
+# reader takes it next (after eBay's hourly search). Made due "now", it went behind every shop already overdue, and
+# with many waiting it could be read hours later (the owner, 24 Nov 2026: "nothing feels like it works").
+READ_NOW_AHEAD = timedelta(days=1)
+
+
+def read_now(shop, now=None):
+    """Read now: the shop first in line, its errors and wait forgotten, as the Crawl health page's button does."""
+    now = now or timezone.now()
+    shop.next_read_at = now - READ_NOW_AHEAD
+    shop.backoff_until = None
+    shop.error_streak = 0
+    shop.save(update_fields=["next_read_at", "backoff_until", "error_streak"])
+
+
 def make_all_due(now=None):
     """Read all: every shop read on a schedule and not paused is due now, its errors forgotten, as Read now does for
     one. Returns (shops made due, shops left paused)."""
@@ -191,12 +206,52 @@ def next_read_for(retailer, now, everything_paused=False):
     return clock(max(moments), now)
 
 
+# The Crawl health page's lights (the owner, 24 Nov 2026: "all stores must update at least every hour ... visually show
+# the ones that aren't going"): Up to date when the last read that worked is this recent (an hour, with room for the
+# read itself and its turn), Late until LATE_FOR, and Not going after that, or when the shop is paused, failing or
+# has never been read.
+UP_TO_DATE_FOR = timedelta(minutes=75)
+LATE_FOR = timedelta(hours=3)
+OK, LATE, STOPPED = "ok", "late", "stopped"
+WORDS = {OK: "Up to date", LATE: "Late", STOPPED: "Not going"}
+
+
+def ordinal(n):
+    return f"{n}{'th' if 10 <= n % 100 <= 20 else {1: 'st', 2: 'nd', 3: 'rd'}.get(n % 10, 'th')}"
+
+
+def light_for(retailer, now, everything_paused):
+    """(light, why) for one shop: OK, LATE or STOPPED, and the few words that say why."""
+    from django.utils.timesince import timesince
+
+    ok_at = retailer.last_ok_at
+    if everything_paused:
+        return STOPPED, "Pause all is on"
+    if retailer.reading_paused:
+        return STOPPED, "Paused"
+    if retailer.backoff_until is not None and retailer.backoff_until > now:
+        tries = retailer.error_streak
+        return STOPPED, (f"Failing: waiting after {tries} failed tr{'y' if tries == 1 else 'ies'}" if tries
+                         else "Waiting")
+    if retailer.error_streak:
+        return STOPPED, "Its last read failed"
+    if ok_at is None:
+        return STOPPED, "Never read"
+    ago = timesince(ok_at, now, depth=1)
+    if now - ok_at <= UP_TO_DATE_FOR:
+        return OK, f"Read {ago} ago"
+    if now - ok_at <= LATE_FOR:
+        return LATE, f"Read {ago} ago"
+    return STOPPED, f"Not read for {ago}"
+
+
 def shops(now, state=_UNREAD):
     """One row per shop that is read on a schedule, for the Crawl health page, in one query.
 
-    A shop is Reading while its latest run has not finished, then Paused, Backing off or Idle. Shops
-    with errors come first, then paused ones, so a problem is at the top of a phone screen, not
-    somewhere in a list of fifty.
+    A shop is Reading while its latest run has not finished, then Paused, Backing off or Idle. Each has a light
+    (light_for) and what it is doing now: reading, its place in line when due, or when it is next read. The shops that
+    are not going come first, failing then paused, then the late ones, so a problem is at the top of a phone screen,
+    not somewhere in a list of fifty.
     """
     latest_open = (
         # A pulse reads part of a shop (ImportRun.note); only whole reads say a shop is being read.
@@ -217,6 +272,7 @@ def shops(now, state=_UNREAD):
     )
     everything_paused = all_paused(state)
     rows = []
+    in_line = []
     for retailer in retailers:
         backing_off = retailer.backoff_until is not None and retailer.backoff_until > now
         if retailer.reading:
@@ -228,18 +284,58 @@ def shops(now, state=_UNREAD):
         else:
             state = "Idle"
         next_read = next_read_for(retailer, now, everything_paused)
-        rows.append({
+        light, why = light_for(retailer, now, everything_paused)
+        row = {
             "retailer": retailer,
             "state": state,
             "problem": backing_off,
+            "light": light, "word": WORDS[light], "why": why,
+            "doing": "Reading now" if retailer.reading else "",
             "last_ok": clock(retailer.last_ok_at, now) if retailer.last_ok_at else "never",
             "next_read": next_read,
             "last_error": retailer.last_error[:160],
             "failed_run": retailer.failed_run,
-            "order": (0 if backing_off or retailer.error_streak else 1 if retailer.reading_paused else 2, retailer.name.lower()),
-        })
+            "order": ({STOPPED: 0, LATE: 1, OK: 2}[light],
+                      0 if backing_off or retailer.error_streak else 1 if retailer.reading_paused else 2,
+                      retailer.name.lower()),
+        }
+        if not row["doing"]:
+            if next_read == "due now":
+                in_line.append(row)
+            elif next_read != "paused":
+                row["doing"] = f"Next read {next_read}"
+        rows.append(row)
+    # Its place in line, as the reader takes them (Worker.plan): eBay's hourly search first, then the shop due longest.
+    epoch = now - timedelta(days=3650)
+    in_line.sort(key=lambda row: (row["retailer"].source_type != Retailer.Source.EBAY,
+                                  row["retailer"].next_read_at or epoch, row["retailer"].name.lower()))
+    for place, row in enumerate(in_line, start=1):
+        row["doing"] = f"{ordinal(place)} in line"
     rows.sort(key=lambda row: row["order"])
     return rows
+
+
+def lights(rows):
+    """How many shops are OK, LATE and STOPPED."""
+    counts = {OK: 0, LATE: 0, STOPPED: 0}
+    for row in rows:
+        counts[row["light"]] += 1
+    return counts
+
+
+def verdict(rows, worker, everything_paused):
+    """("ok" | "behind" | "stopped", why) for the top of the Crawl health page."""
+    if everything_paused:
+        return "stopped", "Pause all is on, so no shop is read. Tap Resume all to start again."
+    if not worker.get("alive"):
+        return "stopped", ("The background reader has stopped. The hourly schedule reads the shops until it is "
+                           "back, and the server starts it again within five minutes.")
+    counts = lights(rows)
+    behind = counts[LATE] + counts[STOPPED]
+    if not behind:
+        return "ok", "Every shop was read in the last hour."
+    return "behind", (f"{behind} shop{'s were' if behind != 1 else ' was'} not read in the last hour. They are at the "
+                      "top of the list below.")
 
 
 def worker_status(state, now):
@@ -262,3 +358,117 @@ def worker_status(state, now):
         # Where it restarts itself to free memory (worker.MEMORY_SHARE).
         "memory_restart": round(state.memory_limit_mb * MEMORY_SHARE) if state.memory_limit_mb else None,
     }
+
+
+# The Log to copy on Crawl health (the owner, 24 Nov 2026, of eBay health first: "keep the log for you"): everything
+# about the reading as plain text, for the owner to paste to Claude.
+LOG_PROBLEMS = 40
+
+
+def log_text(now, state, rows, worker, everything_paused):
+    """The Crawl health page's Log to copy: the verdict, the background reader and what it last planned, the import
+    lock and who waits for it, how long each kind of shop takes to read against the time the reader has, the reads of
+    the last hour, every shop worst first, and the reader's own warnings (catalogue/worklog.py). No key, token or
+    address of a person is in it. Two queries."""
+    from collections import defaultdict
+
+    from django.db.models import Count, Q
+
+    from . import worker as reader, worklog
+
+    def at(moment):
+        if moment is None:
+            return "none"
+        if isinstance(moment, str):
+            from datetime import datetime
+
+            try:
+                moment = datetime.fromisoformat(moment)
+            except ValueError:
+                return moment
+        minutes = int((now - moment).total_seconds() // 60)
+        ago = f"{minutes} min ago" if 0 <= minutes < 120 else f"{minutes // 60} h ago" if minutes >= 0 else \
+            f"in {-minutes} min" if minutes > -120 else f"in {-minutes // 60} h"
+        return f"{timezone.localtime(moment):%d %b %H:%M} ({ago})"
+
+    light, why = verdict(rows, worker, everything_paused)
+    counts = lights(rows)
+    out = [f"RipRaptor crawl log, {timezone.localtime(now):%a %d %b %Y %H:%M} UK time",
+           f"Verdict: {light}. {why}",
+           f"Shops read on a schedule: {len(rows)}; up to date {counts[OK]}, late {counts[LATE]}, "
+           f"not going {counts[STOPPED]}"]
+
+    out += ["", "BACKGROUND READER"]
+    if state is None:
+        out.append("never started")
+    else:
+        out += [f"running: {'yes' if worker.get('alive') else 'NO'}, last sign of life {at(state.heartbeat_at)}, "
+                f"started {at(state.started_at)}",
+                f"pause all: {'ON' if everything_paused else 'off'}; drop day: "
+                + (f"every {state.fast_minutes} min until {at(state.fast_until)}"
+                   if state.fast_until and state.fast_until > now else "off"),
+                f"jobs done since it started: {state.jobs_done}, last job: {state.last_job or 'none'}",
+                f"requests to shops in the last hour: {state.requests_last_hour}, errors: {state.errors_last_hour}",
+                f"memory: {state.memory_mb or '?'} MB of a {state.memory_limit_mb or '?'} MB limit"]
+        if state.note:
+            out.append(f"note: {state.note}")
+    out.append(f"limits: {reader.MAX_READS} whole-shop reads at once, {reader.MAX_WEBSITE_READS} of website shops, "
+               f"{reader.GLOBAL_RATE[0]:g} requests a second in all")
+    plan = worklog.last_plan()
+    if not plan:
+        out.append("last plan: none noted")
+    elif plan.get("paused"):
+        out.append(f"last plan {at(plan.get('at'))}: nothing planned, Pause all is on")
+    else:
+        queue, lock = plan.get("queue", {}), plan.get("lock", {})
+        jobs = ", ".join(f"{job['label']} ({job['minutes']} min)" for job in plan.get("running", [])) or "nothing"
+        out += [f"last plan {at(plan.get('at'))}, {plan.get('threads')} threads",
+                f"  running then: {jobs}",
+                f"  due: {queue.get('reads', 0)} reads ({queue.get('reads_with_room', 0)} with room to start), "
+                f"{queue.get('checks', 0)} shops to check, {queue.get('pulses', 0)} pulses, {queue.get('other', 0)} other",
+                "  import lock: " + (f"held by the reader since {at(lock.get('held_since'))}"
+                                     if lock.get("held_since") else "not held by the reader")
+                + (f"; refused since {at(lock.get('refused_since'))}: {lock.get('refused')}"
+                   if lock.get("refused_since") else "")]
+    waiting = reader.lock_waiters()
+    out.append(f"waiting for the import lock now: {', '.join(waiting) if waiting else 'nobody'}")
+
+    out += ["", "READ TIME BY KIND OF SHOP (each shop's last read)"]
+    kinds = defaultdict(list)
+    for row in rows:
+        kinds[row["retailer"].source_type].append(row["retailer"])
+    need = website_need = 0
+    for kind, shops_of_kind in sorted(kinds.items()):
+        timed = [shop for shop in shops_of_kind if shop.last_read_seconds is not None]
+        total = sum(shop.last_read_seconds for shop in timed)
+        slowest = max(timed, key=lambda shop: shop.last_read_seconds, default=None)
+        out.append(f"{kind}: {len(shops_of_kind)} shops, {len(timed)} timed, {total:,} s in all"
+                   + (f", slowest {slowest.name} {slowest.last_read_seconds:,} s" if slowest else ""))
+        if kind not in (Retailer.Source.AMAZON,):
+            need += total
+            if kind == Retailer.Source.WEBSITE:
+                website_need += total
+    out.append(f"reading every shop once takes about {need // 60:,} minutes of reading; the reader has "
+               f"{reader.MAX_READS * 60} an hour ({website_need // 60:,} of {reader.MAX_WEBSITE_READS * 60} for "
+               "website shops)")
+
+    runs = ImportRun.objects.filter(note="", started_at__gte=now - timedelta(hours=1)).aggregate(
+        started=Count("pk"), finished=Count("pk", filter=Q(finished_at__isnull=False)),
+        failed=Count("pk", filter=~Q(error="")))
+    out += ["", "READS IN THE LAST HOUR",
+            f"started {runs['started']}, finished {runs['finished']}, failed {runs['failed']}"]
+
+    out += ["", "SHOPS (worst first): name | light | kind | why | doing | last good read | took | every | errors | last error"]
+    for row in rows:
+        shop = row["retailer"]
+        out.append(" | ".join([
+            shop.name, row["word"], shop.source_type, row["why"], row["doing"] or "-",
+            at(shop.last_ok_at), f"{shop.last_read_seconds} s" if shop.last_read_seconds is not None else "-",
+            f"{shop.every_minutes} min", str(shop.error_streak), (shop.last_error or "-")[:120],
+        ]))
+
+    kept = worklog.entries()
+    problems = [lines for bad, lines in kept if bad][-LOG_PROBLEMS:]
+    out += ["", f"READER LOG: WARNINGS AND ERRORS (the newest {LOG_PROBLEMS}, oldest first)"]
+    out += [line for lines in problems for line in lines] or ["none kept"]
+    return worklog.scrub("\n".join(out))

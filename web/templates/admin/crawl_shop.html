@@ -1,0 +1,13 @@
+{% with shop=row.retailer %}<li class="item {{ row.light }}" id="shop-{{ shop.slug }}">
+  <p class="head"><i class="dot" aria-hidden="true"></i><b>{{ shop.name }}</b><span class="word">{{ row.word }}</span>{% if row.doing == "Reading now" %}<span class="doing">Reading now</span>{% endif %}</p>
+  <p class="facts">{{ row.why }}{% if row.doing and row.doing != "Reading now" %} &middot; {{ row.doing }}{% endif %}{% if shop.last_read_seconds is not None %} &middot; took {{ shop.last_read_seconds }} s{% endif %}{% if shop.error_streak %} &middot; errors in a row: {{ shop.error_streak }}{% endif %}</p>
+  {% if row.last_error and row.light != "ok" %}<p class="error">Last error: {{ row.last_error }}{% if row.failed_run %} <a href="{% url 'admin:catalogue_importrun_change' row.failed_run %}">See what happened</a>{% endif %}</p>{% endif %}
+  <div class="row">
+    <form method="post">{% csrf_token %}<input type="hidden" name="action" value="read_now"><input type="hidden" name="shop" value="{{ shop.pk }}"><input type="submit" value="Read now"></form>
+    {% if shop.reading_paused %}
+    <form method="post">{% csrf_token %}<input type="hidden" name="action" value="resume"><input type="hidden" name="shop" value="{{ shop.pk }}"><input type="submit" value="Resume"></form>
+    {% else %}
+    <form method="post">{% csrf_token %}<input type="hidden" name="action" value="pause"><input type="hidden" name="shop" value="{{ shop.pk }}"><input type="submit" value="Pause"></form>
+    {% endif %}
+  </div>
+</li>{% endwith %}

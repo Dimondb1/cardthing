@@ -138,7 +138,7 @@ class PerDayTests(SettingsCase):
         cache.set(askrip.day_key(timezone.now()), 3, 60)
         self.assertEqual(self.ask().json()["state"], "closed")
         self.assertEqual(askrip.closed_words(askrip.work_out_closed(timezone.now())),
-                         "Hidden for today: its 3 questions a day were asked. It shows again tomorrow.")
+                         "Hidden for today: its 3 requests a day were used. It shows again tomorrow.")
 
     def test_raising_it_opens_the_box_again_at_once(self):
         AskRipSettings.objects.create(pk=1, per_day=3)

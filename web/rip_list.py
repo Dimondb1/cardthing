@@ -47,8 +47,8 @@ STATES = ("made", "limit", "busy", "closed", "empty", "failed", "nothing", "phot
 PHOTO_MAX_BYTES = 15 * 1024 * 1024    # a phone camera's photo with room to spare; the server refuses over 25 MB
 PHOTO_EDGE = 1568                     # the longest side Claude reads in full; handwriting stays legible
 PHOTO_MAX_PIXELS = 60_000_000         # a 50 megapixel camera's photo, not a picture made to wear the server out
-# A PNG, WebP or GIF cannot be read at a fraction of its size as a JPEG can, so it is held to fewer: a phone's
-# screenshot of a list is under 4 megapixels.
+# What is ever decoded in full. A PNG, WebP or GIF cannot be read at a fraction of its size as a JPEG can, so it is
+# held to this as it is: a phone's screenshot of a list is under 4 megapixels. A JPEG is held to it once drafted.
 PHOTO_MAX_PIXELS_FULL = 16_000_000
 PHOTO_FORMATS = {"JPEG", "PNG", "WEBP", "GIF", "MPO"}   # MPO: some phones' JPEGs with a second picture inside
 # Claude reads a picture at about a token for every 750 square pixels: the most a photo adds, as characters (three
@@ -200,11 +200,17 @@ def photo_jpeg(upload):
             most = PHOTO_MAX_PIXELS if opened.format in ("JPEG", "MPO") else PHOTO_MAX_PIXELS_FULL
             if opened.format not in PHOTO_FORMATS or opened.width * opened.height > most:
                 return None
-            opened.draft("RGB", (PHOTO_EDGE, PHOTO_EDGE))   # a JPEG decodes straight at a fraction of its size
-            picture = ImageOps.exif_transpose(opened).convert("RGB")
-        picture.thumbnail((PHOTO_EDGE, PHOTO_EDGE))
-        out = io.BytesIO()
-        picture.save(out, "JPEG", quality=85)
+            # A JPEG decodes straight at a half, a quarter or an eighth of its size. Asked by its longest side alone,
+            # a long thin photo (a panorama, or one made to wear the server out) shrinks as far as a square one.
+            opened.draft("RGB", (PHOTO_EDGE, 1) if opened.width >= opened.height else (1, PHOTO_EDGE))
+            # What will be decoded, not what the file says, is held to the full-size budget.
+            if opened.width * opened.height > PHOTO_MAX_PIXELS_FULL:
+                return None
+            ImageOps.exif_transpose(opened, in_place=True)   # one full-size copy at a time, not three
+            picture = opened if opened.mode == "RGB" else opened.convert("RGB")
+            picture.thumbnail((PHOTO_EDGE, PHOTO_EDGE))
+            out = io.BytesIO()
+            picture.save(out, "JPEG", quality=85)
     except (OSError, ValueError, SyntaxError, Image.DecompressionBombError):
         return None
     return out.getvalue()
@@ -399,20 +405,22 @@ def make(request, wants, now=None, client=None, photo=None):
         return Made("busy")
     try:
         askrip.count_question(request, now)
-        state = send(wants, token, model, now, client, image)
-        if state in ("failed", "nothing"):   # nothing to show for it, so it does not count; a chat reply does
-            askrip.count_question(request, now, give_back=True)
+        state = send(wants, token, model, now, client, image, request=request)
+        if state in ("failed", "nothing"):
+            # Nothing to show for it, so it is not one of theirs; a chat reply is. It reached Anthropic, so the
+            # address's backstop and the site's day keep it.
+            askrip.count_question(request, now, give_back=True, own_only=True)
         return Made(state, token if state in ("made", "nothing", "chat") else "")
     finally:
         cache.delete(askrip.BUSY_KEY)
 
 
-def send(wants, token, model, now, client=None, image=None, row_key="list"):
+def send(wants, token, model, now, client=None, image=None, row_key="list", request=None):
     found_games = games()
     params = request_params(wants, found_games, model, image)
     characters = len(params["system"][0]["text"]) + len(words_sent(wants, image))
     worst = askrip.worst_micros(characters + (PHOTO_CHARACTERS if image is not None else 0), model)
-    if judge.job_room(KIND, worst, now):
+    if judge.job_room(KIND, worst, now) or not askrip.take_paid_call(now, request):
         askrip.reopen()
         return "closed"
     ask = askrip.Ask.objects.create(
@@ -623,7 +631,7 @@ def hear(request, said, now=None, client=None, row_key="voice"):
     if not cache.add(askrip.BUSY_KEY, 1, int(askrip.TIMEOUT_SECONDS) + 10):
         return Made("busy")
     try:
-        state = send(said, token, model, now, client, row_key=row_key)
+        state = send(said, token, model, now, client, row_key=row_key, request=request)
         if state == "chat":
             # A reply to small talk is one of the visitor's Ask Rip questions, as the list builder's are (the owner,
             # 15 Nov 2026: "it still takes away their allowance"). The caller keeps the count in the cookie.

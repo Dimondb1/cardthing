@@ -2308,7 +2308,8 @@ class ClaudeJob(models.Model):
     on = models.BooleanField(default=True)
     monthly_budget_usd = models.DecimalField(
         "own monthly limit", max_digits=6, decimal_places=2, null=True, blank=True,
-        help_text="US dollars this job alone may spend in a month. Empty: only the shared monthly limit applies.")
+        help_text="US dollars this job alone may spend in a month. Empty: only the shared monthly limit applies, "
+                  "except Ask Rip, which then stops at the server's ceiling (RIPRAPTOR_CLAUDE_MAX_MONTHLY_USD).")
     changed_at = models.DateTimeField(auto_now=True)
 
     class Meta:

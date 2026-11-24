@@ -468,8 +468,14 @@ def spent_by_job(now=None):
 
 
 def job_cap_micros(job):
-    """A job's own monthly limit in micro-dollars, or None when it has none."""
-    return None if job.monthly_budget_usd is None else int(job.monthly_budget_usd * 1_000_000)
+    """A job's own monthly limit in micro-dollars, or None when it has none. Ask Rip never takes the shared limit's
+    check (its spend comes from visitors, and a background job's spend should not close it), so with no limit of its
+    own it stops at the server's ceiling, RIPRAPTOR_CLAUDE_MAX_MONTHLY_USD."""
+    if job.monthly_budget_usd is None:
+        if job.name == "ask":
+            return int(Decimal(settings.RIPRAPTOR_CLAUDE_MAX_MONTHLY_USD) * 1_000_000)
+        return None
+    return int(job.monthly_budget_usd * 1_000_000)
 
 
 def job_room(kind, worst, now=None, jobs=None, spent=None):

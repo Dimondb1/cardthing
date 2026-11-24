@@ -233,7 +233,8 @@ class LimitTests(AskRipCase):
         self.fake.answer = anthropic.APIConnectionError(request=httpx2.Request("POST", "https://api.anthropic.com"))
         response = self.ask()
         self.assertEqual(response.json()["state"], "failed")
-        self.assertEqual(askrip.address_count(SimpleNamespace(META={"REMOTE_ADDR": "203.0.113.7"}), 0)[0], 0)
+        # It may still have been paid for, so the address's backstop keeps it; only the visitor's own goes back.
+        self.assertEqual(askrip.address_count(SimpleNamespace(META={"REMOTE_ADDR": "203.0.113.7"}), 0)[0], 1)
         from django.core import signing
         self.assertEqual(signing.loads(response.cookies[askrip.COUNT_COOKIE].value, salt=askrip.COUNT_SALT)["n"], 0)
 

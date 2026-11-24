@@ -59,6 +59,21 @@ class JobTests(Base):
                          "Cardmarket matches reached its own monthly limit of $2.00, set on the Claude page")
         self.assertEqual(judge.job_room(Kind.FOUND, 50_000_000), "")   # the shared limit is the run's own check
 
+    def test_ask_rip_with_its_own_limit_emptied_stops_at_the_servers_ceiling(self):
+        from django.test import override_settings
+
+        ClaudeJob.objects.create(name="ask", monthly_budget_usd=None)
+        ClaudeJob.objects.create(name="market", monthly_budget_usd=None)
+        with override_settings(RIPRAPTOR_CLAUDE_MAX_MONTHLY_USD=5):
+            ask(Kind.ASK, cost=4_990_000)
+            ask(Kind.MARKET, cost=9_000_000)
+            self.assertEqual(judge.job_cap_micros(judge.job_settings()["ask"]), 5_000_000)
+            self.assertEqual(judge.job_room(Kind.ASK, 5_000), "")
+            self.assertIn("reached its own monthly limit of $5.00", judge.job_room(Kind.ASK, 20_000))
+            # A background job with no limit of its own still has only the shared limit, each run's own check.
+            self.assertIsNone(judge.job_cap_micros(judge.job_settings()["market"]))
+            self.assertEqual(judge.job_room(Kind.MARKET, 50_000_000), "")
+
     def test_the_judge_never_asks_about_a_job_switched_off_and_passes_over_one_at_its_limit(self):
         self.switch_on()
         self.found()

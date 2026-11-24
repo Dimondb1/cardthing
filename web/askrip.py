@@ -195,7 +195,7 @@ CLOSED_WORDS = {
     "stopped": "Hidden: Anthropic refused the key or reported no credit left. It shows again once they accept it.",
     "off": "Hidden: switched off here. Tick it and Save jobs to show it.",
     "job": "Hidden: it reached its own monthly limit. Raise it here, or it shows again next month.",
-    "day": "Hidden for today: its {per_day} questions a day were asked. It shows again tomorrow.",
+    "day": "Hidden for today: its {per_day} requests a day were used. It shows again tomorrow.",
 }
 
 
@@ -222,7 +222,7 @@ def work_out_closed(now):
     owner = chosen()
     if judge.job_room(KIND, typical_worst(owner.model), now):
         return "job"   # at its own monthly limit
-    if (cache.get(day_key(now)) or 0) >= owner.per_day:
+    if (cache.get(day_key(now)) or 0) >= owner.per_day or (cache.get(paid_key(now)) or 0) >= owner.per_day:
         return "day"
     return ""
 
@@ -252,6 +252,27 @@ def person_key(request):
 
 def day_key(now):
     return f"askrip:day:{timezone.localdate(now).isoformat()}"
+
+
+def paid_key(now):
+    return f"askrip:paid:{timezone.localdate(now).isoformat()}"
+
+
+def take_paid_call(now, request=None):
+    """Count one request about to be sent to Anthropic under Ask Rip's job (a question, a list, a photo, a voice or
+    search-bar reading), whatever comes back, and say whether today's ceiling (the owner's questions a day) still has
+    room. Never given back, so nothing that reaches Anthropic escapes the day. The owner's are not counted
+    (is_owner)."""
+    if request is not None and is_owner(request):
+        return True
+    key = paid_key(now)
+    cache.add(key, 0, 2 * 86400)
+    try:
+        sent = cache.incr(key)
+    except ValueError:   # gone between the add and the incr
+        cache.set(key, 1, 2 * 86400)
+        sent = 1
+    return sent <= chosen().per_day
 
 
 def browser_count(request, now_ts):
@@ -332,15 +353,18 @@ def was_helped(request):
     return cache.get(helped_key(request)) is not None
 
 
-def count_question(request, now, give_back=False):
+def count_question(request, now, give_back=False, own_only=False):
     """Add one to the visitor's questions and their address's (or take one off, for a question that failed on our
     side), and to the day's. Each window is a day from its first question, kept to its end however often it is
-    written. The owner's are not counted (is_owner)."""
+    written. ``own_only`` changes only the browser's own count: a give-back for a request that reached Anthropic
+    leaves the address's backstop and the day counted, so blank photos or failures cannot be sent without end. The
+    owner's are not counted (is_owner)."""
     if is_owner(request):
         return
     now_ts = time.time()
     step = -1 if give_back else 1
-    for count, key in ((address_count(request, now_ts), person_key(request)), (browser_count(request, now_ts), None)):
+    counts = ((address_count(request, now_ts), person_key(request)), (browser_count(request, now_ts), None))
+    for count, key in counts[1:] if own_only else counts:
         n, until = count
         until = until or now_ts + WINDOW.total_seconds()
         n = max(0, n + step)
@@ -349,6 +373,8 @@ def count_question(request, now, give_back=False):
         else:
             # For the browser's cookie (keep_count); read back by a give-back in the same request.
             request.askrip_count = {"n": n, "until": math.ceil(until)}
+    if own_only:
+        return
     day = day_key(now)
     cache.set(day, max(0, (cache.get(day) or 0) + (-1 if give_back else 1)), 2 * 86400)
 
@@ -971,8 +997,8 @@ def ask(request, product, question, now=None, client=None):
     try:
         count_question(request, now)
         state = send(product, question, found, amounts, checked, token, print_, now, client, request=request)
-        if state == "failed":
-            count_question(request, now, give_back=True)
+        if state == "failed":   # it may still have been paid for (judge.settle_failed), so only theirs goes back
+            count_question(request, now, give_back=True, own_only=True)
         return Asked(state, token if state == "answered" else "")
     finally:
         cache.delete(BUSY_KEY)
@@ -982,7 +1008,7 @@ def send(product, question, found, amounts, checked, token, print_, now, client=
     params = request_params(found, question)
     model = params["model"]
     worst = worst_micros(len(SYSTEM_PROMPT) + len(params["messages"][0]["content"]), model)
-    if judge.job_room(KIND, worst, now):
+    if judge.job_room(KIND, worst, now) or not take_paid_call(now, request):
         reopen()
         return "closed"
     ask = Ask.objects.create(

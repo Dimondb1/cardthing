@@ -63,7 +63,7 @@
         <span class="does">1 to {{ askrip.per_person_most }}. A person is their browser. Everyone on one internet address shares {{ askrip.per_address }} a day.</span></p>
       <p class="field"><label for="askrip_per_day"><b>Questions a day across the site</b></label>
         <input type="number" id="askrip_per_day" name="askrip_per_day" min="1" max="{{ askrip.per_day_most }}" step="1" inputmode="numeric" value="{{ askrip.per_day }}" required>
-        <span class="does">1 to {{ askrip.per_day_most|number }}. Past this, Ask Rip hides until tomorrow, whoever asks.</span></p>
+        <span class="does">1 to {{ askrip.per_day_most|number }}. Past this, Ask Rip hides until tomorrow, whoever asks. Every request sent to Claude counts: questions, lists, list photos, voice searches and search-bar readings, even ones that find nothing.</span></p>
       <fieldset class="field"><legend><b>Model</b></legend>
         {% for model in askrip.models %}<label class="pick"><input type="radio" name="askrip_model" value="{{ model.id }}"{% if model.chosen %} checked{% endif %} required> {{ model.label }}{% if forloop.first %} (cheapest){% endif %}
           <span class="does">Up to about {{ model.cost }} a question{% if model.covers %}, so ${{ askrip.limit }} covers at least {{ model.covers|number }}{% endif %}.</span></label>
@@ -76,7 +76,7 @@
 
   <section>
     <h2>Jobs</h2>
-    <p class="note">Switch a job off and every run skips it. Give it a monthly limit of its own and it stops there while the other jobs carry on; empty means only the shared limit applies. A batch already out at Anthropic still comes back and is acted on, free.</p>
+    <p class="note">Switch a job off and every run skips it. Give it a monthly limit of its own and it stops there while the other jobs carry on; empty means only the shared limit applies. Ask Rip never takes the shared limit, so with this empty it stops at the server&#x27;s ceiling of ${{ claude.max_monthly }} a month. A batch already out at Anthropic still comes back and is acted on, free.</p>
     <form method="post">{% csrf_token %}<input type="hidden" name="action" value="claude_jobs">
     <table>
       <thead><tr><th>Job</th><th>On</th><th class="num">This month</th><th class="num">Today</th><th class="num">From cache</th><th class="num">Own limit ($)</th></tr></thead>

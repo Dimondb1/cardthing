@@ -187,10 +187,12 @@ def page_fetch(retailer, allow_private=False):
     import http.cookiejar
 
     hosts = shop_hosts(retailer)
-    handlers = [ShopRedirects(hosts, allow_private)]
+    handlers = []
     if retailer.session_url:
         handlers.append(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
-    opener = urllib.request.build_opener(*handlers)
+    # http and https only, every connection pinned to the address that was checked (importers.public_opener).
+    opener = importers.public_opener(*handlers, redirects=ShopRedirects(hosts, allow_private),
+                                     private_ok=True if allow_private else None)
     state = {"session": not retailer.session_url or bool(refused(retailer.session_url, hosts, allow_private))}
 
     def one(url, deadline):
@@ -201,6 +203,8 @@ def page_fetch(retailer, allow_private=False):
         try:
             with opener.open(request, timeout=importers.socket_timeout(deadline)) as response:
                 return Page(importers.read_body(response, deadline), response.geturl())
+        except ImportError_:
+            raise
         except urllib.error.HTTPError as exc:
             raise ImportError_(f"Could not fetch {url}: HTTP Error {exc.code}") from exc
         except (urllib.error.URLError, http.client.HTTPException, OSError) as exc:

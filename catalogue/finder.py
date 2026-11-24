@@ -975,8 +975,9 @@ def link(row):
     if listing.url != row.url:
         listing.url = row.url
         listing.save(update_fields=["url"])
-    if row.image_url and not product.image_src:
-        product.image_url = row.image_url
+    image = importers.web_image(row.image_url)
+    if image and not product.image_src:
+        product.image_url = image[:1000]
         product.save(update_fields=["image_url"])
     answered(row, ShopProduct.Status.LINKED, StockistSearch.Outcome.LINKED)
     if created:

@@ -19,10 +19,13 @@ missing barcodes can be added in admin.
 import csv
 import dataclasses
 import html as html_
+import http.client
 import io
+import ipaddress
 import json
 import logging
 import re
+import socket
 import time
 import urllib.error
 import urllib.parse
@@ -168,23 +171,40 @@ def socket_timeout(deadline):
     return min(TIMEOUT, max(left, 0.1))
 
 
-def read_body(response, deadline=None):
-    """The whole answer. With a deadline the body is read a piece at a time and given up once it passes.
+# The most of one answer that is read: far over a whole shop's product feed, so an answer that never ends (a sitemap
+# streamed for ever, a robots.txt of millions of lines) is cut off before it fills the reader's memory.
+MAX_BODY_BYTES = 64 * 1024 * 1024
+# robots.txt is read only for its rules and Sitemap: lines; search engines read the first 500 KB of one too.
+ROBOTS_BYTES = 512 * 1024
+
+
+class TooBig(ImportError_):
+    """An answer longer than its limit, given up part way."""
+
+
+def read_body(response, deadline=None, limit=MAX_BODY_BYTES):
+    """The whole answer, at most ``limit`` bytes: a longer one raises TooBig. With a deadline the body is given up
+    once it passes.
 
     The socket timeout covers each read on its own, so a shop that sends a byte every few seconds could
     otherwise keep one request open for as long as it liked.
     """
-    if deadline is None:
-        return response.read()
-    import http.client
-
-    pieces = []
+    too_big = TooBig(f"The answer is over {max(1, limit // (1024 * 1024))} MB")
+    if not hasattr(response, "read1"):   # not an HTTP answer: a test's stand-in, read whole
+        body = response.read()
+        if len(body) > limit:
+            raise too_big
+        return body
+    pieces, size = [], 0
     while True:
-        if time_left(deadline) <= 0:
+        if deadline is not None and time_left(deadline) <= 0:
             raise TimeoutError("ran out of time")
         piece = response.read1(65536)
         if not piece:
             break
+        size += len(piece)
+        if size > limit:
+            raise too_big
         pieces.append(piece)
     body = b"".join(pieces)
     if getattr(response, "length", None):
@@ -192,17 +212,168 @@ def read_body(response, deadline=None):
     return body
 
 
-def fetch(url, retries=2, deadline=None):
-    """The page at ``url``. ``deadline`` (a time.monotonic() value) caps the whole request, every try included."""
-    url = safe_url(url)
-    import http.client
+# Where a shop's reads may go -----------------------------------------------------------------------------------
+# Every address a shop gives (its feed, its robots.txt and sitemaps, the pages they list, its redirects, its
+# pictures) is read only over http or https, on the usual ports, from an address on the public internet: never a
+# file on this server, the server itself or a private network. The address is checked when the connection is made,
+# and the connection goes to the very address that was checked, so a name that answers differently a moment later
+# (DNS rebinding) gets nowhere. Every redirect is held to the same. Tests that read from a server of their own on
+# this machine set PRIVATE_OK.
+PRIVATE_OK = False
+
+
+class NotPublic(ImportError_):
+    """An address that is not a public web address, refused before anything is sent to it."""
+
+
+def vetted(host, port, private_ok=None):
+    """Where to connect for ``host``: every address it resolves to, each one public. NotPublic otherwise."""
+    private_ok = PRIVATE_OK if private_ok is None else private_ok
+    try:
+        found = socket.getaddrinfo(host, port, proto=socket.IPPROTO_TCP)
+    except (OSError, UnicodeError) as exc:
+        raise NotPublic(f"Could not find {host}") from exc
+    if not found:
+        raise NotPublic(f"Could not find {host}")
+    addresses = []
+    for *_rest, sockaddr in found:
+        address = ipaddress.ip_address(sockaddr[0].split("%")[0])
+        if (not address.is_global or address.is_multicast) and not private_ok:
+            raise NotPublic(f"{host} is not on the public internet")
+        addresses.append(sockaddr[0])
+    return addresses
+
+
+def public_host(host):
+    """Raise NotPublic unless every address ``host`` resolves to is a public one: not loopback, private, link local,
+    reserved, multicast or this server's own."""
+    vetted(host, 443)
+
+
+def connect_vetted(host, port, timeout, source_address=None, private_ok=None):
+    """A socket to one of the addresses ``host`` was vetted for, tried in turn."""
+    last = None
+    for address in vetted(host, port, private_ok):
+        try:
+            return socket.create_connection((address, port), timeout, source_address)
+        except OSError as exc:
+            last = exc
+    raise last
+
+
+class PinnedHTTPConnection(http.client.HTTPConnection):
+    def __init__(self, *args, private_ok=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.private_ok = private_ok
+
+    def connect(self):
+        self.sock = connect_vetted(self.host, self.port, self.timeout, self.source_address, self.private_ok)
+
+
+class PinnedHTTPSConnection(http.client.HTTPSConnection):
+    def __init__(self, *args, private_ok=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.private_ok = private_ok
+
+    def connect(self):
+        sock = connect_vetted(self.host, self.port, self.timeout, self.source_address, self.private_ok)
+        # The certificate is still checked against the name, not the address.
+        self.sock = self._context.wrap_socket(sock, server_hostname=self.host)
+
+
+class PinnedHTTPHandler(urllib.request.HTTPHandler):
+    def __init__(self, private_ok=None):
+        super().__init__()
+        self.private_ok = private_ok
+
+    def http_open(self, req):
+        return self.do_open(PinnedHTTPConnection, req, private_ok=self.private_ok)
+
+
+class PinnedHTTPSHandler(urllib.request.HTTPSHandler):
+    def __init__(self, private_ok=None):
+        super().__init__()
+        self.private_ok = private_ok
+
+    def https_open(self, req):
+        return self.do_open(PinnedHTTPSConnection, req, context=self._context, private_ok=self.private_ok)
+
+
+def web_address(url, private_ok=None):
+    """``url`` when it is http or https on port 80 or 443 (any port for a test's own server); NotPublic otherwise.
+    Whether its host is public is checked as it is connected to (vetted)."""
+    private_ok = PRIVATE_OK if private_ok is None else private_ok
+    parts = urllib.parse.urlsplit(str(url or ""))
+    try:
+        port = parts.port
+    except ValueError:
+        port = -1
+    if parts.scheme.lower() not in ("http", "https") or not parts.hostname or (
+            port not in (None, 80, 443) and not private_ok):
+        raise NotPublic(f"Not a web address: {str(url)[:80]}")
+    return url
+
+
+class PublicRedirects(urllib.request.HTTPRedirectHandler):
+    """Follows a redirect only to a web address on the public internet; the connection checks the host again."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        try:
+            web_address(newurl)
+            if not PRIVATE_OK:
+                public_host(urllib.parse.urlsplit(newurl).hostname)
+        except NotPublic:
+            if fp is not None:
+                fp.close()
+            raise NotPublic(f"Redirected to {newurl[:80]}") from None
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+def public_opener(*handlers, redirects=None, private_ok=None):
+    """An opener for addresses a shop gave: http and https only (no files, ftp or data), no proxy from the
+    environment, every connection pinned to a vetted public address, and redirects held to web addresses
+    (``redirects``, PublicRedirects unless given). ``handlers`` adds others, such as a cookie jar."""
+    opener = urllib.request.OpenerDirector()
+    for handler in (urllib.request.ProxyHandler({}), urllib.request.UnknownHandler(),
+                    PinnedHTTPHandler(private_ok), PinnedHTTPSHandler(private_ok), redirects or PublicRedirects(),
+                    urllib.request.HTTPDefaultErrorHandler(), urllib.request.HTTPErrorProcessor(), *handlers):
+        opener.add_handler(handler)
+    return opener
+
+
+def open_public(request, timeout):
+    """Open ``request`` (a urllib Request for an address a shop gave) with a public_opener."""
+    web_address(request.full_url)
+    return public_opener().open(request, timeout=timeout)
+
+
+def web_image(address):
+    """A shop's picture address when it is http or https, else "": no other kind is ever kept."""
+    address = str(address or "").strip()
+    return address if address.lower().startswith(("http://", "https://")) else ""
+
+
+def same_site(url, base):
+    """Whether ``url`` is on the shop's own site (``base``'s host, with or without www, or one inside the other, as
+    shop.example.com is in example.com)."""
+    def host(address):
+        return (urllib.parse.urlsplit(address).hostname or "").lower().removeprefix("www.")
+
+    own, other = host(base), host(url)
+    return bool(own and other) and (other == own or other.endswith("." + own) or own.endswith("." + other))
+
+
+def fetch(url, retries=2, deadline=None, limit=MAX_BODY_BYTES):
+    """The page at ``url``. ``deadline`` (a time.monotonic() value) caps the whole request, every try included, and
+    ``limit`` its length. Only a web address on the public internet is read (NotPublic, an ImportError_, otherwise)."""
+    url = web_address(safe_url(url))
 
     request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
     last = None
     for attempt in range(retries + 1):
         try:
-            with urllib.request.urlopen(request, timeout=socket_timeout(deadline)) as response:
-                return read_body(response, deadline)
+            with open_public(request, timeout=socket_timeout(deadline)) as response:
+                return read_body(response, deadline, limit)
         except urllib.error.HTTPError as exc:
             if exc.code in (429, 500, 502, 503, 504) and attempt < retries and not out_of_time(deadline):
                 time.sleep(2 * (attempt + 1))
@@ -285,19 +456,17 @@ def session_fetch(session_url, timeout=None):
     """
     import http.cookiejar
 
-    opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
+    opener = public_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
     state = {"ready": False}
 
     def fetch_with_cookies(url, retries=2, deadline=None):
-        import http.client
-
         if not state["ready"]:
             state["ready"] = True
             try:
                 fetch_with_cookies(session_url, retries=retries, deadline=deadline)
             except ImportError_:
                 pass
-        request = urllib.request.Request(safe_url(url), headers={"User-Agent": USER_AGENT})
+        request = urllib.request.Request(web_address(safe_url(url)), headers={"User-Agent": USER_AGENT})
         last = None
         for attempt in range(retries + 1):
             try:
@@ -1149,9 +1318,11 @@ def sitemap_pages(base, fetch=fetch, limit=MAX_PAGES, must_answer=False):
     found, seen, queue = {}, set(), [f"{base}/sitemap.xml", f"{base}/sitemap_index.xml", f"{base}/xmlsitemap.php"]
     answered, failed = [], []
     try:
-        robots = fetch(f"{base}/robots.txt").decode("utf-8", "replace")
+        robots = fetch(f"{base}/robots.txt")[:ROBOTS_BYTES].decode("utf-8", "replace")
         answered.append(True)
-        queue = [line.split(":", 1)[1].strip() for line in robots.splitlines() if line.lower().startswith("sitemap:")] + queue
+        # Only sitemaps on the shop's own site: a robots.txt cannot send the reader elsewhere.
+        listed = [line.split(":", 1)[1].strip() for line in robots.splitlines() if line.lower().startswith("sitemap:")]
+        queue = [url for url in listed if same_site(url, base)] + queue
     except ImportError_ as exc:
         failed.append(exc)
     # Read every sitemap file (up to MAX_SITEMAPS of them) before ranking, so
@@ -1183,6 +1354,8 @@ def sitemap_pages(base, fetch=fetch, limit=MAX_PAGES, must_answer=False):
                     lastmod = sitemap_lastmod(dated.group(1)) if dated else None
                     for loc in locs:
                         loc = loc.replace("&amp;", "&")
+                        if not same_site(loc, base):
+                            continue   # a sitemap lists the shop's own pages, and only those are read
                         if loc.endswith(".xml") or "sitemap" in loc.lower():
                             queue.append(loc)
                         elif loc not in found or (lastmod and (found[loc] is None or lastmod > found[loc])):
@@ -2014,8 +2187,9 @@ def apply_offers(retailer, offers, checked_at=None, run=None, complete=True, sho
                 listing.changed_at = checked_at
                 fields.append("changed_at")
             listing.save(update_fields=fields)
-        if offer.image and getattr(settings, "RIPRAPTOR_USE_FEED_IMAGES", True):
-            images_by_product.setdefault(product_pk, []).append(offer.image)
+        image = web_image(offer.image)   # a picture is kept only as a web address, never a file or other kind
+        if image and getattr(settings, "RIPRAPTOR_USE_FEED_IMAGES", True):
+            images_by_product.setdefault(product_pk, []).append(image)
         delivery = offer.delivery if offer.delivery is not None else retailer.delivery_for(offer.price)
         if not created and unchanged(listing, offer, delivery):
             to_stamp.append(listing.pk)
@@ -2120,14 +2294,14 @@ def apply_offers(retailer, offers, checked_at=None, run=None, complete=True, sho
                     ShopProduct.objects.update_or_create(
                         retailer=retailer, url=offer.url,
                         defaults={"title": offer.title, "price": offer.price, "availability": offer.availability,
-                                  "image_url": offer.image, "suggested_id": product_pk, "confidence": value,
+                                  "image_url": web_image(offer.image), "suggested_id": product_pk, "confidence": value,
                                   "status": ShopProduct.Status.LINKED, "last_seen": checked_at, **described(offer)},
                     )
                 elif match and value >= SUGGEST:
                     ShopProduct.objects.update_or_create(
                         retailer=retailer, url=offer.url,
                         defaults={"title": offer.title, "price": offer.price, "availability": offer.availability,
-                                  "image_url": offer.image, "suggested_id": match[0], "confidence": value,
+                                  "image_url": web_image(offer.image), "suggested_id": match[0], "confidence": value,
                                   "last_seen": checked_at, **described(offer)},
                     )
                     unmatched.append(f"{offer.title} -> maybe {match[1]} ({value}%)")
@@ -2498,7 +2672,7 @@ def create_from_offer(offer, catalogue, sealed=None, refused=()):
     held = new_pages.can_act()
     product = Product.objects.create(
         game=game, name=sealed.name, slug=slug, product_type=sealed.product_type,
-        ean=offer.ean or "", image_url=offer.image[:1000] if offer.image else "", is_active=not held,
+        ean=offer.ean or "", image_url=web_image(offer.image)[:1000], is_active=not held,
     )
     new_pages.note_new(product, held)
     catalogue.append((product.pk, product.name, game.slug))

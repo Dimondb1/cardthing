@@ -40,15 +40,17 @@ OK, GONE, UNKNOWN = "ok", "gone", "unknown"
 def look(url, timeout=TIMEOUT):
     """OK, GONE or UNKNOWN for the picture at ``url``: a HEAD request, or the first byte where a server refuses
     HEAD. GONE only for 404, 410, or a page sent in place of a picture."""
-    from .importers import USER_AGENT, safe_url
+    from . import importers
 
     if not url.lower().startswith(("http://", "https://")):
         return UNKNOWN
-    address = safe_url(url)
+    address = importers.safe_url(url)
     for method, headers in (("HEAD", {}), ("GET", {"Range": "bytes=0-0"})):
-        request = urllib.request.Request(address, method=method, headers={"User-Agent": USER_AGENT, **headers})
+        request = urllib.request.Request(address, method=method,
+                                         headers={"User-Agent": importers.USER_AGENT, **headers})
         try:
-            with urllib.request.urlopen(request, timeout=timeout) as response:
+            # Only a public web address, as every shop read (importers.open_public).
+            with importers.open_public(request, timeout=timeout) as response:
                 kind = (response.headers.get("Content-Type") or "").split(";")[0].strip().lower()
                 if method == "GET":
                     response.read(1)
@@ -59,7 +61,7 @@ def look(url, timeout=TIMEOUT):
             if exc.code in (405, 501) and method == "HEAD":
                 continue   # a server that will not answer HEAD: ask for the first byte instead
             return UNKNOWN
-        except (urllib.error.URLError, OSError, ValueError) as exc:
+        except (urllib.error.URLError, OSError, ValueError, importers.ImportError_) as exc:
             logger.info("Picture check: no answer for %s (%s)", url, exc)
             return UNKNOWN
     return UNKNOWN

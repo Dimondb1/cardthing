@@ -20,11 +20,9 @@ added by add_passed. The owner, 14 Nov 2026: "they need to provide the info it t
 we already have and is checked, need to make sure this a cannot be abused, I will then approve it".
 """
 
-import ipaddress
 import json
 import logging
 import re
-import socket
 import time
 import urllib.error
 import urllib.request
@@ -90,51 +88,26 @@ def take(text):
     return saved, known
 
 
-class NotPublic(importers.ImportError_):
-    """An address that is not on the public internet, refused before anything is sent to it."""
-
-
-def public_host(host):
-    """Raise NotPublic unless every address ``host`` resolves to is a public one: not loopback, private, link local,
-    reserved, multicast or this server's own."""
-    try:
-        found = socket.getaddrinfo(host, 443, proto=socket.IPPROTO_TCP)
-    except (socket.gaierror, UnicodeError) as exc:
-        raise NotPublic(f"Could not find {host}") from exc
-    if not found:
-        raise NotPublic(f"Could not find {host}")
-    for *_rest, sockaddr in found:
-        address = ipaddress.ip_address(sockaddr[0].split("%")[0])
-        if not address.is_global or address.is_multicast:
-            raise NotPublic(f"{host} is not on the public internet")
-
-
-class PublicRedirects(urllib.request.HTTPRedirectHandler):
-    """Follows a redirect only to http or https on the public internet."""
-
-    def redirect_request(self, req, fp, code, msg, headers, newurl):
-        parts = urlsplit(newurl)
-        if parts.scheme not in ("http", "https") or not parts.hostname:
-            raise NotPublic(f"Redirected to {newurl[:80]}")
-        public_host(parts.hostname)
-        return super().redirect_request(req, fp, code, msg, headers, newurl)
+# The public-address rules every shop read follows (importers: NotPublic, public_host, PublicRedirects and the pinned
+# connections). A List your shop check reads less than a shop read may: one answer at most CHECK_BODY_BYTES.
+NotPublic = importers.NotPublic
+public_host = importers.public_host
+PublicRedirects = importers.PublicRedirects
+CHECK_BODY_BYTES = 8 * 1024 * 1024
 
 
 def public_get(deadline):
-    """A reader for an address anyone could have typed: like importers.fetch, once, but only to the public internet."""
-    opener = urllib.request.build_opener(PublicRedirects)
+    """A reader for an address anyone could have typed: like importers.fetch, once, but only to the public internet,
+    every connection to the very address that was checked, and no answer over CHECK_BODY_BYTES."""
+    opener = importers.public_opener()
 
     def get(url):
-        url = importers.safe_url(url)
-        parts = urlsplit(url)
-        if parts.scheme not in ("http", "https") or not parts.hostname or parts.port not in (None, 80, 443):
-            raise NotPublic(f"Not a web address: {url[:80]}")
-        public_host(parts.hostname)
+        url = importers.web_address(importers.safe_url(url))
         request = urllib.request.Request(url, headers={"User-Agent": importers.USER_AGENT})
         try:
             with opener.open(request, timeout=importers.socket_timeout(deadline)) as response:
-                return importers.read_body(response, deadline)
-        except NotPublic:
+                return importers.read_body(response, deadline, limit=CHECK_BODY_BYTES)
+        except importers.ImportError_:
             raise
         except urllib.error.HTTPError as exc:
             raise importers.ImportError_(f"Could not fetch {url}: {exc}") from exc
@@ -156,7 +129,7 @@ def robots_for(base, get):
     """The shop's robots.txt rules, or None when it turns us away. A missing file allows everything."""
     rules = urllib.robotparser.RobotFileParser()
     try:
-        rules.parse(get(f"{base}/robots.txt").decode("utf-8", "replace").splitlines())
+        rules.parse(get(f"{base}/robots.txt")[:importers.ROBOTS_BYTES].decode("utf-8", "replace").splitlines())
     except importers.ImportError_ as exc:
         if re.search(r"\b(401|403|429)\b", str(exc)):
             return None

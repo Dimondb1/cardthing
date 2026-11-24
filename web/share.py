@@ -161,11 +161,17 @@ def post_image(product, summary, store=None):
     return png
 
 
+PHOTO_FETCH_BYTES = 8 * 1024 * 1024   # a shop's product picture, with room to spare
+
+
 def photo_bytes(product):
-    """The product's picture: its own file, else the shop's over the web, else None."""
+    """The product's picture: its own file, else the shop's over the public web, else None. Anyone can ask for a
+    share picture, so the shop's address is read as every shop read is (importers.fetch): http or https at a public
+    address, redirects held to the same, and here no more than PHOTO_FETCH_BYTES."""
     import time
 
-    from catalogue.importers import ImportError_, fetch
+    from catalogue import importers
+    from catalogue.importers import ImportError_, web_image
 
     if product.image:
         try:
@@ -173,10 +179,11 @@ def photo_bytes(product):
                 return handle.read()
         except (OSError, ValueError):
             return None
-    if not product.image_url:
+    url = web_image(product.image_url)
+    if not url:
         return None
     try:
-        return fetch(product.image_url, retries=0, deadline=time.monotonic() + POST_FETCH_SECONDS)
+        return importers.fetch(url, retries=0, deadline=time.monotonic() + POST_FETCH_SECONDS, limit=PHOTO_FETCH_BYTES)
     except (ImportError_, OSError, ValueError, TimeoutError):
         return None
 

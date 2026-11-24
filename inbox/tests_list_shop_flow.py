@@ -41,7 +41,7 @@ class FlowCase(TestCase):
     def setUp(self):
         cache.clear()
         self.addCleanup(cache.clear)
-        self.enterContext(mock.patch("catalogue.shop_adding.socket.getaddrinfo", resolve))
+        self.enterContext(mock.patch("socket.getaddrinfo", resolve))
         self.zepto = FakeZeptoMail()
         self.enterContext(mock.patch("urllib.request.urlopen", self.zepto))
         OutreachMail.objects.update_or_create(pk=1, defaults={

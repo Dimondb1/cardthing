@@ -21,7 +21,7 @@ from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
 
-from . import heat, insights, mail, notify, probe, worker
+from . import heat, importers, insights, mail, notify, probe, worker
 from .importers import STOPPED, ImportError_
 from .models import DailyPageView, ImportRun, Listing, Product, Retailer, StockAlert, WorkerState
 from .testing import make_game, make_listing, make_product, make_retailer, make_set
@@ -823,6 +823,11 @@ class ProbeBackOffTests(WorkerTestCase):
 
 class SlowShopTests(WorkerTestCase):
     """A shop that sends its answer a byte at a time cannot hold a probe past its limit."""
+
+    def setUp(self):
+        super().setUp()
+        # A server of the test's own on this machine, which a shop read would refuse (importers.PRIVATE_OK).
+        self.enterContext(mock.patch.object(importers, "PRIVATE_OK", True))
 
     def serve(self, delay, body=b"x" * 50):
         import http.server

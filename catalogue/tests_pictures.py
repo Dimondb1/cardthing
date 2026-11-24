@@ -44,7 +44,7 @@ def refusing(code):
 
 class LookTests(TestCase):
     def look(self, urlopen):
-        with mock.patch("urllib.request.urlopen", urlopen):
+        with mock.patch("catalogue.importers.open_public", urlopen):
             return pictures.look(DEAD)
 
     def test_only_a_shop_saying_the_file_is_gone_counts(self):
@@ -73,7 +73,7 @@ class LookTests(TestCase):
         self.assertEqual(asked, [("HEAD", None), ("GET", "bytes=0-0")])
 
     def test_not_a_web_address_is_never_asked(self):
-        with mock.patch("urllib.request.urlopen") as urlopen:
+        with mock.patch("catalogue.importers.open_public") as urlopen:
             self.assertEqual(pictures.look("/media/products/box.png"), pictures.UNKNOWN)
         urlopen.assert_not_called()
 

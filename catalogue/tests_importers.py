@@ -1,11 +1,13 @@
 import json
 from decimal import Decimal
+from unittest import mock
 
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
 from .classify import classify
+from . import importers
 from .importers import ImportError_, Offer, apply_offers, feed_offers, run_import, shopify_offers
 from .models import DailyLowestPrice, ImportRun, Listing, Product, Retailer, ShopProduct
 from .testing import make_game, make_listing, make_product, make_retailer, make_set
@@ -1239,6 +1241,10 @@ class PageStockTests(TestCase):
 
 
 class SessionFetchTests(TestCase):
+    def setUp(self):
+        # A server of the test's own on this machine, which a shop read would refuse (importers.PRIVATE_OK).
+        self.enterContext(mock.patch.object(importers, "PRIVATE_OK", True))
+
     def test_the_session_address_is_opened_first_and_its_cookie_kept(self):
         import http.server
         import threading

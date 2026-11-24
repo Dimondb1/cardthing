@@ -220,12 +220,13 @@ class CartSession:
     """A cookie-keeping client, so the basket survives between requests."""
 
     def __init__(self, timeout=30):
-        self.opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(CookieJar()))
+        # Only public web addresses, as every shop read (importers.public_opener).
+        self.opener = importers.public_opener(urllib.request.HTTPCookieProcessor(CookieJar()))
         self.timeout = timeout
 
     def _open(self, url, data=None):
         request = urllib.request.Request(
-            url, data=data, headers={"User-Agent": "RipRaptor price checker (+https://ripraptor.com)", "Accept": "application/json"},
+            importers.web_address(url), data=data, headers={"User-Agent": "RipRaptor price checker (+https://ripraptor.com)", "Accept": "application/json"},
         )
         if data is not None:
             request.add_header("Content-Type", "application/json")

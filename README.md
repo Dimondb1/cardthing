@@ -662,6 +662,16 @@ reports whether the shop publishes Shopify product data, how many products
 carry barcodes, and how many look like sealed TCG. If it is not Shopify, ask
 the retailer or your affiliate network for a CSV feed instead.
 
+**Where a shop's reads may go.** Every address a shop gives (its feed, robots.txt and sitemaps, the pages they
+list, its redirects, its pictures) is read only over http or https, on ports 80 and 443, from an address on the
+public internet: never a file on the server, the server itself or a private network (`importers.web_address`,
+`importers.public_opener`). The address is checked as the connection is made, and the connection goes to the
+address that was checked; every redirect is held to the same, and no proxy from the environment is used. A
+robots.txt or sitemap lists only the shop's own site (its host, with or without www, or one inside the other),
+and robots.txt is read up to 512 KB, as search engines read it. One answer is read up to 64 MB
+(`importers.MAX_BODY_BYTES`), a List your shop check up to 8 MB and a share picture up to 8 MB. Only an http or
+https picture address is ever kept (`importers.web_image`).
+
 ## What we do for a shop
 
 ```sh
@@ -1208,7 +1218,8 @@ Cardmarket matches, RRPs, not a product (pages on the site that may be
 something else, below; it starts with a limit of $3 a month of its own) and
 Ask Rip (shoppers' questions, below). The page shows what each asked and spent this
 month and today, and lets you switch each off or give it a monthly limit of
-its own within the shared one (empty means none of its own). Every run asks
+its own within the shared one (empty means none of its own; Ask Rip, which the shared limit never stops, then
+stops at the server's ceiling, `RIPRAPTOR_CLAUDE_MAX_MONTHLY_USD`, $100 unless set). Every run asks
 the same gate before each question (`judge.job_room`): a job switched off is
 skipped, and one at its own limit waits for next month, while the other jobs
 carry on. A batch already out at Anthropic still comes back and is acted on,
@@ -1253,6 +1264,11 @@ we need to."
 - Each person gets 5 questions a day (or the number saved); the same question on the same
   product, while its prices are unchanged, is answered free from the cache
   and does not count. A question that fails on our side does not count.
+  Every request sent to Anthropic under Ask Rip's job (a question, a list, a photo of a list, a voice search
+  or a search-bar reading) counts toward the questions a day across the site, whatever comes back
+  (`askrip.take_paid_call`), and none is ever given back. A failed request, or a list or photo with nothing to
+  buy, gives the shopper their own question back, but the address's backstop and the site's day keep it, so
+  blank photos or voice searches cannot run the monthly limit down. The owner's are not counted.
   A person is their browser: a signed cookie (`rip_asked`) holds only how
   many they asked and when their day ends, so a phone getting a new
   internet address keeps its count (the owner, 12 Nov 2026: "the 5 uses
@@ -1845,10 +1861,12 @@ waiting.
 
 **What is sent.** Our product's name, game, kind and set; the shop's name,
 title, price, stock and page address; up to five other shops' titles for the
-product; whether its price is close to or far from the other shops' (never
+product (shops only: an eBay or Amazon seller's title never reaches a shop's row); whether its price is close to or far from the other shops' (never
 their prices); the site's own note on the price; the shop's own description
 as its last read stored it (below); and what the shop's own page said when
-it was read (below). Never anything about visitors, alerts or messages.
+it was read (below). Never anything about visitors, alerts or messages. A price is never taken off on a
+language difference alone while the shop's own title reads as our language: that row waits for you
+(`judge.LANGUAGE_READS_OURS`).
 
 **The shop's description.** Every read already fetches each product's
 description: Shopify's `body_html`, a website page's schema.org or Open Graph
@@ -2729,6 +2747,20 @@ and a firewall (`ufw`) that lets in only the web (80, and 443 over TCP and UDP) 
 the update carries on. Run the same command again to update. The repository must be
 public (or the server needs a token) for the clone to work.
 
+**Who owns what.** The update runs as root; the site, the reader and the cron jobs run as `ripraptor`. Root
+runs nothing `ripraptor` can change: the code, its history (`.git`) and the Python packages (`.venv`) belong to
+root, and `.env` belongs to root with the `ripraptor` group allowed to read it (mode 640). `ripraptor` writes only
+its data: `/var/lib/ripraptor` (the database, the shared cache, saved keys, backups), `media/` and `staticfiles/`.
+Every `manage.py` step of the update runs as `ripraptor`, and root reads the few settings it needs from `.env` as
+text rather than running it. Both services also run with `ProtectSystem=strict`, so they can write only
+`/var/lib/ripraptor`, `media/` and `/tmp`. The first update after 24 Nov 2026 moved an existing server over by
+itself: it made `.git` and `.venv` again as root (the new packages are built beside the old ones and moved into
+place, so the site keeps running), set the ownership above and dropped root's old git exception
+(`safe.directory`). Python's compiled files are made by root on each update, as `ripraptor` cannot write them
+beside the code. The site starts gunicorn as `python -m gunicorn`, which a moved package folder still runs. The
+site refuses to start with debug off and the secret key from `.env.example`, or one under 50 characters, and the
+update replaces such a key with a long random one (staff then sign in again).
+
 **Memory.** On a 1 GB server the site, the reader and the cron jobs share
 very little room. On 14 October 2026 the server ran out, with no swap, and
 the kernel killed the site's gunicorn: visitors could not load it for
@@ -2765,7 +2797,7 @@ sudo systemctl stop ripraptor ripraptor-worker cron
 sudo rm -f /var/lib/ripraptor/db.sqlite3-wal /var/lib/ripraptor/db.sqlite3-shm
 sudo cp /var/lib/ripraptor/backups/db.sqlite3.YYYYMMDD-HHMM.bak /var/lib/ripraptor/db.sqlite3
 sudo chown ripraptor:ripraptor /var/lib/ripraptor/db.sqlite3
-cd /srv/ripraptor && sudo -u ripraptor git checkout <previous commit>
+cd /srv/ripraptor && sudo git checkout <previous commit>
 sudo systemctl start ripraptor ripraptor-worker cron
 ```
 
@@ -2775,15 +2807,16 @@ The `deploy/` folder has everything for a small Linux server (a £4 to £6 a
 month VPS is enough):
 
 1. Clone the repository to `/srv/ripraptor` and run `sudo deploy/setup.sh`.
-   It creates a virtualenv, installs requirements, applies migrations,
-   collects static files, loads the catalogue, installs systemd services
-   for the app and the background reader, and the crontab.
-2. Edit `/srv/ripraptor/.env` (start from `.env.example`): a long random
-   `DJANGO_SECRET_KEY`, your domain in `DJANGO_ALLOWED_HOSTS` and
+   It creates a virtualenv, installs requirements, writes `.env` from
+   `.env.example` with a long random `DJANGO_SECRET_KEY`, sets who owns what
+   as above, applies migrations, collects static files, loads the catalogue,
+   installs systemd services for the app and the background reader, and the
+   crontab.
+2. Edit `/srv/ripraptor/.env`: your domain in `DJANGO_ALLOWED_HOSTS` and
    `DJANGO_CSRF_TRUSTED_ORIGINS`, then `sudo systemctl restart ripraptor`.
 3. Install Caddy, put `deploy/caddy.Caddyfile` at `/etc/caddy/Caddyfile`
    with your domain, and reload it. Caddy fetches the HTTPS certificate.
-4. Create an admin user: `sudo -u ripraptor .venv/bin/python manage.py createsuperuser`.
+4. Create an admin user: `sudo -u ripraptor bash -c 'set -a; . ./.env; set +a; .venv/bin/python manage.py createsuperuser'`.
 
 Static files are served by the app itself (WhiteNoise) with hashed names
 and long cache headers, so no separate static hosting is needed. Uploaded
@@ -3713,7 +3746,7 @@ index.
 | Environment variable           | Default | Notes |
 |--------------------------------|---------|-------|
 | `DJANGO_DEBUG`                 | on      | Set to `0` in production. |
-| `DJANGO_SECRET_KEY`            |         | Required when debug is off. |
+| `DJANGO_SECRET_KEY`            |         | Required when debug is off: 50 characters or more, never the one in `.env.example`. |
 | `DJANGO_ALLOWED_HOSTS`         | `localhost,127.0.0.1` | Comma separated. |
 | `DJANGO_CSRF_TRUSTED_ORIGINS`  |         | Comma separated, with scheme. |
 | `DJANGO_SQLITE_PATH`           | `db.sqlite3` | |
@@ -4738,7 +4771,9 @@ the lists, `web.listcache.mark_stale`) forgets every kept page at once.
 `warm_pages` builds each game's own page before anyone asks (the tap from
 the home page) and `--due` builds any whose copy has gone, so the first
 visitor never pays either; a page served from the cache says
-`X-RipRaptor-Page: cached`. The tests run with the cache off
+`X-RipRaptor-Page: cached`. A page's own links (canonical, share, breadcrumbs) carry the address it was asked
+at, so a page is kept per host and only when asked at one of `DJANGO_ALLOWED_HOSTS` as named, or the host pages
+are warmed for (`pagecache.keepable`): asked at another port, it is built for that visitor alone. The tests run with the cache off
 (`RIPRAPTOR_PAGE_CACHE_SECONDS` is 0 under `manage.py test`) and its own
 tests turn it on.
 
@@ -4884,7 +4919,11 @@ shop now has in stock, it sends one email naming the cheapest shop and
 linking to the product page, then deletes the address. Unconfirmed
 requests are deleted after a week, confirmed ones after six months, and
 every email has a link that deletes the request at once. One address can
-wait on 30 products. The Terms page says all of this. Insights counts
+wait on 30 products: only confirmed alerts count, since anyone can type an address, and a confirm link past
+the 30 leaves the alert unset and says so ("Alert not set", `alerts.full.*`). The form answers "check your
+inbox" whatever it knows about the address, as the drop and search alerts do: an address that already has the
+alert, or is at its 30, is sent nothing more and the visitor is not told which. One address is sent at most 10
+confirmation emails a day across every product (`alerts.CONFIRMS_PER_EMAIL_DAY`). The Terms page says all of this. Insights counts
 requests, confirmations, emails sent and stops.
 
 Setting up ZeptoMail: add and verify the domain (the DNS records it gives),
@@ -5440,7 +5479,8 @@ Every keyring promised but never posted goes back to **Keyrings left** when its 
 by Cancel, by a person deleting their details or by deleting in admin, so the count matches the drawer. Once
 a day, while any address has waited over 14 days to be posted, you are reminded by push and email. It also
 restores the footer link after the cache is emptied (a deploy, or the weekly delivery check). Every email carries a "Delete my details" link to
-a page with a button that deletes that person's details at once.
+a page with a button that deletes that person's details at once. A friend's delete is decided from the
+referral as it is at that moment, so one that their own claim has just completed keeps the referrer's keyring.
 
 ## Message us
 
@@ -6188,7 +6228,10 @@ package and no paid service.
   only if it gave a code, so the admin app asks you to sign in again, with
   the code. It then stays signed in as before.
 - *A new phone:* Two-step login, **Set up a new phone**. The old phone keeps
-  working until the new one gives its first code. **Make new backup codes**
+  working until the new one gives its first code.
+- The key shown on the set-up page is kept in that sign-in's session, never on the login's row, and only that
+  sign-in can confirm it (`twostep.models.PENDING_KEY`). Another sign-in with the same password gets a key of
+  its own that never becomes the login's. **Make new backup codes**
   replaces the old set.
 - *Lost phone and no backup codes:* on the server console,
   ```sh
@@ -6204,8 +6247,10 @@ package and no paid service.
 
 **Wrong tries.** Ten wrong sign-ins (password or code) from one address in
 15 minutes and that address is turned away for 15 minutes without its
-password being checked (`twostep/lockout.py`). A right sign-in clears the
-count. It counts addresses, not usernames, so nobody can lock you out by
+password being checked (`twostep/lockout.py`). A right sign-in clears only the
+wrong tries made with its own username, so a guide editor signing in from the same address never lowers the
+count against the owner's login. A code is six plain digits 0 to 9; anything else is a wrong try like any
+other. It blocks addresses, not usernames, so nobody can lock you out by
 typing your name; the address is the one Caddy adds last to
 `X-Forwarded-For`.
 
@@ -6469,7 +6514,9 @@ from 9 Nov 2026):
   Google's site verification and its page speed tests, never Googlebot.
   The answer is kept for a day. A lookup with no answer in 2 seconds, or
   one the name server fails, is asked again ten minutes later, so no page
-  waits on DNS. Until then a visitor naming one of these search engines is
+  waits on DNS. A lookup that never started, waiting behind others that hang, is not held against its
+  address, and an answer that comes late is still kept; at most eight lookups wait or run in each web worker
+  (`botcheck.MAX_PENDING`), and past that nothing more is asked or remembered. Until then a visitor naming one of these search engines is
   neither let in nor shown the check: it is asked to come back (**503**
   with `Retry-After`, plain text, never marked noindex), which a search
   engine treats as a blip. Before 17 Nov 2026 it was shown the check page,
@@ -7253,8 +7300,10 @@ could take a while, and upload a shopping list photo"):
 
 - **A photo of the list.** The form is multipart with a plain file field,
   so it works without script. `rip_list.photo_jpeg` refuses files over 15 MB
-  (`PHOTO_MAX_BYTES`), over 60 megapixels or not JPEG, PNG, WebP or GIF, then
-  turns the photo upright from its EXIF note and shrinks it to 1568 pixels on
+  (`PHOTO_MAX_BYTES`), over 60 megapixels or not JPEG, PNG, WebP or GIF. A JPEG is decoded at a half, a
+  quarter or an eighth of its size by its longest side, so a long thin one shrinks as far as a square one,
+  and nothing over 16 megapixels (`PHOTO_MAX_PIXELS_FULL`) is ever decoded, whatever shape the file says it is.
+  It then turns the photo upright from its EXIF note and shrinks it to 1568 pixels on
   its longest side. Claude gets the picture plus any words. The photo is
   never saved, only the products read from it (the `ClaudeAsk` row's
   evidence says `"photo": true`). It counts as one question, the same photo

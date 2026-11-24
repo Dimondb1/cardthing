@@ -88,9 +88,15 @@ _live = {"token": "", "token_until": 0.0}
 # waited behind them past a day (the owner's eBay health page: 282 eBay items in stock hidden, one unchecked for ten
 # days: "fix the ebay falling behind thing"). Products not on eBay get NEW_SHARE of each slice. The owner,
 # 16 Nov 2026, chose this over one search run a morning: "Spread out, show 24h".
+# Before both, the deals Story deals offers (deal_ids: cheapest at an eBay seller, a Good price or the Lowest yet) are
+# searched again after DEAL_EVERY, longest since first, with at most DEAL_SHARE of the hour's searches, so the owner
+# never posts a story for an item sold hours ago (the owner, 24 Nov 2026: "the products offered are. Sometimes really
+# old").
 KNOWN_EVERY = timedelta(hours=20)
 POPULAR_EVERY = timedelta(hours=4)
+DEAL_EVERY = timedelta(hours=2)
 NEW_SHARE = Decimal("0.2")
+DEAL_SHARE = Decimal("0.25")
 
 
 # What the owner's Test eBay now button last found (self_test), for the eBay health page and its Log to copy.
@@ -617,22 +623,37 @@ def hourly_searches(searches_left, reset, now=None, since=None):
     return max(0, min(cap, spare * missed // hours, spare))
 
 
-def due_known(products, scores, now):
-    """The products already on eBay that are due another search, in the order to search them. First every one not
-    searched for KNOWN_EVERY, longest since first, so no eBay price passes the hours it counts for while visitors'
-    favourites are searched again; then those visitors look at (``scores``) after POPULAR_EVERY, most looked at
-    first."""
+def deal_ids():
+    """The products Story deals can offer from eBay: on the site, in stock, a Good price or the Lowest yet on the Price
+    check, and cheapest at an eBay seller. One query."""
+    from .fair_price import GOOD_PRICE
+    from .offers import with_lead
+
+    deals = with_lead(Product.objects.active().in_stock().filter(price_band__gte=GOOD_PRICE))
+    return set(deals.filter(lead_source="ebay").values_list("pk", flat=True))
+
+
+def due_known(products, scores, now, deals=frozenset(), deal_most=0):
+    """The products already on eBay that are due another search, in the order to search them. First the deals Story
+    deals offers (``deals``) not searched for DEAL_EVERY, at most ``deal_most`` of them, longest since first; then
+    every product not searched for KNOWN_EVERY, longest since first, so no eBay price passes the hours it counts for
+    while visitors' favourites are searched again; then those visitors look at (``scores``) after POPULAR_EVERY, most
+    looked at first."""
     epoch = datetime(2000, 1, 1, tzinfo=dt_timezone.utc)
-    due = []
+    due, wanted = [], []
     for product in products:
         score = scores.get(product.pk, 0)
         at = product.ebay_checked_at
+        if product.pk in deals and at is not None and now - at >= DEAL_EVERY:
+            wanted.append((at, product.pk, product))
         if at is None or now - at >= KNOWN_EVERY:
             due.append((0, 0, at or epoch, product.pk, product))
         elif score > 0 and now - at >= POPULAR_EVERY:
             due.append((1, -score, at, product.pk, product))
+    first = [row[2] for row in sorted(wanted, key=lambda row: row[:2])[:deal_most]]
+    chosen = {product.pk for product in first}
     due.sort(key=lambda row: row[:4])
-    return [row[4] for row in due]
+    return first + [row[4] for row in due if row[3] not in chosen]
 
 
 def search_order(product):
@@ -656,8 +677,8 @@ def iter_ebay_offers(retailer, limit=None, request=None, pause=None, run=None, c
     come one at a time as they are found, so the importer saves each as it
     arrives and an interrupted run keeps everything found before it stopped.
 
-    Known listings are refreshed by searching for their products again (due_known), and NEW_SHARE of each hour's
-    searches goes on products not yet on eBay.
+    Known listings are refreshed by searching for their products again (due_known: Story deals' deals first, with at
+    most DEAL_SHARE of the searches), and NEW_SHARE of each hour's searches goes on products not yet on eBay.
     When an allowance runs out, or RUN_SECONDS have passed, the run stops and keeps what it found.
     ``run`` is the ImportRun to keep posted so admin shows progress. ``clock`` gives seconds (for tests).
     """
@@ -726,8 +747,10 @@ def iter_ebay_offers(retailer, limit=None, request=None, pause=None, run=None, c
         def too_cheap(product, offer):
             return product.pk in shops and offer.price + offer.delivery < shops[product.pk] * PRICE_FLOOR
 
-        # Known listings due again (due_known), searched for below: the oldest first, then the most looked at.
-        known = due_known(products.filter(pk__in=existing), scores, now)
+        # Known listings due again (due_known), searched for below: Story deals' deals, then the oldest, then the
+        # most looked at.
+        known = due_known(products.filter(pk__in=existing), scores, now, deals=deal_ids(),
+                          deal_most=int(limit * DEAL_SHARE))
         # One eBay listing is one product: an item already another product's is never taken for a second
         # (one Future Flash SV4M box was on both our Scarlet ex SV1S and Violet ex SV1V boxes).
         taken = {}

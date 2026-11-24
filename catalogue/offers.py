@@ -25,7 +25,7 @@ from datetime import timedelta
 from decimal import ROUND_HALF_UP, Decimal
 
 from django.conf import settings
-from django.db.models import Case, Prefetch, Value, When
+from django.db.models import Case, OuterRef, Prefetch, Subquery, Value, When
 from django.utils import timezone
 
 from .models import DailyLowestPrice, Listing, fresh
@@ -40,6 +40,16 @@ OUTLIER_RATIO = Decimal("1.5")    # a runner-up dearer than this many times the 
 MATCHED = Decimal("0.10")         # unless a third shop is within this share of it
 DEAL_PERCENT = 5                  # a credible saving this big or bigger is a deal
 
+
+def with_lead(products):
+    """``products`` with the cheapest delivered price in stock (delivery known) described: ``lead_source``, its shop's
+    source type (Retailer.Source), and ``lead_checked``, when it was last checked. Story deals and the eBay search's
+    deal re-checks (ebay.deal_ids) use it. Subqueries: no extra query."""
+    cheapest = (Listing.objects.buyable()
+                .filter(product=OuterRef("pk"), availability=Listing.Availability.IN_STOCK, delivery_known=True)
+                .order_by("delivered_price", "retailer__name"))
+    return products.annotate(lead_source=Subquery(cheapest.values("retailer__source_type")[:1]),
+                             lead_checked=Subquery(cheapest.values("last_checked")[:1]))
 
 def buyable_prefetch():
     """Attach ``product.offers``: buyable listings, in stock before pre-orders, then cheapest first. A list leads with

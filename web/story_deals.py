@@ -7,7 +7,10 @@ advert slightly if I need to".
 What it lists: products in stock whose cheapest delivered price now is an eBay seller's (or any seller's, with
 ?from=all) and whose Price check says Good price or Lowest yet (Product.price_band, kept each hour), the lowest yet
 first, then the dearer products. A doubtful price is never offered: it may not be this product. eBay sellers are
-already held to the owner's rating rules before their prices count at all.
+already held to the owner's rating rules before their prices count at all. An eBay price is offered only when it was
+checked in the last FRESH hours (the owner, 24 Nov 2026: "the products offered are. Sometimes really old"): an eBay
+item sells in hours, and a story must not send people to one sold already. The hourly eBay search checks these deals
+again first, every two hours (ebay.deal_ids), so the list stays full.
 
 Each deal is a card in a row that swipes sideways: the story picture the product page's Share to story makes
 (web/share.py), the price, the seller and when it was checked. One tap on Share to story hands the picture to the
@@ -16,27 +19,31 @@ phone's share sheet, where Instagram offers Stories, with the product's link cop
 in the link sticker itself. The advert can be changed a little: the words on the picture's badge, and a line of the
 owner's own under the price. They are his words, drawn as typed; everything else on the picture is the site's data.
 
-Staff only, never for editors, never cached or indexed. Two queries for the page, and the offers' and the week's
+Staff only, never for editors, never cached or indexed. Three queries for the page, and the offers' and the week's
 lows, however many deals.
 """
 from urllib.parse import urlencode
 
 from django.contrib import admin
 from django.contrib.admin.views.decorators import staff_member_required
-from django.db.models import OuterRef, Subquery
+from datetime import timedelta
+
+from django.db.models import Q
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
+from django.utils import timezone
 from django.views.decorators.http import require_GET
 
 from catalogue import fair_price, offers
-from catalogue.models import Listing, Product, Retailer
+from catalogue.models import Product, Retailer
 from content import service as copy
 from guides.access import not_for_editors
 
 from . import share
 
 SHOWN = 30
+FRESH = timedelta(hours=3)   # an eBay price older than this is not offered for a story
 EBAY, ALL = "ebay", "all"
 SOURCES = ((EBAY, "eBay"), (ALL, "Every seller"))
 PICTURE_SECONDS = 600     # a picture is kept by the phone this long: the share sheet gets the one the card shows
@@ -44,18 +51,21 @@ PICTURE_SECONDS = 600     # a picture is kept by the phone this long: the share 
 LINK_TAGS = {"utm_source": "instagram_story", "utm_medium": "social", "utm_campaign": "story_deals"}
 
 
-def candidates(source):
+def stale_ebay(now=None):
+    """The test for a product whose cheapest price is an eBay seller's checked longer ago than FRESH."""
+    return Q(lead_source=Retailer.Source.EBAY, lead_checked__lt=(now or timezone.now()) - FRESH)
+
+
+def candidates(source, now=None):
     """Products in stock with a Good price or Lowest yet, whose cheapest delivered price in stock is an eBay
-    seller's (``source`` EBAY) or anyone's, lowest yet first, with their offers. Two queries."""
-    cheapest = (Listing.objects.buyable()
-                .filter(product=OuterRef("pk"), availability=Listing.Availability.IN_STOCK, delivery_known=True)
-                .order_by("delivered_price", "retailer__name"))
-    products = (Product.objects.for_lists().in_stock().filter(price_band__gte=fair_price.GOOD_PRICE)
-                .annotate(lead_source=Subquery(cheapest.values("retailer__source_type")[:1])))
+    seller's (``source`` EBAY) or anyone's, lowest yet first, with their offers; never an eBay price checked longer ago
+    than FRESH. Two queries."""
+    products = offers.with_lead(Product.objects.for_lists().in_stock().filter(price_band__gte=fair_price.GOOD_PRICE))
     if source == EBAY:
         products = products.filter(lead_source=Retailer.Source.EBAY)
     else:
         products = products.filter(lead_source__isnull=False)
+    products = products.exclude(stale_ebay(now))
     # Twice the number shown: a few are dropped below (a doubtful price, a pre-order leading).
     return list(products.order_by("-price_band", "-lowest_known", "name")
                 .prefetch_related(offers.buyable_prefetch())[:SHOWN * 2])
@@ -88,6 +98,13 @@ def deals(source, store=None):
     return found
 
 
+def waiting_count(now=None):
+    """eBay deals left out for now because their price was checked longer ago than FRESH: they come back once the
+    hourly search checks them again. One query."""
+    deals = offers.with_lead(Product.objects.active().in_stock().filter(price_band__gte=fair_price.GOOD_PRICE))
+    return deals.filter(stale_ebay(now)).count()
+
+
 def picture_url(slug, badge="", line=""):
     """Where a deal's story picture is, with the owner's own words when he gave any."""
     words = {name: value for name, value in (("badge", badge), ("line", line)) if value}
@@ -117,7 +134,8 @@ def story_deals_page(request):
     response = render(request, "admin/story_deals.html", {
         **admin.site.each_context(request),
         "title": "Story deals",
-        "cards": cards, "source": source, "sources": SOURCES,
+        "cards": cards, "source": source, "sources": SOURCES, "waiting": waiting_count(),
+        "fresh_hours": round(FRESH.total_seconds() / 3600),
         "badge_most": share.STORY_BADGE_MOST, "line_most": share.STORY_LINE_MOST,
     })
     response["Cache-Control"] = "private, no-store"

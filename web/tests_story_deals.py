@@ -115,6 +115,28 @@ class ListTests(Base):
         self.assertEqual((cards["ebay-other"]["badge"], cards["ebay-other"]["shown"]),
                          ("", reverse("story_deal_image", args=["ebay-other"])))
 
+    def test_an_ebay_price_not_checked_in_the_last_three_hours_is_never_offered(self):
+        """The owner, 24 Nov 2026: "the products offered are. Sometimes really old". An eBay item sells in hours, so
+        a story never sends people to one checked longer ago than FRESH, though its price still counts on the site."""
+        Listing.objects.filter(product=self.deal, retailer=self.ebay).update(
+            last_checked=timezone.now() - story_deals.FRESH - timedelta(minutes=1))
+        self.assertEqual(self.slugs(), [])
+        self.assertNotIn("ebay-deal", self.slugs(**{"from": "all"}))
+        html = self.page().content.decode()
+        self.assertIn('<p class="note" id="waiting">1 more eBay deal waits for a fresh check. eBay deals are checked '
+                      "again every two hours, so it should be back soon.</p>", html)
+        self.assertIn("a price checked in the last 3 hours.", html)
+        # Checked again: offered again, and nothing waits.
+        Listing.objects.filter(product=self.deal, retailer=self.ebay).update(last_checked=timezone.now())
+        self.assertEqual(self.slugs(), ["ebay-deal"])
+        self.assertNotIn('id="waiting"', self.page().content.decode())
+        self.assertEqual(story_deals.waiting_count(), 0)
+
+    def test_a_shops_price_is_not_held_to_ebays_three_hours(self):
+        Listing.objects.filter(product=self.shop_deal, retailer=self.harbour).update(
+            last_checked=timezone.now() - timedelta(hours=10))
+        self.assertIn("shop-deal", self.slugs(**{"from": "all"}))
+
     def test_the_same_queries_however_many_deals(self):
         with CaptureQueriesContext(connection) as few:
             self.page()

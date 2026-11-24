@@ -28,7 +28,8 @@
 {% block content %}
 <div class="story-deals">
   <p class="sources">{% for key, label in sources %}{% if key == source %}<strong>{{ label }}</strong>{% else %}<a href="?from={{ key }}">{{ label }}</a>{% endif %}{% endfor %}</p>
-  <p>{{ cards|length }} deal{{ cards|length|pluralize }} ready for a story: in stock, {% if source == "ebay" %}cheapest at an eBay seller{% else %}at any seller{% endif %}, and a Good price or the Lowest yet on the Price check. Swipe through them.</p>
+  <p>{{ cards|length }} deal{{ cards|length|pluralize }} ready for a story: in stock, {% if source == "ebay" %}cheapest at an eBay seller{% else %}at any seller{% endif %}, and a Good price or the Lowest yet on the Price check. An eBay price is offered only when it was checked in the last {{ fresh_hours }} hours. Swipe through them.</p>
+  {% if waiting %}<p class="note" id="waiting">{{ waiting }} more eBay deal{{ waiting|pluralize }} wait{{ waiting|pluralize:"s," }} for a fresh check. eBay deals are checked again every two hours, so {{ waiting|pluralize:"it,they" }} should be back soon.</p>{% endif %}
   <p class="note">Share to story sends the picture to your phone's share sheet and copies the product's link. In Instagram choose Stories, add a link sticker and paste. Only you see this page.</p>
 
   {% if cards %}
@@ -52,7 +53,7 @@
     {% endwith %}{% endfor %}
   </ol>
   {% else %}
-  <p>No deals to post now{% if source == "ebay" %}: no product in stock is cheapest at an eBay seller with a Good price or the Lowest yet. <a href="?from=all">See every seller</a>{% endif %}.</p>
+  <p>No deals to post now{% if source == "ebay" %}: no product in stock is cheapest at an eBay seller with a Good price or the Lowest yet and a price checked in the last {{ fresh_hours }} hours. <a href="?from=all">See every seller</a>{% endif %}.</p>
   {% endif %}
 </div>
 {% endblock %}

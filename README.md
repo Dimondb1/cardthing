@@ -836,9 +836,10 @@ set. eBay is read every hour (since 16 Nov 2026; once a day before), each
 read searching its share of the day's allowance (`ebay.hourly_searches`:
 what is left above `KEEP_BACK` shared over the hours to eBay's reset, at
 most `RIPRAPTOR_EBAY_DAILY_LIMIT` spread over the day): first the products
-already on eBay that are due (`ebay.due_known`: every one unchecked for 20
-hours, the longest unchecked first, then the ones visitors look at after 4
-hours, the most looked at first), then the rest with a fifth of the hour's
+already on eBay that are due (`ebay.due_known`: Story deals' eBay deals
+after 2 hours, with at most a quarter of the hour's searches, then every one
+unchecked for 20 hours, the longest unchecked first, then the ones visitors
+look at after 4 hours, the most looked at first), then the rest with a fifth of the hour's
 searches, by barcode where we have one and otherwise by name. Until 24 Nov
 2026 the popular products went first and could take every search, so the
 rest slipped past the 24 hours a price counts for and were hidden. An eBay
@@ -7629,6 +7630,16 @@ most 30. A doubtful price is never offered. Each is a card in a row that
 swipes sideways, with the story picture the product page's Share to story
 makes (`share.story_image`), the price, the eBay seller and their feedback,
 and when it was checked.
+
+- **Only fresh eBay prices** (the owner, 24 Nov 2026: "the products offered
+  are. Sometimes really old"). An eBay price counts on the site for 24 hours,
+  but an eBay item sells in hours, so a story offers one only when it was
+  checked in the last 3 hours (`story_deals.FRESH`). A shop's price is not
+  held to this. The page says how many eBay deals wait for a fresh check.
+  The hourly eBay search keeps them fresh: the deals this page can offer
+  (`ebay.deal_ids`) are searched again every 2 hours, before everything else
+  and with at most a quarter of the hour's searches (`ebay.DEAL_EVERY`,
+  `ebay.DEAL_SHARE`).
 
 - **Share to story** hands the picture to the phone's share sheet, where
   Instagram offers Stories, and copies the product's link for the story's

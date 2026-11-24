@@ -12,7 +12,7 @@ from django.utils import timezone
 from . import ebay
 from .importers import Offer, run_import
 from .models import ImportRun, Listing, OutboundClick, Product, Retailer
-from .testing import make_game, make_listing, make_product, make_set
+from .testing import make_game, make_listing, make_product, make_retailer, make_set
 
 KEYS = {
     "RIPRAPTOR_EBAY_APP_ID": "RipRapto-RipRapto-PRD-abc",
@@ -296,6 +296,57 @@ class LookupTests(TestCase):
         products = Product.objects.filter(pk__in=[old.pk, older.pk, popular.pk])
         self.assertEqual([p.pk for p in ebay.due_known(products, {popular.pk: 50}, now)],
                          [older.pk, popular.pk, old.pk])
+
+    def test_story_deals_go_first_every_two_hours_with_a_quarter_of_the_searches(self):
+        """The owner, 24 Nov 2026, of Story deals: "the products offered are. Sometimes really old"."""
+        now = timezone.now()
+
+        def box(slug, hours):
+            product = make_product(self.set, name=slug.replace("-", " ").title(), slug=slug)
+            Product.objects.filter(pk=product.pk).update(ebay_checked_at=now - datetime.timedelta(hours=hours))
+            return product
+
+        overdue = box("overdue-box", 30)
+        deal = box("deal-box", 2.5)
+        older_deal = box("older-deal-box", 5)
+        just_seen = box("just-seen-box", 1)          # a deal searched an hour ago is not due
+        spare = box("spare-deal-box", 3)             # past the hour's quarter: waits its turn
+        products = Product.objects.filter(pk__in=[overdue.pk, deal.pk, older_deal.pk, just_seen.pk, spare.pk])
+        deals = {deal.pk, older_deal.pk, just_seen.pk, spare.pk}
+        self.assertEqual([p.pk for p in ebay.due_known(products, {}, now, deals=deals, deal_most=2)],
+                         [older_deal.pk, spare.pk, overdue.pk])
+        self.assertEqual([p.pk for p in ebay.due_known(products, {}, now, deals=deals, deal_most=3)],
+                         [older_deal.pk, spare.pk, deal.pk, overdue.pk])
+        # Without deals, the order is as before.
+        self.assertEqual([p.pk for p in ebay.due_known(products, {}, now)], [overdue.pk])
+
+    def test_a_deal_is_cheapest_at_an_ebay_seller_with_a_good_price_or_better(self):
+        from catalogue import fair_price
+
+        shop = make_retailer("Harbour Games")
+        make_listing(self.bundle, self.retailer, price="30.00", url="https://www.ebay.co.uk/itm/9?campid=1")
+        make_listing(self.bundle, shop, price="40.00")
+        Product.objects.filter(pk=self.bundle.pk).update(price_band=fair_price.GOOD_PRICE)
+        self.assertEqual(ebay.deal_ids(), {self.bundle.pk})
+        Product.objects.filter(pk=self.bundle.pk).update(price_band=fair_price.FAIR)
+        self.assertEqual(ebay.deal_ids(), set())
+        Product.objects.filter(pk=self.bundle.pk).update(price_band=fair_price.LOWEST)
+        Listing.objects.filter(retailer=shop).update(price=Decimal("20.00"))
+        self.assertEqual(ebay.deal_ids(), set())   # a shop is cheapest: not eBay's deal
+
+    def test_the_hourly_search_asks_about_a_story_deal_first(self):
+        from catalogue import fair_price
+
+        now = timezone.now()
+        make_listing(self.bundle, self.retailer, price="30.00", url="https://www.ebay.co.uk/itm/9?campid=1")
+        other = make_product(self.set, name="Pokemon Surging Sparks Booster Box", slug="surging-box")
+        make_listing(other, self.retailer, price="90.00", url="https://www.ebay.co.uk/itm/8?campid=1")
+        Product.objects.filter(pk=self.bundle.pk).update(price_band=fair_price.LOWEST,
+                                                         ebay_checked_at=now - datetime.timedelta(hours=3))
+        Product.objects.filter(pk=other.pk).update(ebay_checked_at=now - datetime.timedelta(hours=30))
+        api = FakeApi([item("Pokemon Prismatic Evolutions Booster Bundle", price="28.50", item_id="v1|9|0")])
+        ebay.ebay_offers(self.retailer, limit=4, request=api, pause=0)
+        self.assertIn("q=Pokemon+Prismatic+Evolutions+Booster+Bundle", api.searches()[0])
 
     def test_known_listings_are_kept_fresh_by_searching_never_the_twenty_at_once_lookup(self):
         make_listing(self.bundle, self.retailer, price="30.00", url="https://www.ebay.co.uk/itm/9?campid=1")

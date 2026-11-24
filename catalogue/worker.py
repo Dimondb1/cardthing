@@ -61,7 +61,7 @@ from django.db import OperationalError, connections
 from django.db.models import Q
 from django.utils import timezone
 
-from . import checks, crawl, ebay, finder, heat, importers, notify, probe, releases, worklog
+from . import checks, crawl, finder, heat, importers, notify, probe, releases, worklog
 from .models import ImportRun, Listing, Retailer, WorkerState
 
 logger = logging.getLogger(__name__)
@@ -86,18 +86,6 @@ RELEASE_KEY = -1
 # Reads go before every other job (plan). Among reads, and among the rest, priority is weight times minutes
 # overdue, so nothing waits for ever behind something heavier.
 WEIGHTS = {SHOP_READ: 500, "hot": 1000, "warm": 100, "cold": 10, PULSE: 300, FINDER: 50, RELEASE_SCAN: 20}
-# eBay's listings in stock are checked through the bulk item lookup (twenty a request) at least every EBAY_EVERY, so
-# each is asked about twice inside the RIPRAPTOR_EBAY_STALE_AFTER_HOURS after which its price stops counting. Every
-# lookup is one of the day's 5,000: ten-minute checks of the busiest ran the allowance out by early afternoon on 6 Nov
-# 2026 (eBay then answered 429), and items that had ended, each asked about alone with every other item of its batch,
-# ran it out on 12 Nov. Ended items are no longer asked about (ebay.ended_items), so half an hour for the hot tier, an
-# hour for the warm and two for the rest is a fraction of it. A listing out of stock is asked about every
-# EBAY_OUT_EVERY: it is not shown as buyable, and only a seller restocking the same item brings it back. The owner,
-# 12 Nov 2026: "This sort of time to update is not good enough".
-EBAY_EVERY = timedelta(hours=2)
-EBAY_HOT_EVERY = timedelta(minutes=30)
-EBAY_WARM_EVERY = timedelta(hours=1)
-EBAY_OUT_EVERY = timedelta(hours=6)
 # A shop never read before has no next read; it counts as an hour overdue.
 NEVER_READ_MINUTES = 60
 
@@ -138,8 +126,6 @@ PROBE_FETCH_SECONDS = 10
 PROBE_ERRORS_IN_A_ROW = 3
 GONE = (404, 410)
 PROBE_BATCH = 30
-# eBay's listings are checked twenty a request through its bulk item lookup (ebay.check_listings), so one job takes more.
-EBAY_CHECK_BATCH = 100
 # A listing checked this recently is not probed: a shop read or a probe has just seen it.
 RECENTLY_CHECKED = timedelta(minutes=8)
 # The reader looks for cached page lists that are due a build (web/warming.py) at least this often, and at
@@ -492,12 +478,11 @@ def megabytes(size):
 
 class Worker:
     def __init__(self, clock=None, fetch=None, sleep=None, threads=THREADS, executor=None, import_lock=None,
-                 page_pause=None, release_fetch=None, warm=False, ebay_request=None, memory=None, limit=None,
+                 page_pause=None, release_fetch=None, warm=False, memory=None, limit=None,
                  free=None, exit=None):
         self.clock = clock or timezone.now
         self.sleep = sleep or time.sleep
         self.fetch = fetch
-        self.ebay_request = ebay_request   # eBay's API, for tests; None asks eBay itself
         self.release_fetch = release_fetch
         self.threads = max(1, threads)
         self.executor = executor
@@ -610,7 +595,6 @@ class Worker:
         market = Retailer.Source.EBAY
         ebay_running = next((task for task, _started in running if task.source_type == market), None)
         ebay_read = next((task for task in reads if task.source_type == market), None)
-        ebay_check = next((task for task in probes if task.source_type == market), None)
         with self.lock:
             waiting = len(self.probe_failed)
         worklog.note_plan({
@@ -623,8 +607,6 @@ class Worker:
                 "running": ebay_running.label if ebay_running else "",
                 "read": "" if ebay_read is None else ("due, with room to start" if ebay_read in chosen
                                                       else "due, no reading slot free"),
-                "check": f"{len(ebay_check.listings)} items ({ebay_check.tier})" if ebay_check else "",
-                "lookup_waiting": ebay.lookup_paused(),
             },
             "checks_waiting_after_a_failed_try": waiting,
             "lock": {
@@ -688,35 +670,20 @@ class Worker:
             .values_list("pk", "product_id", "retailer_id", "retailer__source_type", "retailer__name", "last_checked", "url",
                          "availability")
         )
-        ended = ebay.ended_items()
-        # While eBay's item lookup is waiting (refused, or not believed: ebay.LookupUnusable), none of its is planned.
-        lookup_paused = bool(ebay.lookup_paused())
-        hot, warm, cold = [], [], []
+        hot, warm = [], []
         for row in rows:
-            # An eBay listing is checked through eBay's item lookup, which needs the item's id from its address, and
-            # never once eBay has said the item ended, unless the daily search has found it in stock since
-            # (ebay.check_listings asks about those again).
-            if row[3] == Retailer.Source.EBAY:
-                item_id = ebay.item_id_of(row[6])
-                if lookup_paused or not item_id or (item_id in ended and row[7] not in Listing.BUYABLE):
-                    continue
             points = scores.get(row[1], 0)
             if points >= heat.HOT:
                 hot.append((points, row))
             elif points >= heat.WARM:
                 warm.append((points, row))
-            elif row[3] == Retailer.Source.EBAY:
-                cold.append((points, row))
         hot.sort(key=lambda item: (-item[0], item[1][5]))
         warm += hot[heat.HOT_CAP:]
         hot = hot[:heat.HOT_CAP]
         by_shop = {}
-        ebay_every = {"hot": EBAY_HOT_EVERY, "warm": EBAY_WARM_EVERY, "cold": EBAY_EVERY}
-        for tier, every, items in (("hot", heat.HOT_EVERY, hot), ("warm", heat.WARM_EVERY, warm), ("cold", EBAY_EVERY, cold)):
-            for _points, (pk, _product, retailer_id, source_type, name, checked, _url, availability) in items:
+        for tier, every, items in (("hot", heat.HOT_EVERY, hot), ("warm", heat.WARM_EVERY, warm)):
+            for _points, (pk, _product, retailer_id, source_type, name, checked, _url, _availability) in items:
                 wait = every
-                if source_type == Retailer.Source.EBAY:
-                    wait = ebay_every[tier] if availability in Listing.BUYABLE else EBAY_OUT_EVERY
                 overdue = now - checked - wait
                 if overdue < timedelta(0):
                     continue
@@ -727,7 +694,7 @@ class Worker:
         tasks = []
         for retailer_id, (source_type, name, items) in by_shop.items():
             items.sort(key=lambda item: (item[0] != "hot", item[1]))
-            items = items[:EBAY_CHECK_BATCH if source_type == Retailer.Source.EBAY else PROBE_BATCH]
+            items = items[:PROBE_BATCH]
             tier = items[0][0]
             worst = max(overdue for t, _c, overdue, _pk in items if t == tier)
             tasks.append(Task(
@@ -925,8 +892,6 @@ class Worker:
         listings = Listing.objects.select_related("retailer", "product__product_set").in_bulk(job.task.listings)
         if not listings:
             return True
-        if next(iter(listings.values())).retailer.source_type == Retailer.Source.EBAY:
-            return self.check_ebay(job, listings)
         fetch = self.fetch_for(next(iter(listings.values())).retailer, probing=True)
         retailer_id = job.task.retailer_id
         with self.lock:
@@ -965,64 +930,6 @@ class Worker:
         if restocked:
             clear_list_caches(force=True)
         return failures == 0
-
-    def check_ebay(self, job, listings):
-        """eBay's listings of the products that matter, twenty a request through eBay's bulk item lookup, which has
-        its own daily allowance (ebay.check_listings), so a price eBay shows is as fresh as any shop's between the
-        daily runs. eBay not answering backs the marketplace off like a failed read; its allowance run down only
-        makes the listings wait. The owner, 6 Nov 2026: "20 hours ago isn't good enough".
-
-        How each check went is noted for the eBay health page (ebay.note_check), an error nobody foresaw too, so a
-        check that keeps failing shows there rather than only in the log."""
-        try:
-            return self.check_ebay_items(job, listings)
-        except Exception as exc:
-            ebay.note_check(problem=f"The check stopped on an unexpected error: {type(exc).__name__}: {exc}")
-            raise
-
-    def check_ebay_items(self, job, listings):
-        from .signals import clear_list_caches
-
-        retailer_id = job.task.retailer_id
-        now = self.clock()
-        wanted = [listings[pk] for pk in job.task.listings
-                  if pk in listings and listings[pk].last_checked < now - RECENTLY_CHECKED]
-        if not wanted:
-            return True
-        try:
-            found = ebay.check_listings(
-                wanted, request=self.ebay_request, pause=self.page_pause, sleep=self.sleep,
-                stop=lambda: self.clock() - job.started >= PROBE_BUDGET,
-            )
-        except (ebay.AllowanceUsed, ebay.LookupUnusable) as exc:
-            # The day's lookups used, or a lookup eBay will not serve or that is not believed: the listings wait,
-            # nothing is marked, and eBay is not backed off, so its daily search is not delayed.
-            logger.warning("eBay: %s", exc)
-            ebay.note_check(problem=str(exc))
-            with self.lock:
-                for listing in wanted:
-                    self.probe_failed[listing.pk] = now
-            return True
-        except ebay.EbayError as exc:
-            ebay.note_check(problem=f"eBay did not answer: {exc}")
-            self.back_off(retailer_id, self.clock(), crawl.http_status(str(exc)), f"Checking eBay listings: {exc}")
-            return False
-        stock = [availability for _price, availability, *_postage in found.values()]
-        in_stock = sum(1 for a in stock if a in Listing.BUYABLE)
-        ebay.note_check(asked=len(wanted), in_stock=in_stock, gone=len(stock) - in_stock, left=len(wanted) - len(found))
-        logger.info("eBay: checked %d items: %d in stock, %d gone, %d not reached", len(wanted), in_stock,
-                    len(stock) - in_stock, len(wanted) - len(found))
-        with self.lock:
-            for listing in wanted:
-                if listing.pk not in found:
-                    self.probe_failed[listing.pk] = now
-        restocked = False
-        for listing in wanted:
-            outcome = probe.record_probe(listing, found.get(listing.pk))
-            restocked = restocked or outcome == "restocked"
-        if restocked:
-            clear_list_caches(force=True)
-        return True
 
     def pulse_shop(self, job):
         """Look at one Shopify shop's collection list and read the pre-order collections that changed.

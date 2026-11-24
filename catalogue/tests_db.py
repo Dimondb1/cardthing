@@ -308,7 +308,7 @@ class ShortTidyTransactionTests(TestCase):
             call_command("tidy_all", "--dry-run", stdout=out)
         self.assertEqual(requests, [])
         self.assertEqual(Listing.objects.get(pk=untitled.pk).title, "")
-        self.assertIn("eBay titles not fetched in a dry run.", out.getvalue())
+        self.assertNotIn("eBay titles", out.getvalue())   # nothing fetches them since 24 Nov 2026
         self.assertIn("would remove", out.getvalue())
         self.assertIn("would keep", out.getvalue())
         self.assertEqual((Product.objects.count(), Listing.objects.count()), before)

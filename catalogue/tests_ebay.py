@@ -1,4 +1,5 @@
 import datetime
+import urllib.parse
 from decimal import Decimal
 from io import StringIO
 from unittest import mock
@@ -57,8 +58,14 @@ class FakeApi:
             return {"access_token": "tok", "expires_in": 7200}
         if url.startswith(ebay.LIMITS_URL):
             return limits(self.searches_left)
-        if url.startswith(ebay.ITEMS_URL):
-            return {"items": self.items}
+        if "item_ids=" in url:
+            raise AssertionError("eBay's twenty-at-once lookup is refused to this application and never asked")
+        if url.startswith(ebay.ITEM_URL):
+            wanted = urllib.parse.unquote(url[len(ebay.ITEM_URL):])
+            found = [row for row in self.items if row.get("itemId") == wanted]
+            if not found:
+                raise ebay.EbayError('eBay API 404: {"errors":[{"errorId":11001,"message":"The item does not exist"}]}')
+            return found[0]
         searches = sum(1 for u, _, _ in self.calls if u.startswith(ebay.SEARCH_URL))
         if self.fail_after is not None and searches > self.fail_after:
             raise ebay.EbayError("eBay API 429: Too many requests.")
@@ -271,69 +278,35 @@ class LookupTests(TestCase):
         Product.objects.filter(pk=fresh.pk).update(ebay_checked_at=now - datetime.timedelta(hours=1))
         products = Product.objects.filter(pk__in=[quiet.pk, wanted.pk, fresh.pk])
         self.assertEqual([p.pk for p in ebay.due_known(products, {}, now)], [quiet.pk])
+        # Looked at and due after four hours, but after every product due after twenty, so none of those passes the
+        # day its price counts for; looked at an hour ago: not due yet.
         self.assertEqual([p.pk for p in ebay.due_known(products, {wanted.pk: 9, fresh.pk: 30}, now)],
-                         [wanted.pk, quiet.pk])   # looked at and due after four hours: first; an hour ago: not yet
+                         [quiet.pk, wanted.pk])
 
-    def test_known_listings_are_refreshed_in_bulk_without_spending_searches(self):
+    def test_the_longest_unchecked_go_first_even_before_the_most_looked_at(self):
+        """The owner's eBay health page, 24 Nov 2026: 282 eBay items hidden, one unchecked for ten days, while the
+        products visitors look at were searched every four hours ahead of them."""
+        now = timezone.now()
+        old = make_product(self.set, name="Old Booster Box", slug="old-box")
+        older = make_product(self.set, name="Older Booster Box", slug="older-box")
+        popular = make_product(self.set, name="Popular Booster Box", slug="popular-box")
+        Product.objects.filter(pk=old.pk).update(ebay_checked_at=now - datetime.timedelta(hours=22))
+        Product.objects.filter(pk=older.pk).update(ebay_checked_at=now - datetime.timedelta(days=10))
+        Product.objects.filter(pk=popular.pk).update(ebay_checked_at=now - datetime.timedelta(hours=23))
+        products = Product.objects.filter(pk__in=[old.pk, older.pk, popular.pk])
+        self.assertEqual([p.pk for p in ebay.due_known(products, {popular.pk: 50}, now)],
+                         [older.pk, popular.pk, old.pk])
+
+    def test_known_listings_are_kept_fresh_by_searching_never_the_twenty_at_once_lookup(self):
         make_listing(self.bundle, self.retailer, price="30.00", url="https://www.ebay.co.uk/itm/9?campid=1")
         fresh = item("Pokemon Prismatic Evolutions Booster Bundle", price="28.50", item_id="v1|9|0")
-        fresh["itemId"] = "v1|9|0"
-        api = FakeApi([], items=[fresh])
-        offers = ebay.ebay_offers(self.retailer, limit=0, request=api, pause=0)
-        bulk = [u for u, _, _ in api.calls if u.startswith(ebay.ITEMS_URL)]
-        self.assertEqual(len(bulk), 1)
-        self.assertIn("item_ids=v1%7C9%7C0", bulk[0].replace("|", "%7C"))
-        self.assertEqual(api.searches(), [])
+        api = FakeApi([fresh])
+        offers = ebay.ebay_offers(self.retailer, limit=1, request=api, pause=0)
+        self.assertIn("q=Pokemon+Prismatic+Evolutions+Booster+Bundle", api.searches()[0])
+        self.assertFalse([url for url, _, _ in api.calls if url.startswith(ebay.ITEM_URL)])
         self.assertEqual([(o.product_pk, o.price) for o in offers], [(self.bundle.pk, Decimal("28.50"))])
 
-    def test_one_ended_listing_does_not_stop_the_rest_being_refreshed(self):
-        etb_listing = make_listing(self.etb, self.retailer, price="80.00", url="https://www.ebay.co.uk/itm/7?campid=1")
-        make_listing(self.bundle, self.retailer, price="30.00", url="https://www.ebay.co.uk/itm/9?campid=1")
-        live = item("Pokemon TCG Prismatic Evolutions Elite Trainer Box", price="78.00", item_id="v1|7|0")
-        live["itemId"] = "v1|7|0"
-        bulk_calls = []
-
-        def api(url, headers, data=None):
-            if url.startswith(ebay.ITEMS_URL):
-                bulk_calls.append(url)
-                if "9" in url.split("item_ids=")[1]:
-                    raise ebay.EbayError('eBay API 404: {"errors":[{"errorId":11001,"message":"The specified item Id was not found."}]}')
-                return {"items": [live]}
-            return FakeApi([])(url, headers, data)
-
-        offers = ebay.ebay_offers(self.retailer, limit=5, request=api, pause=0)
-        by_product = {o.product_pk: o for o in offers}
-        self.assertEqual(by_product[self.etb.pk].price, Decimal("78.00"))
-        # The ended one was searched for again, found nothing, and is marked sold out.
-        self.assertEqual(by_product[self.bundle.pk].availability, Listing.Availability.OUT_OF_STOCK)
-        self.assertEqual(len(bulk_calls), 3)   # the batch, then each listing on its own
-        self.assertIsNotNone(etb_listing.pk)
-
-    def test_a_lookup_that_shows_no_known_listing_is_not_believed_and_they_are_searched_for(self):
-        """The owner's log, 16 Nov 2026: "refreshing 1966 known listings" and, twenty minutes and thousands of lookups
-        later, "0 known listings still live", with every one put on the ended list. The lookup was failing, not the
-        listings: the search found 262 of 262 live two minutes after."""
-        ebay.forget_live()
-        self.addCleanup(ebay.forget_live)
-        for n in range(30):
-            product = make_product(self.set, name=f"Known Box {n}", slug=f"known-{n}")
-            make_listing(product, self.retailer, price="30.00", url=f"https://www.ebay.co.uk/itm/{500 + n}?campid=1")
-        fake, bulk = FakeApi([]), []
-
-        def api(url, headers, data=None):
-            if url.startswith(ebay.ITEMS_URL):
-                bulk.append(url)
-                raise ebay.EbayError('eBay API 404: {"errors":[{"errorId":11001,"message":"The specified item Id was not found."}]}')
-            return fake(url, headers, data)
-
-        with self.assertLogs("catalogue.ebay", "WARNING") as logged:
-            ebay.ebay_offers(self.retailer, limit=60, request=api, pause=0)
-        self.assertTrue(any("which is not believed" in record.getMessage() for record in logged.records))
-        self.assertLessEqual(len(bulk), 20)          # it stops at ten said not to exist; all thirty took 59
-        self.assertEqual(ebay.ended_items(), {})     # and none is put on the ended list
-        self.assertGreaterEqual(len(fake.searches()), 30)   # every one is searched for instead
-
-    def test_a_listing_the_bulk_lookup_no_longer_knows_is_searched_again_then_marked_sold_out(self):
+    def test_a_known_listing_the_search_no_longer_finds_is_marked_sold_out(self):
         make_listing(self.bundle, self.retailer, price="30.00", url="https://www.ebay.co.uk/itm/9?campid=1")
         api = FakeApi([], items=[])
         offers = ebay.ebay_offers(self.retailer, limit=1, request=api, pause=0)
@@ -651,7 +624,7 @@ class FallbackSearchTests(TestCase):
         offers = ebay.ebay_offers(self.retailer, limit=5, request=api, pause=0)
         self.assertEqual([(o.product_pk, o.price) for o in offers], [(pack.pk, Decimal("5.50"))])
 
-    def test_a_known_listing_now_too_cheap_is_searched_for_again(self):
+    def test_a_known_listing_now_too_cheap_is_replaced_by_the_genuine_one_the_search_finds(self):
         from .testing import make_retailer
 
         pack = make_product(self.set, name="Darkness Ablaze Booster Pack", slug="da-pack", product_type="booster_pack")
@@ -661,30 +634,37 @@ class FallbackSearchTests(TestCase):
         api = FakeApi([item("Pokemon TCG Darkness Ablaze Booster Pack Sealed", price="5.50", item_id="v1|2|0")],
                       items=[cheap])
         offers = ebay.ebay_offers(self.retailer, limit=5, request=api, pause=0)
-        # Taken off the site first, then replaced by the genuine listing the search found.
         self.assertEqual([(o.product_pk, o.price, o.availability) for o in offers], [
-            (pack.pk, Decimal("1.36"), Listing.Availability.OUT_OF_STOCK),
             (pack.pk, Decimal("5.50"), Listing.Availability.IN_STOCK),
         ])
         self.assertEqual(len(api.searches()), 1)
 
-    def test_a_known_listing_in_another_language_is_hidden_even_when_searches_run_out(self):
+    def test_a_known_listing_in_another_language_is_taken_off_when_its_product_is_searched(self):
         pack = make_product(self.set, name="30th Celebration Booster Pack", slug="30th-pack", product_type="booster_pack")
         make_listing(pack, self.retailer, price="5.44", url="https://www.ebay.co.uk/itm/1?campid=1")
         chinese = item("CHS Pokémon TCG 30th Celebration Booster Pack", price="5.44", item_id="v1|1|0")
-        api = FakeApi([], items=[chinese])
-        offers = ebay.ebay_offers(self.retailer, limit=0, request=api, pause=0)
+        api = FakeApi([chinese])
+        offers = ebay.ebay_offers(self.retailer, limit=5, request=api, pause=0)
         self.assertEqual([(o.product_pk, o.availability) for o in offers], [(pack.pk, Listing.Availability.OUT_OF_STOCK)])
-        self.assertEqual(api.searches(), [])
 
-    def test_tidy_fetches_missing_titles_and_removes_a_chinese_pack(self):
+    def test_an_ebay_item_on_a_product_taken_off_the_site_goes_out_of_stock(self):
+        """Only the site's products are searched, so an item on one taken off it was never checked again and kept
+        the eBay health page behind (one unchecked for ten days, 24 Nov 2026)."""
+        gone = make_product(self.set, name="Gone Booster Box", slug="gone-box")
+        row = make_listing(gone, self.retailer, price="50.00", url="https://www.ebay.co.uk/itm/8?campid=1")
+        Product.objects.filter(pk=gone.pk).update(is_active=False)
+        ebay.ebay_offers(self.retailer, limit=0, request=FakeApi([]), pause=0)
+        row.refresh_from_db()
+        self.assertEqual(row.availability, Listing.Availability.OUT_OF_STOCK)
+
+    def test_tidy_removes_a_chinese_pack_and_asks_ebay_nothing(self):
         pack = make_product(self.set, name="30th Celebration Booster Pack", slug="30th-pack", product_type="booster_pack")
-        chinese = make_listing(pack, self.retailer, price="5.44", url="https://www.ebay.co.uk/itm/1?campid=1")
+        chinese = make_listing(pack, self.retailer, price="5.44", url="https://www.ebay.co.uk/itm/1?campid=1",
+                               title="CHS Pokémon TCG 30th Celebration Booster Pack")
         etb = make_product(self.set, name="Prismatic Evolutions Elite Trainer Box", slug="pev-etb")
-        english = make_listing(etb, self.retailer, price="80.00", url="https://www.ebay.co.uk/itm/2?campid=1")
-        rows = [item("CHS Pokémon TCG 30th Celebration Booster Pack", price="5.44", item_id="v1|1|0"),
-                item("Pokemon TCG Prismatic Evolutions Elite Trainer Box", price="80.00", item_id="v1|2|0")]
-        api = FakeApi([], items=rows)
+        english = make_listing(etb, self.retailer, price="80.00", url="https://www.ebay.co.uk/itm/2?campid=1",
+                               title="Pokemon TCG Prismatic Evolutions Elite Trainer Box")
+        api = FakeApi([])
         out = StringIO()
         with mock.patch.object(ebay, "http", api), mock.patch.object(ebay, "PAUSE", 0):
             call_command("tidy_listings", stdout=out)
@@ -694,15 +674,6 @@ class FallbackSearchTests(TestCase):
         self.assertIn("removed: 30th Celebration Booster Pack <- eBay CHS Pokémon TCG 30th Celebration Booster Pack",
                       out.getvalue())
         self.assertEqual(english.availability, Listing.Availability.IN_STOCK)
-        self.assertIn("2 eBay titles fetched", out.getvalue())
-        self.assertEqual(api.searches(), [])
-
-    def test_titles_are_not_fetched_when_every_listing_has_one(self):
-        etb = make_product(self.set, name="Prismatic Evolutions Elite Trainer Box", slug="pev-etb")
-        make_listing(etb, self.retailer, price="80.00", url="https://www.ebay.co.uk/itm/2?campid=1",
-                     title="Pokemon TCG Prismatic Evolutions Elite Trainer Box")
-        api = FakeApi([])
-        self.assertEqual(ebay.fill_titles(request=api, pause=0), 0)
         self.assertEqual(api.calls, [])
 
     def test_language_shorthand_and_foreign_script_are_another_edition(self):

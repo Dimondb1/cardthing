@@ -22,7 +22,7 @@ from django.utils import timezone
 
 from catalogue import languages, sanity
 from catalogue.classify import NOT_SEALED, box_contents, find_game
-from catalogue.ebay import EbayError, fill_titles, too_cheap_listings, wrong_listings
+from catalogue.ebay import too_cheap_listings, wrong_listings
 from catalogue.importers import (
     barcode_owners, calls_itself_a_card, ean_key, link_key, listing_page, remove_not_sealed, slug_words, valid_gtin,
 )
@@ -188,18 +188,6 @@ class Command(BaseCommand):
     def handle(self, *args, dry_run=False, **options):
         removed = 0
         clear_owned_barcodes()
-        # eBay listings saved before titles were kept cannot be judged by their title, so ask eBay for it.
-        # Not in a dry run: fetching saves each title, and a dry run changes nothing.
-        if dry_run:
-            self.stdout.write("eBay titles not fetched in a dry run.")
-        else:
-            try:
-                filled = fill_titles()
-            except EbayError as exc:
-                filled = 0
-                self.stdout.write(f"eBay titles not fetched: {exc}")
-            if filled:
-                self.stdout.write(f"{filled} eBay titles fetched.")
         # Each change is its own short transaction, so a web request or another job never waits
         # for a whole table walk. A dry run wraps them all in one transaction and rolls it back.
         with transaction.atomic() if dry_run else nullcontext():

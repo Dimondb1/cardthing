@@ -12,7 +12,7 @@ from django.test import override_settings
 
 from . import ebay, worker, worklog
 from .models import Retailer
-from .tests_ebay_checks import KEYS, FakeEbay, item
+from .tests_ebay_search_only import KEYS
 from .tests_worker import HeldExecutor, WorkerTestCase
 
 
@@ -94,9 +94,8 @@ class WorkerLogTests(WorkerTestCase):
         reader = self.make_worker(executor=executor)
         reader.queue = reader.plan(self.clock())
         plan = worklog.last_plan()
-        self.assertEqual(plan["ebay"], {"running": "", "read": "due, with room to start", "check": "1 items (hot)",
-                                        "lookup_waiting": ""})
-        self.assertEqual(plan["queue"], {"reads": 1, "reads_with_room": 1, "checks": 2, "pulses": 0, "other": 0})
+        self.assertEqual(plan["ebay"], {"running": "", "read": "due, with room to start"})
+        self.assertEqual(plan["queue"], {"reads": 1, "reads_with_room": 1, "checks": 1, "pulses": 0, "other": 0})
         self.assertEqual((plan["running"], plan["lock"]["held_since"], plan["lock"]["refused"]), ([], "", ""))
         # The read under way: the next plan says eBay is running and the reader holds the lock.
         reader.dispatch(self.clock())
@@ -155,6 +154,7 @@ class WorkerLogTests(WorkerTestCase):
 
     def test_a_lock_file_that_cannot_be_opened_keeps_reads_waiting_and_checks_going(self):
         Retailer.objects.filter(pk=self.ebay.pk).update(next_read_at=self.clock() - timedelta(hours=3))
+        self.listing(self.product("hot-box", views=3), self.shop("Probe Shop"), 30)
         executor = HeldExecutor()
         reader = self.make_worker(executor=executor)
         reader.queue = reader.plan(self.clock())
@@ -163,13 +163,9 @@ class WorkerLogTests(WorkerTestCase):
         self.assertEqual([task.kind for task in executor.jobs], [worker.PROBE])
         self.assertIn("its file cannot be opened", reader.import_lock.refused)
 
-    def test_each_ebay_check_and_read_leaves_a_line(self):
-        reader = self.make_worker(ebay_request=FakeEbay([item(123)]))
-        [task] = reader.plan(self.clock())
+    def test_each_ebay_read_leaves_a_line(self):
+        reader = self.make_worker()
         now = self.clock()
-        with self.assertLogs("catalogue.worker", "INFO") as logged:
-            reader.run_job(worker.Job(task, now, now + worker.PROBE_DEADLINE))
-        self.assertEqual(logged.records[0].getMessage(), "eBay: checked 1 items: 1 in stock, 0 gone, 0 not reached")
         # Its hourly read: this hour's share of the day's searches, and said so.
         from .tests_ebay import FakeApi
 

@@ -25,6 +25,10 @@
   .eh td, .eh th { vertical-align: top; }
   .eh td.wrap { overflow-wrap: anywhere; }
   .eh .muted { color: var(--body-quiet-color); font-size: 0.85em; display: block; }
+  .eh details { border: 1px solid var(--hairline-color); border-radius: 6px; padding: 0 16px; }
+  .eh details[open] { padding-bottom: 16px; }
+  .eh summary { cursor: pointer; padding: 12px 0; font-weight: 600; font-size: 1.05rem; }
+  .eh summary span { font-weight: 400; color: var(--body-quiet-color); }
   .eh textarea.log { display: block; width: 100%; height: 22rem; max-height: none; box-sizing: border-box; margin: 0; padding: 8px; font: 12px/1.45 ui-monospace, Menlo, Consolas, monospace; white-space: pre; overflow: auto; }
   .eh form.rules { display: grid; gap: 12px; max-width: 32rem; }
   .eh form.rules label { display: block; font-weight: 600; margin-bottom: 4px; }
@@ -42,12 +46,23 @@
 {% block breadcrumbs %}<div class="breadcrumbs"><a href="{% url 'admin:index' %}">Home</a> &rsaquo; eBay health</div>{% endblock %}
 {% block content %}
 <div class="eh">
-  <p class="verdict {{ state }}"><b>{% if state == "ok" %}Up to date{% elif state == "behind" %}Falling behind{% else %}Not updating{% endif %}</b>{{ why }}</p>
-  <p class="note"><a href="#log">Log to copy</a>: everything about eBay's updating as text, at the bottom of this page.</p>
+  <section>
+    <p class="verdict {{ state }}"><b>{% if state == "ok" %}Up to date{% elif state == "behind" %}Behind{% else %}Not updating{% endif %}</b>{{ why }}</p>
+    {% if state != "ok" and reasons %}
+    <ul class="reasons">{% for reason in reasons %}<li><b>{{ reason.line }}</b> {{ reason.detail }}</li>{% endfor %}</ul>
+    {% endif %}
+    <ul class="figures">
+      <li><b>{{ fresh.showing|number }}</b><span>eBay prices showing</span></li>
+      <li><b>{{ fresh.stale|number }}</b><span>hidden until checked again</span></li>
+      <li><b>{% if fresh.latest %}{{ fresh.latest|timesince }} ago{% else %}Never{% endif %}</b><span>last check</span></li>
+    </ul>
+    <p class="note" style="margin-top: 8px;">eBay is searched every hour. A price not checked for {{ fresh.hours }} hours is hidden until it is checked again.</p>
+    {% if state != "ok" %}<form method="post" class="inline">{% csrf_token %}<input type="hidden" name="action" value="try_again"><input type="submit" value="Try eBay again now"></form>{% endif %}
+  </section>
 
   <section id="test">
     <h2>Test eBay now</h2>
-    <p class="note">Asks eBay for a token, its allowances and two item lookups, and shows eBay's own answer to each. It uses two of the day's item lookups, no search, and changes no listing.</p>
+    <p class="note">Asks eBay for a token, the day's searches left, one search and one listing, and shows eBay's own answer to each. Changes no listing.</p>
     <form method="post" class="inline">{% csrf_token %}<input type="hidden" name="action" value="test"><input type="submit" value="Test eBay now"></form>
     {% if test.lines %}
     <p class="note" style="margin-top: 8px;">Asked {{ test.at|timesince }} ago:</p>
@@ -55,49 +70,8 @@
     {% endif %}
   </section>
 
-  {% if state != "ok" %}
-  <section id="why">
-    <h2>Why it is not updating</h2>
-    {% if reasons %}
-    <ul class="reasons">{% for reason in reasons %}<li><b>{{ reason.line }}</b> {{ reason.detail }}</li>{% endfor %}</ul>
-    {% else %}
-    <p>The background reader is running and eBay is neither paused nor waiting after errors, yet its items are not being checked. Its log will say why: <code>journalctl -u ripraptor-worker --since today | grep -i ebay</code></p>
-    {% endif %}
-    <ul class="facts note">
-      <li>Background reader: {% if facts.alive %}running, last sign of life {{ facts.worker.heartbeat_at|timesince }} ago{% elif facts.worker.heartbeat_at %}stopped, last sign of life {{ facts.worker.heartbeat_at|timesince }} ago{% else %}never started{% endif %}.</li>
-      {% for shop in facts.shops %}<li>{{ shop.name }}: {% if shop.reading_paused %}paused{% elif shop.backoff_until and shop.error_streak %}waiting after errors{% else %}not waiting{% endif %}{% if shop.last_ok_at %}, last good read {{ shop.last_ok_at|timesince }} ago{% endif %}{% if shop.waiting %}, next read due for {{ shop.next_read_at|timesince }}{% elif shop.next_read_at %}, next read at {{ shop.next_read_at|time:"H:i" }}{% endif %}.</li>{% endfor %}
-      <li>Last item check: {% if facts.check.at %}{{ facts.check.at|timesince }} ago, {{ facts.check.asked|number }} asked about: {{ facts.check.in_stock|number }} in stock, {{ facts.check.gone|number }} gone{% if facts.check.left %}, {{ facts.check.left|number }} not reached{% endif %}{% else %}none noted yet{% endif %}.</li>
-      {% if facts.check.problem_at %}<li>Last problem, {{ facts.check.problem_at|timesince }} ago: {{ facts.check.problem }}</li>{% endif %}
-      <li>Ended list: {{ facts.ended|number }} item{{ facts.ended|pluralize }} eBay said had ended, not asked about again for {{ facts.ended_days }} days{% if facts.on_list %}, {{ facts.on_list|number }} of them in stock{% endif %}.</li>
-      <li>Marked out of stock in the last day: {{ facts.marked|number }}.</li>
-    </ul>
-    <form method="post" class="inline">{% csrf_token %}<input type="hidden" name="action" value="try_again"><input type="submit" value="Try eBay again now"></form>
-  </section>
-  {% endif %}
-
-  <section>
-    <h2>Is it updating often enough?</h2>
-    <p class="note">eBay is searched every hour for a share of the day's allowance: a product visitors look at again after {{ fresh.popular_hours }} hours, the rest after {{ fresh.every_hours }}. An eBay price not checked for {{ fresh.hours }} hours stops counting and is not shown as buyable until it is checked again.</p>
-    <ul class="figures">
-      <li><b>{{ fresh.total|number }}</b><span>eBay items in stock</span></li>
-      <li><b>{{ fresh.recent|number }}</b><span>checked in the last {{ fresh.every_hours }} hours</span></li>
-      <li><b>{{ fresh.stale|number }}</b><span>past {{ fresh.hours }} hours, not shown as buyable</span></li>
-      <li><b>{% if fresh.latest %}{{ fresh.latest|timesince }} ago{% else %}Never{% endif %}</b><span>latest check</span></li>
-    </ul>
-    <p class="note" style="margin-top: 8px;">eBay's hourly searches looked at {{ searched.day|number }} products in the last day{% if searched.latest %}, the latest {{ searched.latest|timesince }} ago{% endif %}.{% if usage %} eBay said {% if usage.searches is not None %}{{ usage.searches|number }} searches and {% endif %}{% if usage.lookups is not None %}{{ usage.lookups|number }}{% else %}an unknown number of{% endif %} item lookups were left today{% if usage.asked %} ({{ usage.asked }}){% endif %}.{% endif %} More on <a href="{% url 'crawl' %}">Crawl health</a>.</p>
-  </section>
-
-  <section>
-    <h2>Products</h2>
-    <ul class="figures">
-      <li><b>{{ products.active|number }}</b><span>products on the site</span></li>
-      <li><b>{{ products.with_ebay|number }}</b><span>with an eBay price that counts now</span></li>
-      <li><b>{{ products.cheapest|number }}</b><span>where eBay is the cheapest</span></li>
-    </ul>
-  </section>
-
-  <section id="cheapest">
-    <h2>Where eBay is the cheapest</h2>
+  <details id="cheapest"{% if show_all %} open{% endif %}>
+    <summary>Where eBay is the cheapest <span>{{ products.cheapest|number }} products</span></summary>
     <p class="note">Cheaper than every UK shop, or the only price that counts now. The biggest saving first; a tie goes to the shop.</p>
     {% if cheapest %}
     <table>
@@ -108,11 +82,12 @@
     </table>
     {% if cheapest_more and not show_all %}<p style="margin-top: 8px;"><a href="?all=1#cheapest">See all {{ products.cheapest|number }}</a></p>{% elif cheapest_more %}<p class="note">And {{ cheapest_more|number }} more.</p>{% endif %}
     {% elif products.with_ebay %}<p>eBay is not the cheapest for any product now.</p>
-    {% else %}<p>No eBay price counts now, so eBay cannot be the cheapest anywhere.{% if state != "ok" %} See <a href="#why">why it is not updating</a>.{% endif %}</p>{% endif %}
-  </section>
+    {% else %}<p>No eBay price counts now, so eBay cannot be the cheapest anywhere.</p>{% endif %}
+    <p class="note" style="margin-top: 8px;">{{ products.with_ebay|number }} of the {{ products.active|number }} products on the site have an eBay price that counts now.</p>
+  </details>
 
-  <section>
-    <h2>Clicks to eBay</h2>
+  <details>
+    <summary>Clicks to eBay <span>{{ clicks.week|number }} in the last 7 days</span></summary>
     <p class="note">People's clicks only: never a robot's, and never a direct hit from outside our pages.</p>
     <ul class="figures">
       <li><b>{{ clicks.today|number }}</b><span>today</span></li>
@@ -121,10 +96,10 @@
       <li><b>{{ clicks.everyone|number }}</b><span>people's clicks to every shop, last 30 days</span></li>
     </ul>
     <p class="note" style="margin-top: 8px;">{{ clicks.turned_away|number }} direct hits to eBay were turned away in the last 30 days.{% if ebay_shop %} <a href="{% url 'admin:catalogue_outboundclick_changelist' %}?retailer__id__exact={{ ebay_shop }}&amp;suspect__exact=0">See the clicks</a>.{% endif %}</p>
-  </section>
+  </details>
 
-  <section id="rules">
-    <h2>Seller rules</h2>
+  <details id="rules">
+    <summary>Seller rules <span>{{ rules.feedback }}% positive, {{ rules.ratings|number }} ratings</span></summary>
     <p class="note">An eBay item is listed only when its seller has at least this positive feedback and this many ratings. A seller eBay gives no count for is judged on the feedback alone. Each price is judged on these when its product is next searched, within {{ fresh.every_hours }} hours.</p>
     <form method="post" class="rules">{% csrf_token %}
       <p><label for="min_feedback">Least positive feedback (%)</label>
@@ -134,13 +109,13 @@
       <p>{% if rules.below %}{{ rules.below|number }} eBay price{{ rules.below|pluralize }} showing now {{ rules.below|pluralize:"is,are" }} from sellers below these and drop{{ rules.below|pluralize:"s," }} at {{ rules.below|pluralize:"its,their" }} next check.{% else %}Every eBay price showing now meets these.{% endif %}</p>
       <p><input type="submit" value="Save seller rules"></p>
     </form>
-  </section>
+  </details>
 
-  <section id="log">
-    <h2>Log to copy</h2>
-    <p class="note">Everything about eBay's updating as plain text, with the background reader's own log. It holds no key or password. Copy it and paste it into a message when something looks wrong.</p>
+  <details id="log">
+    <summary>Log to copy <span>for Claude, when something looks wrong</span></summary>
+    <p class="note">Everything about eBay's updating as plain text, with the background reader's own log. It holds no key or password. Copy it and paste it into a message.</p>
     <p><button type="button" class="button" data-copy-from="ebay-log" data-label="Copy the log" data-done="Copied" data-failed="Selected: now copy it" hidden>Copy the log</button></p>
     <textarea id="ebay-log" class="log" rows="14" readonly spellcheck="false" aria-label="Log to copy">{{ log }}</textarea>
-  </section>
+  </details>
 </div>
 {% endblock %}

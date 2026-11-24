@@ -836,19 +836,27 @@ set. eBay is read every hour (since 16 Nov 2026; once a day before), each
 read searching its share of the day's allowance (`ebay.hourly_searches`:
 what is left above `KEEP_BACK` shared over the hours to eBay's reset, at
 most `RIPRAPTOR_EBAY_DAILY_LIMIT` spread over the day): first the products
-already on eBay that are due (`ebay.due_known`: after 4 hours for one
-visitors look at, the most looked at first, otherwise after 20), then the
-rest with a fifth of the hour's searches, by barcode where we have one and
-otherwise by name. Since 23 Nov 2026 (the owner's eBay log: reads four hours
+already on eBay that are due (`ebay.due_known`: every one unchecked for 20
+hours, the longest unchecked first, then the ones visitors look at after 4
+hours, the most looked at first), then the rest with a fifth of the hour's
+searches, by barcode where we have one and otherwise by name. Until 24 Nov
+2026 the popular products went first and could take every search, so the
+rest slipped past the 24 hours a price counts for and were hidden. An eBay
+item on a product taken off the site is marked out of stock at the start of
+each hourly run, since nothing searches for it again. Since 23 Nov 2026 (the owner's eBay log: reads four hours
 apart behind overdue shops, about 1,200 of the 4,800 searches spent, and
 1,663 of 2,076 eBay items in stock over a day old) eBay's read goes before
 every shop read in the background reader's queue, and a read that comes
 more than an hour after the last good one (`Retailer.last_ok_at`) takes the
 share of every hour since, never more than is left, so the day's searches
-are spent. eBay's one-item lookup is no way round its refusal of the bulk
-item lookup: it counts against the same allowance as the searches (the
-`buy.browse` resource), so each would be a search fewer. Only eBay can
-raise the allowance or open the bulk lookup (its Application Growth Check).
+are spent. Prices are kept fresh by these searches alone. eBay refuses this
+application its bulk item lookup (`getItems`, twenty at once, a limited
+release for partners eBay chooses), and since 24 Nov 2026 the site no longer
+asks it. eBay's one-item lookup is no way round that: it counts against the
+same allowance as the searches (the `buy.browse` resource), so each would be
+a search fewer; it is used only by the judge and Test eBay now. Only eBay
+can raise the allowance or open the bulk lookup (its Application Growth
+Check).
 The search that found a product last time is tried first
 (`Product.ebay_query`), so searching it again costs one search, not two or
 three. A run stops
@@ -918,14 +926,13 @@ the price delivered, which one the import would pick, and why each other
 is refused (too cheap, a different product, no UK postage). It uses one or
 two searches and saves nothing. Links are eBay's own
 affiliate links for the campaign, so the shop needs no affiliate link
-format. Listings we already have are refreshed twenty at a time through eBay's
-bulk item lookup, which has its own daily allowance, so searches go on
-new products. The run asks eBay how many searches are left today and
+format. Listings we already have are refreshed by searching for their
+product again (above). The run asks eBay how many searches are left today and
 stays inside that; when the allowance is used up it stops and keeps what
 it found, and the hourly import tries again after the reset at 08:00 UK
 time. A product whose listing has gone is searched again and marked out
 of stock if nothing matches; products not reached in a run keep their
-last state. Both allowances, as eBay last reported them, show on Crawl
+last state. The searches left, as eBay last reported them, show on Crawl
 health as eBay today. A higher allowance is eBay's to grant, free, through
 its Application Growth Check on the developer site, once usage shows the
 need; a second developer account to double it breaks eBay's rules and
@@ -1040,9 +1047,8 @@ description says so. When no other shop lists the product, its eBay and
 Amazon listings go too, and `tidy_catalogue` retires the page (410 Gone).
 Listings keep the shop's own
 title for this, so a new rule applies at the next hourly import rather
-than the next eBay run; an eBay listing saved before titles were kept has
-its title fetched through eBay's bulk lookup first, which does not touch the
-search allowance). Each takes
+than the next eBay run; an eBay listing saved before titles were kept is
+judged once its product is next searched, which saves its title). Each takes
 `--dry-run`. No page ever shows a saving or a price drop above 70%, because
 a gap that large is a wrong link, not a bargain, and such a product gets no
 badge and is never featured. Savings name the shop they are measured
@@ -1906,7 +1912,7 @@ asked once more with its page.
 Only shops you added are read, the way their reads already read them: a
 Shopify shop through `/products/<handle>.js` (as the stock probe does),
 any other shop's page for its schema.org product data, Open Graph tags,
-title and heading, and an eBay listing through eBay's own item lookup
+title and heading, and an eBay listing through eBay's own one-item lookup
 (never its page). Amazon, feed shops (affiliate links the site never
 follows) and hand-entered prices are not read, nor is a shop that is
 paused, switched off, waiting after errors, being read right now (asked
@@ -3016,40 +3022,10 @@ that keeps prices fresh all day:
   listings; the rest wait their turn hourly), with 3 every hour, otherwise
   only by its shop's whole read. A listing checked in the last 8 minutes,
   or at a shop being read, is skipped. Feed shops and Amazon are never
-  asked about single listings. eBay's are, through its bulk item lookup
-  (`ebay.check_listings`, twenty a request, up to a hundred a job): the
-  item's price, postage and whether it is still live, so no eBay price
-  waits a day for the next daily run (the owner, 6 Nov 2026: "20 hours ago
-  isn't good enough"). eBay's listings keep their own cadence, since every
-  lookup is one of the day's 5,000: in stock, every half hour for the
-  products people are looking at, every hour for the warm tier and every
-  two for the rest (`EBAY_HOT_EVERY`, `EBAY_WARM_EVERY`, `EBAY_EVERY`), so
-  each is asked about twice inside the four hours its price counts for
-  (below); out of stock, every six (`EBAY_OUT_EVERY`). Ten-minute checks of
-  the busiest ran the allowance out by early afternoon on 6 Nov 2026.
-  Ended items ran it out on 12 Nov: eBay refuses a whole batch of twenty
-  when one item has ended, and each check asked about all twenty alone,
-  then asked about the same ended item again at every check. Now an item
-  eBay says has ended is remembered for 30 days (`ebay.ended_items`, in
-  the shared cache by item number) and never asked about again by the
-  checks, the daily run's refresh or the title filler; the daily run
-  searches for a new listing for its product. A refused batch is asked
-  about in halves (`ebay.halves`), about ten lookups for one ended item in
-  twenty instead of twenty-one. The owner, 12 Nov 2026: "As ebay hasn't
-  updated in 8 hours ... most things become out of stock and th site
-  doesn't know". The lookup's own daily allowance is asked
-  about hourly, and again after every hundred lookups counted down in the
-  process (the daily run's refresh and the title filler count theirs too),
-  and 400 of it are left for the daily run; when it is down to that the
-  listings wait for the reset, with no back-off, so the daily read is not
-  delayed. A 429 from the lookup is eBay's own counter saying no, whatever
-  ours said: what was found is kept, the checks wait ten minutes
-  (`BULK_PAUSE`) and then ask eBay's counter again, and eBay is not backed
-  off (the owner, 6 Nov 2026, with "backing off until 13:49" on Crawl
-  health: "That's the eBay failure"). eBay not answering at all backs it
-  off like a failed read. An ended listing, or one whose
-  seller or postage no longer passes, is out of stock at its last price
-  until the daily run searches again.
+  asked about single listings, and since 24 Nov 2026 neither is eBay
+  (`probe.NEVER_CHECKED`). Its checks went through eBay's bulk item
+  lookup, twenty a request, which eBay refuses this application; every
+  eBay price is now kept fresh by the hourly search alone (above).
 - **An eBay price counts for 24 hours** (`RIPRAPTOR_EBAY_STALE_AFTER_HOURS`),
   not the 72 a shop's does: an eBay item sells out in hours. It was four
   until 16 Nov 2026, when it turned out eBay refuses this application the
@@ -7497,42 +7473,33 @@ exclamation marks) and drops any with a price, a link or an address.
 15 Nov 2026: "an ebay health check is it updating often enough, how many
 products on the site, how many ebay products are cheapest, with a link to
 see those products, how many legit clicks. Maybe add a seller rating config
-button"). One page, linked from the Admin home:
+button"). Made plain on 24 Nov 2026 (the owner: "simplify the ebay health
+menu for me and keep the log for you"). One page, linked from the Admin home:
 
-- A verdict: Up to date, Falling behind (more than 5% of the eBay items in
-  stock past the hours a price counts for, or no check for 45 minutes) or
-  Not updating (nothing checked inside those hours).
-- The eBay items in stock, how many were checked in the last 2 hours
-  (`worker.EBAY_EVERY`), how many are past `RIPRAPTOR_EBAY_STALE_AFTER_HOURS`
-  and not shown as buyable, the latest check, the daily search and what
-  eBay last said was left of the day's searches and lookups.
-- Products on the site, with an eBay price that counts now, and where eBay
-  is the cheapest: cheaper than every UK shop (a tie goes to the shop) or
-  the only price, listed with the best shop price, the saving, the seller
-  and when it was checked, 25 at first and See all for every one.
-- People's clicks to eBay today, in 7 and 30 days (never a robot's or a
-  direct hit), to an item and to eBay's search, beside every shop's, linked
-  to the clicks.
-- Why it is not updating (the owner, 16 Nov 2026, with no eBay price
-  counting and all 5,000 lookups unused: "something is wrong"), whenever
-  the verdict is not Up to date (`ebay_health.reasons`): the background
-  reader stopped or never started, Pause all on, eBay paused, eBay waiting
-  after failed tries until a time with eBay's own last error, or every item
-  checked in the last day marked out of stock. Try eBay again now clears
-  eBay's wait and makes it due, as Read now does on Crawl health. With no
-  eBay price counting, the cheapest list says so rather than "eBay is not
-  the cheapest".
+- At the top, one verdict: Up to date, Behind (more than 5% of the eBay
+  items in stock on the site's products past the hours a price counts for,
+  or no check for 90 minutes, which is one hourly search missed) or Not
+  updating (nothing checked inside those hours), with one line saying why.
+- Three numbers: eBay prices showing, hidden until checked again, and the
+  last check.
+- When the verdict is not Up to date, why (the owner, 16 Nov 2026: "something
+  is wrong"; `ebay_health.reasons`): the background reader stopped or never
+  started, Pause all on, eBay paused, eBay waiting after failed tries until a
+  time with eBay's own last error, eBay's read due over 30 minutes without
+  starting, or every item checked in the last day marked out of stock. Try
+  eBay again now clears eBay's wait and makes it due, as Read now does on
+  Crawl health.
+- Test eBay now (below), then four folded sections (`<details>`, so they open
+  without JavaScript): Where eBay is the cheapest (cheaper than every UK
+  shop, a tie going to the shop, or the only price, with the best shop
+  price, the saving, the seller and when it was checked, 25 at first and See
+  all for every one, which opens it); Clicks to eBay (people's clicks today,
+  in 7 and 30 days, never a robot's or a direct hit, to an item and to
+  eBay's search, beside every shop's, linked to the clicks); Seller rules;
+  and Log to copy, last. With no eBay price counting, the cheapest list says
+  so rather than "eBay is not the cheapest".
 - `ebay.seller_rules` falls back to the defaults if the database cannot
-  answer, so the rules can never be what stops eBay's checks.
-- The why box also lists the facts behind it, one a line: the reader,
-  eBay's last good read and when its next read is due (or how long it has
-  been due), the last item check (asked about, in stock, gone, not reached)
-  and the last problem one hit (`ebay.note_check`, kept in the shared cache
-  under `ebay:last-check`), the size of the ended list and how many of its
-  items are in stock. Reasons added: eBay's read due over 30 minutes without
-  starting, the last check stopped by a problem (eBay not answering, the
-  day's lookups used, or an error nobody foresaw), items in stock with no
-  item number in their link, and items in stock on the ended list.
+  answer, so the rules can never be what stops eBay's searches.
 
 - **Log to copy** (the owner, 16 Nov 2026, asked to run a command on the
   server and paste what it printed: "why aren't you producing an output log
@@ -7543,9 +7510,9 @@ button"). One page, linked from the Admin home:
   `ebay_health.log_text`: the verdict and reasons; the background reader's
   heartbeat, jobs and what it last planned (the jobs running, the queue, what
   eBay is due, and whether the import lock is free or refused and why); eBay's
-  own row; what eBay last said of its allowances; eBay's items by how long ago
-  they were checked; the last item check and problem; the last 6 searches with
-  their errors; and the reader's own log. No key or token is in it: the
+  own row; what eBay last said was left of the day's searches; eBay's items on
+  the site's products by how long ago they were checked; the last Test eBay
+  now; the last 6 searches with their errors; and the reader's own log. No key or token is in it: the
   value of any setting that reads as a secret and every email address are
   taken out of each kept line and of the finished text (`worklog.scrub`).
 - The reader's own log is `catalogue/worklog.py`: `run_worker` installs a
@@ -7554,8 +7521,8 @@ button"). One page, linked from the Admin home:
   `reader.log` in `RIPRAPTOR_CACHE_DIR`. A file, not the cache, because the
   update command clears the cache and the lines from before an update are the
   ones wanted. It is trimmed to 600 lines when it reaches 1,200. The reader
-  now logs each eBay check, each eBay read (the search, or the day's search
-  handed back), and reads kept waiting over 5 minutes for the import lock,
+  logs each eBay read (this hour's search and what it updated), and reads
+  kept waiting over 5 minutes for the import lock,
   with why, every 10 minutes until the lock is free. What it last planned is
   a snapshot in the cache (`worklog.note_plan`), written every minute.
 - A lock file that cannot be opened no longer stops every job being started:
@@ -7568,8 +7535,8 @@ application does not have. So a price is kept up to date only by searching
 for its product again, from the same daily allowance of about 5,000. The
 search is now spread over every hour, the most viewed products first, with
 the last search that worked tried first, and an eBay price counts for 24
-hours. The item checks between searches still try every six hours
-(`REFUSED_PAUSE`), so they start working on their own if eBay grants access.
+hours. Since 24 Nov 2026 the item checks between searches are not tried at
+all (below).
 Toys that carry a card game's name (`ebay.NOT_THE_THING`: Jazwares, Wicked
 Cool Toys, Funko, Lego, figures, plush, "58 pieces") are never taken for a
 card product: Jazwares' figure advent calendar was the Holiday Calendar 2024
@@ -7577,6 +7544,8 @@ card box at £31.90 (the owner: "These aren't the same thing"); the hourly
 tidy hides such a listing already saved.
 
 **eBay's item lookup was asked at the wrong address, 22 Oct to 16 Nov 2026.**
+(History: since 24 Nov 2026 the bulk lookup described here is not used at
+all.)
 The owner's Log to copy showed it: "refreshing 1966 known listings", then "0
 known listings still live", and two minutes later the search found 262 of 262
 products live, with all 5,000 of the day's lookups unused. The bulk lookup
@@ -7607,12 +7576,14 @@ list and nothing was checked. What changed:
   a limited release for chosen partners, so this can happen at the right
   address too.
 - **Test eBay now** on eBay health (`ebay.self_test`) asks eBay for a token,
-  its allowances, the lookup for up to five listings at once and for one on
-  its own, and shows eBay's answer to each, on the page and in the log to
-  copy. It spends two lookups, no search, and changes no listing.
+  the day's searches left, one search for the product of the newest eBay
+  listing in stock and the one-item lookup for that listing, and shows
+  eBay's answer to each, on the page and in the log to copy. It spends two
+  of the day's searches and changes no listing.
 
-**Why eBay stopped updating, 16 Nov 2026.** Two more faults stopped eBay's
-item checks with no error anywhere:
+**Why eBay stopped updating, 16 Nov 2026.** (History: the item checks named
+here were removed on 24 Nov 2026.) Two more faults stopped eBay's item
+checks with no error anywhere:
 
 - A shop due a read is not probed, since its read sees every listing. eBay
   is due its read every hour (the daily search, handed back the rest of the
@@ -7629,7 +7600,7 @@ item checks with no error anywhere:
   ratings a seller needs, saved in `EbaySettings` and used for every offer
   (`ebay.seller_rules`, cached, cleared on save). The defaults are the old
   95% and 50. The page says how many prices showing now are below the rules;
-  each is judged again at its next check, within 2 hours for one in stock.
+  each is judged again when its product is next searched, within 20 hours.
 
 **What Rip couldn't find** (Admin, `/admin/rip-wants/`, `web/rip_wants.py`;
 the owner picked it on 15 Nov 2026). What people asked Rip for that the site

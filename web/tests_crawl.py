@@ -118,10 +118,11 @@ class CrawlPageTests(TestCase):
         }})
         page = self.client.get(self.url)
         self.assertContains(page, "eBay today, as of ")
-        self.assertContains(page, "3870 searches and 4610 item lookups left, resetting ")
-        self.assertContains(page, "Searches find products not yet on eBay; item lookups keep known listings fresh, twenty at a time.")
+        self.assertContains(page, "3870 searches left, resetting ")
+        self.assertContains(page, "The hourly search finds new products on eBay and keeps known listings fresh.")
+        self.assertNotContains(page, "item lookups")
         WorkerState.objects.filter(pk=1).update(ebay_usage={"searches": None, "lookups": 200, "reset": "", "asked_at": self.now.isoformat()})
-        self.assertContains(self.client.get(self.url), "searches not counted and 200 item lookups left.")
+        self.assertContains(self.client.get(self.url), "searches left not counted.")
 
     def test_read_all_makes_every_scheduled_shop_due_now_and_leaves_paused_ones(self):
         # The owner, 6 Nov 2026: "a quick feature in admin Crawl health to read all".

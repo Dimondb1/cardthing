@@ -539,17 +539,17 @@ class Reader:
                 self.ebay_headers = ebay.headers_for(ebay.access_token(app, cert, request=request), campaign)
             self.pages_left -= 1
             self.requests += 1
-            answer = request(ebay.items_address([item_id]), self.ebay_headers)
+            # eBay's one-item lookup (getItem): its twenty-at-once lookup is refused to this application.
+            answer = request(ebay.item_address(item_id), self.ebay_headers)
         except ebay.EbayError as exc:
             if ebay.not_found(exc):
                 return {"status": "gone", "http": 404, "source": "ebay"}
             if "Set RIPRAPTOR_EBAY" in str(exc):
                 return {"status": "not read", "why": "eBay's keys are not set"}
             return {"status": "not read", "why": "eBay did not answer"}
-        items = [item for item in answer.get("items") or [] if isinstance(item, dict)]
-        if not items:
+        if not isinstance(answer, dict) or not answer.get("itemId"):
             return {"status": "gone", "http": 404, "source": "ebay"}
-        item = items[0]
+        item = answer
         price = item.get("price") or {}
         found = {"status": "product", "source": "ebay", "name": text_of(item.get("title"), TEXT_CHARS),
                  "price": str(money(price.get("value")) or "") if price.get("currency", "GBP") == "GBP" else "",

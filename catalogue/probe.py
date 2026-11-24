@@ -21,9 +21,9 @@ from .models import Listing, Retailer
 # daily search, a feed shop's from the feed the owner agreed with it (its links are affiliate clicks,
 # which a server must never follow), and a price entered by hand is never fetched.
 NOT_PROBED = (Retailer.Source.EBAY, Retailer.Source.AMAZON, Retailer.Source.MANUAL, Retailer.Source.FEED)
-# Of those, eBay's listings are still checked between its daily runs, through its bulk item lookup rather than a
-# page (ebay.check_listings, the background reader's check_ebay); the rest are never asked about one listing.
-NEVER_CHECKED = (Retailer.Source.AMAZON, Retailer.Source.MANUAL, Retailer.Source.FEED)
+# None of those is asked about one listing at a time. eBay's were, through its twenty-at-once item lookup, until
+# 24 Nov 2026: eBay has always refused it to this application, so its prices are kept fresh by its hourly searches.
+NEVER_CHECKED = (Retailer.Source.EBAY, Retailer.Source.AMAZON, Retailer.Source.MANUAL, Retailer.Source.FEED)
 
 # One cookie-keeping fetch per shop that needs a session, kept for the life of the process.
 _session_fetches = {}
@@ -130,7 +130,7 @@ def record_probe(listing, result, checked_at=None):
     """
     if result is None:
         return None
-    # A marketplace check (ebay.check_listings) gives the item's own postage as a third value.
+    # A marketplace check may give the item's own postage as a third value.
     price, availability, *postage = result
     if (price is None or price <= 0) and availability != Listing.Availability.OUT_OF_STOCK:
         return None

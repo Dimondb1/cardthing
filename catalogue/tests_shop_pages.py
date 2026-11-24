@@ -249,7 +249,8 @@ class EbayTests(ReaderBase):
         self.assertEqual((said["page_price"], said["page_stock"], said["page_barcode"], said["shop_condition"]),
                          ("£112.00", "in stock", "same", "New"))
         self.assertIn("Language: English", said["shop_item_specifics"])
-        self.assertEqual(self.asked[-1], ebay.ITEMS_URL + "?item_ids=v1%7C123456789012%7C0")
+        # eBay's one-item lookup: the twenty-at-once one is refused to this application.
+        self.assertEqual(self.asked[-1], ebay.ITEM_URL + "v1%7C123456789012%7C0")
 
     def test_an_ended_listing_is_gone(self):
         from . import ebay

@@ -36,11 +36,22 @@ def env_bool(name, default=False):
 
 DEBUG = env_bool("DJANGO_DEBUG", default=True)
 
+# .env.example's stand-in, public in the repository: a server left with it would sign every link and cookie with a
+# key anyone can read, so it is refused like a short or repetitive key (Django's own deploy check, made a stop).
+EXAMPLE_SECRET_KEYS = {"replace-with-a-long-random-string"}
+
+
+def weak_secret_key(key):
+    return key in EXAMPLE_SECRET_KEYS or len(key) < 50 or len(set(key)) < 5 or key.startswith("django-insecure-")
+
+
 SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "")
 if not SECRET_KEY:
     if not DEBUG:
         raise RuntimeError("Set DJANGO_SECRET_KEY when DJANGO_DEBUG is off.")
     SECRET_KEY = "dev-only-insecure-key-do-not-use-in-production"
+elif not DEBUG and weak_secret_key(SECRET_KEY):
+    raise RuntimeError("DJANGO_SECRET_KEY is the example one, or shorter than 50 characters: set a long random one.")
 
 ALLOWED_HOSTS = [
     host.strip()

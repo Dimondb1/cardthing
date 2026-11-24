@@ -224,7 +224,7 @@ class SpreadsheetDeployTests(TestCase):
         self.assertIn('DATA_LOCK="${RIPRAPTOR_CACHE_DIR:-/var/lib/ripraptor/cache}/data-files.lock"', text)
         self.assertEqual(data_jobs.lock_path().name, "data-files.lock")
         wait = text.index('sudo -u ripraptor timeout 1800 flock "$DATA_LOCK" true')
-        self.assertGreater(wait, text.index("set -a; . ./.env; set +a"))
+        self.assertGreater(wait, text.index('RIPRAPTOR_CACHE_DIR="$(env_value RIPRAPTOR_CACHE_DIR)"'))
         for later in ("manage.py compact_db", "manage.py migrate", "systemctl restart ripraptor"):
             self.assertLess(wait, text.index(later), later)
 
@@ -411,8 +411,7 @@ class CronTests(TestCase):
 
         text = (DEPLOY / "install.sh").read_text()
         # Under the update's time limit ($STEP), like every step run while the reader is stopped.
-        found = re.search(r"sudo -u ripraptor bash -c \"cd \$DIR && set -a && \. \./\.env && set \+a && "
-                          r"\$STEP \.venv/bin/python manage\.py shell -c '([^']+)'\"", text)
+        found = re.search(r"^site \$STEP \.venv/bin/python manage\.py shell -c '([^']+)'$", text, re.M)
         self.assertIsNotNone(found, "install.sh does not empty the cache")
         self.assertGreater(found.start(), text.index("manage.py migrate"))
         self.assertGreater(found.start(), text.index("systemctl restart ripraptor"))
@@ -613,7 +612,8 @@ class WorkerThreadsInstallTests(TestCase):
 
     def run_line(self, env_text, mem_kb):
         text = (DEPLOY / "install.sh").read_text()
-        line = "\n".join(l for l in text.splitlines() if "RIPRAPTOR_WORKER_THREADS" in l and not l.startswith("#"))
+        line = "\n".join(l for l in text.splitlines() if "RIPRAPTOR_WORKER_THREADS" in l and " .env" in l
+                         and not l.startswith("#"))
         folder = Path(tempfile.mkdtemp(prefix="ripraptor-install-test-"))
         self.addCleanup(shutil.rmtree, folder, True)
         (folder / ".env").write_text(env_text)

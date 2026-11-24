@@ -23,6 +23,10 @@ Environment=PYTHONUNBUFFERED=1
 # three quarters of MemoryMax (catalogue/worker.py MEMORY_SHARE) rather than reach it.
 Environment=MALLOC_ARENA_MAX=2
 ExecStart=/srv/ripraptor/.venv/bin/python manage.py run_worker
+# It reads its code and settings but writes only its own data and the shared /tmp (the import lock it shares with
+# the cron jobs), as the site does (ripraptor.service).
+ProtectSystem=strict
+ReadWritePaths=-/var/lib/ripraptor -/srv/ripraptor/media -/tmp -/var/tmp
 Restart=always
 RestartSec=10
 WatchdogSec=180

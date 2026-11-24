@@ -681,7 +681,7 @@ class InstallTests(TestCase):
     def test_install_builds_the_lists_after_emptying_the_cache(self):
         text = (DEPLOY / "install.sh").read_text()
         cleared = text.index("cache.clear()")
-        warmed = re.search(r"\.venv/bin/python manage\.py warm_pages\"( \|\| true)?\n", text)
+        warmed = re.search(r"\.venv/bin/python manage\.py warm_pages\"?( \|\| true)?\n", text)
         self.assertIsNotNone(warmed, "install.sh does not build the page lists")
         self.assertGreater(warmed.start(), cleared)
         self.assertEqual(warmed.group(1), " || true")   # a failure never stops the install

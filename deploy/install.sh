@@ -75,19 +75,59 @@ echo 'vm.swappiness=10' > /etc/sysctl.d/90-ripraptor.conf
 sysctl -q -p /etc/sysctl.d/90-ripraptor.conf || true
 
 id -u ripraptor >/dev/null 2>&1 || useradd --system --home "$DIR" --shell /usr/sbin/nologin ripraptor
-git config --global --add safe.directory "$DIR" >/dev/null 2>&1 || true   # the checkout is owned by ripraptor, git runs as root
+
+# Root and ripraptor (the account the site, the reader and the cron jobs run as) are kept apart by who owns what.
+# Everything root runs or reads here belongs to root, and ripraptor can only read it: the code, its history (.git),
+# the Python packages (.venv) and the settings (.env, which ripraptor reads through its group). ripraptor writes only
+# its data: /var/lib/ripraptor (the database, the cache, saved keys, backups), media (uploaded pictures) and
+# staticfiles (collectstatic's copy). Every manage.py step below runs as ripraptor (site), never as root. Until
+# 24 Nov 2026 the whole folder belonged to ripraptor and root ran its .venv and shell-read its .env on every update,
+# so a break-in to the site could have become root at the next update (the security audit).
+# A checkout whose history or packages belonged to ripraptor has both made again, once, by root: nothing that
+# account could have changed is ever run as root. Root's old exception for it (safe.directory) goes too.
+git config --global --fixed-value --unset-all safe.directory "$DIR" >/dev/null 2>&1 || true
+FRESH_VENV=0
+if [ -d "$DIR" ]; then
+  if [ -e "$DIR/.git" ] && [ "$(stat -c %u "$DIR/.git")" != 0 ]; then rm -rf "${DIR:?}/.git"; fi
+  if [ ! -d "$DIR/.venv" ] || [ "$(stat -c %u "$DIR/.venv")" != 0 ]; then FRESH_VENV=1; fi
+  # A link ripraptor may have left where a file root writes goes, or where its own folders go, is never followed.
+  if [ -L "$DIR/.env" ]; then echo "$DIR/.env is a link, not a file. Stopping: look at it before updating."; exit 1; fi
+  for kept in media staticfiles; do if [ -L "$DIR/$kept" ]; then rm -f "${DIR:?}/$kept"; fi; done
+  find "$DIR" -xdev \( -path "$DIR/media" -o -path "$DIR/staticfiles" \) -prune -o -exec chown -h root:root {} +
+  find "$DIR" -xdev \( -path "$DIR/media" -o -path "$DIR/staticfiles" \) -prune -o ! -type l -exec chmod go-w {} +
+  if [ -f "$DIR/.env" ]; then chown root:ripraptor "$DIR/.env" && chmod 640 "$DIR/.env"; fi
+fi
 if [ -d "$DIR/.git" ]; then
   git -C "$DIR" fetch -q origin "$BRANCH" && git -C "$DIR" checkout -q "$BRANCH" && git -C "$DIR" reset -q --hard "origin/$BRANCH"
+elif [ -d "$DIR" ]; then
+  git -C "$DIR" init -q
+  git -C "$DIR" remote add origin "$REPO"
+  git -C "$DIR" fetch -q origin "$BRANCH"
+  git -C "$DIR" checkout -q -f -B "$BRANCH" "origin/$BRANCH"
 else
   git clone -q --branch "$BRANCH" "$REPO" "$DIR"
+  FRESH_VENV=1
 fi
 cd "$DIR"
-[ -d .venv ] || python3 -m venv .venv
-.venv/bin/pip install -q -r requirements.txt
+# The packages are run as python -m (pip, gunicorn), never by a script's own first line, so a folder made beside the
+# old one and then moved into its place works: the running site keeps its packages until it is restarted below.
+if [ "$FRESH_VENV" = 1 ]; then
+  rm -rf .venv-new .venv-old
+  python3 -m venv .venv-new
+  .venv-new/bin/python -I -m pip install -q -r requirements.txt
+  if [ -e .venv ]; then mv .venv .venv-old; fi
+  mv .venv-new .venv
+  rm -rf .venv-old
+else
+  .venv/bin/python -I -m pip install -q -r requirements.txt
+fi
+# Python cannot save its compiled copies in a folder ripraptor cannot write, so root makes them once per update and
+# every process starts as quickly as before.
+python3 -I -m compileall -q -j 0 manage.py ripraptor catalogue content web inbox guides twostep >/dev/null
 
 if [ ! -f .env ]; then
-  SECRET=$(.venv/bin/python -c "import secrets; print(secrets.token_urlsafe(50))")
-  cat > .env <<ENV
+  SECRET=$(python3 -I -c "import secrets; print(secrets.token_urlsafe(50))")
+  (umask 077 && cat > .env <<ENV
 DJANGO_DEBUG=0
 DJANGO_SECRET_KEY=$SECRET
 DJANGO_ALLOWED_HOSTS=$DOMAIN,www.$DOMAIN
@@ -96,12 +136,43 @@ DJANGO_SQLITE_PATH=/var/lib/ripraptor/db.sqlite3
 RIPRAPTOR_USE_FEED_IMAGES=1
 RIPRAPTOR_GEOIP_DB=/var/lib/ripraptor/dbip-country.mmdb
 ENV
+  )
 fi
-mkdir -p /var/lib/ripraptor media
-# The cache the web app and every cron command share (RIPRAPTOR_CACHE_DIR's default). It must
-# belong to ripraptor: a folder the site cannot write falls back to a cache per process.
-install -d -o ripraptor -g ripraptor /var/lib/ripraptor/cache
-set -a; . ./.env; set +a
+grep -q RIPRAPTOR_GEOIP_DB .env || echo "RIPRAPTOR_GEOIP_DB=/var/lib/ripraptor/dbip-country.mmdb" >> .env
+# Pre-order emails go only to alerts asked for from this install on, when the form first promised them.
+# Written once, so a later update never moves the cut-off and an earlier subscriber never hears about pre-orders.
+grep -q RIPRAPTOR_PREORDER_ALERTS_FROM .env || echo "RIPRAPTOR_PREORDER_ALERTS_FROM=$(date -u +%Y-%m-%dT%H:%M:%S+00:00)" >> .env
+# A server with under 1.5 GB of memory runs two background reader jobs at once instead of three, so
+# the reader stays under its memory limit beside the site. A "1 GB" server reports about 960 MB, which
+# the old 900 MB line missed. Written once; a value set by hand stays. A server resized to 1.5 GB or more
+# since loses the 2 written for it, so its reader runs three jobs at the next update.
+[ "$(awk '/^MemTotal:/ {print $2}' /proc/meminfo)" -lt 1500000 ] || sed -i '/^RIPRAPTOR_WORKER_THREADS=2$/d' .env
+grep -q RIPRAPTOR_WORKER_THREADS .env || { [ "$(awk '/^MemTotal:/ {print $2}' /proc/meminfo)" -lt 1500000 ] && echo "RIPRAPTOR_WORKER_THREADS=2" >> .env || true; }
+# The Google Analytics id the site used until 30 Oct 2026 reached no stream of the owner's: a copy of it in .env
+# would keep sending there, so it goes and the site's default (settings.py) applies.
+sed -i '/^RIPRAPTOR_GA_ID=G-LGFBHYP6JC$/d' .env
+# Root reads the few settings it needs from .env as text, and never runs it as a script.
+env_value() { sed -n "s/^$1=//p" .env | tail -n 1 | sed -e 's/^["'"'"']//' -e 's/["'"'"']$//'; }
+# The site refuses to start with .env.example's stand-in key, or one under 50 characters (ripraptor/settings.py), so
+# such a key is replaced here with a long random one. Signed links already sent stop working and staff sign in again.
+KEY="$(env_value DJANGO_SECRET_KEY)"
+if [ "$KEY" = replace-with-a-long-random-string ] || [ "${#KEY}" -lt 50 ] || [ "$(printf '%s' "$KEY" | fold -w1 | sort -u | wc -l)" -lt 5 ]; then
+  sed -i '/^DJANGO_SECRET_KEY=/d' .env
+  echo "DJANGO_SECRET_KEY=$(python3 -I -c "import secrets; print(secrets.token_urlsafe(50))")" >> .env
+  echo "The secret key in .env was the example one or too short, so a new one was written. Staff sign in again."
+fi
+unset KEY
+chown root:ripraptor .env && chmod 640 .env
+# Every manage.py step runs as ripraptor, with .env loaded by ripraptor's own shell.
+site() { sudo -u ripraptor bash -c 'cd "$0" && set -a && . ./.env && set +a && exec "$@"' "$DIR" "$@"; }
+
+# ripraptor's own folders. The cache the web app and every cron command share (RIPRAPTOR_CACHE_DIR's default) must
+# be ripraptor's: a folder the site cannot write falls back to a cache per process. chown -R changes a link itself,
+# never what it points to.
+mkdir -p /var/lib/ripraptor media staticfiles
+chown -R ripraptor:ripraptor /var/lib/ripraptor media staticfiles
+sudo -u ripraptor mkdir -p /var/lib/ripraptor/cache /var/lib/ripraptor/backups
+RIPRAPTOR_CACHE_DIR="$(env_value RIPRAPTOR_CACHE_DIR)"
 # A spreadsheet being made (manage.py data_files, which the site starts) holds this lock until its run
 # ends, at most 25 minutes. Wait for it, so the restart below never stops a file part way and the
 # database is not shrunk or migrated under it. As ripraptor, so the lock file stays the runner's.
@@ -115,10 +186,8 @@ fi
 # the -wal file). It makes room first and stops, changing nothing, if there is still not enough.
 # The newest five copies are kept in /var/lib/ripraptor/backups/.
 if [ -f /var/lib/ripraptor/db.sqlite3 ]; then
-  # As the site's own user, so the -wal and -shm files it may create stay writable by the running site.
-  sudo -E -u ripraptor .venv/bin/python manage.py compact_db
-  chown ripraptor:ripraptor /var/lib/ripraptor/db.sqlite3*
-  .venv/bin/python manage.py backup_db --keep 5
+  site .venv/bin/python manage.py compact_db
+  site .venv/bin/python manage.py backup_db --keep 5
 fi
 # Keep the import log to a fixed size: four weekly files, each cut at 50 MB.
 cat > /etc/logrotate.d/ripraptor <<'ROTATE'
@@ -132,7 +201,7 @@ cat > /etc/logrotate.d/ripraptor <<'ROTATE'
     copytruncate
 }
 ROTATE
-.venv/bin/python manage.py migrate -v0
+site .venv/bin/python manage.py migrate -v0
 # Football cards became Sports cards at /games/sports-cards/, filed by product line (catalogue/sports.py). The
 # address moves before the language and type steps below read it, with the background reader stopped first so
 # its old code never meets the new address (it is started again at the end). The old pages send visitors on.
@@ -154,39 +223,24 @@ trap 'rm -f /run/ripraptor-updating; systemctl start ripraptor-worker 2>/dev/nul
 # Every step while the reader is stopped has a time limit: one that hangs is ended, which ends the script and starts
 # the reader on the way out, where before it would have waited for ever with the reader stopped.
 STEP="timeout -k 30 900"
-$STEP .venv/bin/python manage.py file_sports_cards
-$STEP .venv/bin/python manage.py backfill_restocks >/dev/null
-$STEP .venv/bin/python manage.py set_languages >/dev/null
-$STEP .venv/bin/python manage.py set_types >/dev/null
-$STEP .venv/bin/python manage.py collectstatic --noinput -v0
-$STEP .venv/bin/python manage.py setup_shops
+site $STEP .venv/bin/python manage.py file_sports_cards
+site $STEP .venv/bin/python manage.py backfill_restocks >/dev/null
+site $STEP .venv/bin/python manage.py set_languages >/dev/null
+site $STEP .venv/bin/python manage.py set_types >/dev/null
+site $STEP .venv/bin/python manage.py collectstatic --noinput -v0
+site $STEP .venv/bin/python manage.py setup_shops
 # Products added by hand rather than by a shop read, so they are on the site before any shop lists them.
-$STEP .venv/bin/python manage.py import_products catalogue/data/union_arena.csv >/dev/null
-grep -q RIPRAPTOR_GEOIP_DB .env || echo "RIPRAPTOR_GEOIP_DB=/var/lib/ripraptor/dbip-country.mmdb" >> .env
-# Pre-order emails go only to alerts asked for from this install on, when the form first promised them.
-# Written once, so a later update never moves the cut-off and an earlier subscriber never hears about pre-orders.
-grep -q RIPRAPTOR_PREORDER_ALERTS_FROM .env || echo "RIPRAPTOR_PREORDER_ALERTS_FROM=$(date -u +%Y-%m-%dT%H:%M:%S+00:00)" >> .env
-# A server with under 1.5 GB of memory runs two background reader jobs at once instead of three, so
-# the reader stays under its memory limit beside the site. A "1 GB" server reports about 960 MB, which
-# the old 900 MB line missed. Written once; a value set by hand stays. A server resized to 1.5 GB or more
-# since loses the 2 written for it, so its reader runs three jobs at the next update.
-[ "$(awk '/^MemTotal:/ {print $2}' /proc/meminfo)" -lt 1500000 ] || sed -i '/^RIPRAPTOR_WORKER_THREADS=2$/d' .env
-grep -q RIPRAPTOR_WORKER_THREADS .env || { [ "$(awk '/^MemTotal:/ {print $2}' /proc/meminfo)" -lt 1500000 ] && echo "RIPRAPTOR_WORKER_THREADS=2" >> .env || true; }
-# The Google Analytics id the site used until 30 Oct 2026 reached no stream of the owner's: a copy of it in .env
-# would keep sending there, so it goes and the site's default (settings.py) applies.
-sed -i '/^RIPRAPTOR_GA_ID=G-LGFBHYP6JC$/d' .env
-set -a; . ./.env; set +a
-[ -f /var/lib/ripraptor/dbip-country.mmdb ] || $STEP .venv/bin/python manage.py fetch_geoip || true
-chown -R ripraptor:ripraptor "$DIR" /var/lib/ripraptor
+site $STEP .venv/bin/python manage.py import_products catalogue/data/union_arena.csv >/dev/null
+[ -f /var/lib/ripraptor/dbip-country.mmdb ] || site $STEP .venv/bin/python manage.py fetch_geoip || true
 
 # Scripts that ran our pages left out of people and clicks (catalogue/automated.py), now rather than at the hour, so
 # the deals rails and the stock checks stop following them at once.
-sudo -u ripraptor bash -c "cd $DIR && set -a && . ./.env && set +a && timeout -k 30 600 .venv/bin/python manage.py classify_visits" || true
+site timeout -k 30 600 .venv/bin/python manage.py classify_visits || true
 # Each product's Price check for lists (the Fairest price sort, the gauge on cards), now rather than at the hour.
-sudo -u ripraptor bash -c "cd $DIR && set -a && . ./.env && set +a && timeout -k 30 600 .venv/bin/python manage.py refresh_price_checks" || true
+site timeout -k 30 600 .venv/bin/python manage.py refresh_price_checks || true
 # How many packs, and cards a pack, each product holds, from the shops' descriptions: now rather than at the hour.
 # Both before the cached lists are emptied and built again below, so the home rows and Cheapest per card read them.
-sudo -u ripraptor bash -c "cd $DIR && set -a && . ./.env && set +a && timeout -k 30 600 .venv/bin/python manage.py refresh_contents" || true
+site timeout -k 30 600 .venv/bin/python manage.py refresh_contents || true
 
 cp deploy/ripraptor.service /etc/systemd/system/ripraptor.service
 systemctl daemon-reload
@@ -195,13 +249,13 @@ systemctl restart ripraptor
 # The cache folder outlives a restart, so the new code would read lists the old code pickled for up
 # to five minutes: a query per row for a field a migration added, or an error for one it now sets.
 # Empty it once the old workers have stopped; clearing before the restart would let them refill it.
-sudo -u ripraptor bash -c "cd $DIR && set -a && . ./.env && set +a && $STEP .venv/bin/python manage.py shell -c 'from django.core.cache import cache; cache.clear()'"
+site $STEP .venv/bin/python manage.py shell -c 'from django.core.cache import cache; cache.clear()'
 # Then build the lists the home, Deals and drops pages read, so the first visitors after a deploy do not wait
 # for them. A failure leaves them to be built by the first visitor, as before.
-sudo -u ripraptor bash -c "cd $DIR && set -a && . ./.env && set +a && $STEP .venv/bin/python manage.py warm_pages" || true
+site $STEP .venv/bin/python manage.py warm_pages || true
 # Cardmarket's catalogue and prices, once, when none are held yet, so matching can start without waiting for the
 # daily read at 6:44. A failure leaves it to that read.
-sudo -u ripraptor bash -c "cd $DIR && set -a && . ./.env && set +a && .venv/bin/python manage.py shell -c 'from catalogue.models import CardmarketProduct; raise SystemExit(0 if CardmarketProduct.objects.exists() else 1)' || timeout -k 30 900 .venv/bin/python manage.py import_cardmarket" || true
+site .venv/bin/python manage.py shell -c 'from catalogue.models import CardmarketProduct; raise SystemExit(0 if CardmarketProduct.objects.exists() else 1)' || site timeout -k 30 900 .venv/bin/python manage.py import_cardmarket || true
 
 # One address for the site: www. sends visitors and Google to the same page without it, permanently.
 # Serving both made Google index the whole site twice and split each page's standing between them.
@@ -288,4 +342,5 @@ echo "Done. https://$DOMAIN should answer within a minute (Caddy fetches the cer
 echo "Create your admin login with:"
 echo "  cd $DIR && sudo -u ripraptor bash -c 'set -a; . ./.env; set +a; .venv/bin/python manage.py createsuperuser'"
 echo "Prices are being read now; watch with: journalctl -fu ripraptor-worker"
+RIPRAPTOR_WORKER_THREADS="$(env_value RIPRAPTOR_WORKER_THREADS)"
 echo "The background reader runs ${RIPRAPTOR_WORKER_THREADS:-3} jobs at once on this server's $(( $(awk '/^MemTotal:/ {print $2}' /proc/meminfo) / 1024 )) MB of memory."

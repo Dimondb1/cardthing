@@ -2366,7 +2366,7 @@ class AnalyticsTests(PageTestCase):
                 "print(json.dumps(s.RIPRAPTOR_GA_ID))")
         env = {key: value for key, value in os.environ.items() if not key.startswith(("DJANGO_", "RIPRAPTOR_"))}
         with tempfile.TemporaryDirectory() as folder:
-            env.update(DJANGO_SETTINGS_MODULE="ripraptor.settings", DJANGO_DEBUG="0", DJANGO_SECRET_KEY="x" * 50,
+            env.update(DJANGO_SETTINGS_MODULE="ripraptor.settings", DJANGO_DEBUG="0", DJANGO_SECRET_KEY="test-only-key-" + "0123456789" * 5,
                        RIPRAPTOR_CACHE_DIR=folder)
             done = subprocess.run([sys.executable, "-c", code], cwd=settings.BASE_DIR, env=env, capture_output=True,
                                   text=True, timeout=120)

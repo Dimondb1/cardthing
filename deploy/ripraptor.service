@@ -7,7 +7,12 @@ After=network.target
 User=ripraptor
 WorkingDirectory=/srv/ripraptor
 EnvironmentFile=/srv/ripraptor/.env
-ExecStart=/srv/ripraptor/.venv/bin/gunicorn ripraptor.wsgi:application --bind 127.0.0.1:8000 --workers 2 --timeout 60
+# As python -m, so the packages' folder can be made again beside the old one and moved into place (install.sh).
+ExecStart=/srv/ripraptor/.venv/bin/python -m gunicorn ripraptor.wsgi:application --bind 127.0.0.1:8000 --workers 2 --timeout 60
+# The site reads its code and settings but writes only its own data and the shared /tmp (the cron jobs' locks,
+# gunicorn's own files): even a break-in to it cannot change the code root later updates. install.sh owns the rest.
+ProtectSystem=strict
+ReadWritePaths=-/var/lib/ripraptor -/srv/ripraptor/media -/tmp -/var/tmp
 Restart=always
 # When memory runs out, the kernel stops background work before the site visitors use.
 OOMScoreAdjust=-500

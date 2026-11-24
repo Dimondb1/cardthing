@@ -13,7 +13,8 @@ S='2 days ago'; D=/srv/ripraptor; L=/var/log/ripraptor-import.log
 h() { printf '== %s ==\n' "$*"; }
 show() { o=$(cat); if [ -n "$o" ]; then printf '%s\n' "$o"; else echo '(nothing)'; fi; }
 j() { journalctl --no-pager -q -o short --since "$S" "$@" 2>/dev/null | sed -E 's/^(\S+ +\S+ \S+) \S+ /\1 /; s/\[[0-9-]+ [0-9:]+ [+-][0-9]{4}\] //'; }
-g() { git -c safe.directory="$D" -C "$D" "$@" 2>/dev/null || runuser -u ripraptor -- git -C "$D" "$@"; }
+# git as root only in a checkout root owns (install.sh); one the site's account still owns is read as that account.
+g() { if [ "$(stat -c %u "$D/.git" 2>/dev/null)" = 0 ]; then git -C "$D" "$@" 2>/dev/null; else runuser -u ripraptor -- git -C "$D" "$@"; fi; }
 h "1 Now (UK time) and last boots"
 echo "now $(date '+%a %d %b %H:%M %Z'), booted $(uptime -s)"; uptime
 { last -x reboot shutdown 2>/dev/null | grep -E '^(reboot|shutdown)' || journalctl --list-boots --no-pager | tail -n 3; } | head -n 3 | show

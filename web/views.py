@@ -3397,7 +3397,9 @@ def share_links(request, product, page_url, cheapest=None):
     }
 
 
-ALERT_STATES = ("sent", "already", "limit", "invalid", "failed")
+# alerts.ask answers "sent" for an address that already has the alert or is at its limit, so the page never tells a
+# stranger about one.
+ALERT_STATES = ("sent", "invalid", "failed")
 # A price alert can also have a price that is not one ("price") or is not below the cheapest now ("under").
 TRACK_STATES = ALERT_STATES + ("price", "under")
 
@@ -3608,6 +3610,10 @@ def alert_confirm(request, token):
     alert = alerts.confirm(token)
     if alert is None:
         heading, message, product = text(request, "alerts.gone.title"), text(request, "alerts.gone.body"), None
+    elif alert.confirmed_at is None:   # the address already has the most confirmed alerts we keep
+        heading = text(request, "alerts.full.title")
+        message = text(request, "alerts.full.body", count=alerts.MAX_PER_EMAIL)
+        product = alert.product
     else:
         heading = text(request, "alerts.confirmed.title")
         if alert.max_price is not None:

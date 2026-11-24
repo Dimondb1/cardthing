@@ -29,7 +29,8 @@ MARKETPLACES = (Retailer.Source.AMAZON, Retailer.Source.EBAY)
 # owner's request, but never Amazon's: Amazon's UK Associates policies forbid price alerting on its prices without
 # its written agreement (README, Amazon Associates rules). Back in stock still means a shop, not a marketplace.
 NOT_PRICE_ALERTED = (Retailer.Source.AMAZON,)
-MAX_PER_EMAIL = 30
+MAX_PER_EMAIL = 30            # confirmed alerts one address can wait on
+CONFIRMS_PER_EMAIL_DAY = 10   # confirmation emails one address can be sent in a day, across every product
 UNCONFIRMED_DAYS = 7
 CONFIRMED_DAYS = 183
 
@@ -139,18 +140,36 @@ def render_mail(template, context, store=None):
     )
 
 
+def confirmation_allowed(email):
+    """False once this email address has been sent CONFIRMS_PER_EMAIL_DAY confirmations in a day. Counted before
+    sending, so a form posted over and over, for one product or many, cannot fill someone's inbox."""
+    from .drop_alerts import counted
+
+    return counted("stock_confirm", email, 86400) <= CONFIRMS_PER_EMAIL_DAY
+
+
+def confirmed_count(email):
+    return StockAlert.objects.filter(email=email, confirmed_at__isnull=False).count()
+
+
 def ask(product, email, max_price=None, days=None):
-    """Record a request and send the confirmation. Returns "sent", "already" or "limit". With ``max_price``
-    it is a price alert that keeps looking for ``days`` once confirmed; asked again before it is confirmed,
-    the newest price and time replace the earlier ones."""
+    """Record a request and send the confirmation. Always returns "sent", whatever is known about the address, as
+    drop_alerts.ask and search_alerts.ask do: an address that already has a confirmed alert for this product, is at
+    MAX_PER_EMAIL or has had its confirmations for the day is sent nothing more, and the visitor is not told which,
+    since they may not own it. Only confirmed alerts count toward MAX_PER_EMAIL, so a stranger typing someone's
+    address cannot fill it; confirm() checks the limit again. With ``max_price`` it is a price alert that keeps
+    looking for ``days`` once confirmed; asked again before it is confirmed, the newest price and time replace the
+    earlier ones."""
     email = email.strip().lower()
     existing = StockAlert.objects.filter(product=product, email=email).first()
     if existing and existing.confirmed_at:
-        return "already"
+        return "sent"
+    if existing is None and confirmed_count(email) >= MAX_PER_EMAIL:
+        return "sent"
+    if not confirmation_allowed(email):
+        return "sent"
     terms = {"max_price": max_price, "watch_days": days if max_price is not None else None}
     if existing is None:
-        if StockAlert.objects.filter(email=email).count() >= MAX_PER_EMAIL:
-            return "limit"
         existing = StockAlert.objects.create(product=product, email=email, **terms)
     elif (existing.max_price, existing.watch_days) != (terms["max_price"], terms["watch_days"]):
         StockAlert.objects.filter(pk=existing.pk).update(**terms)
@@ -179,8 +198,13 @@ def ask(product, email, max_price=None, days=None):
 
 
 def confirm(token):
+    """The alert, confirmed, or None for a link that no longer works. One whose address already has MAX_PER_EMAIL
+    confirmed alerts is left unconfirmed (confirmed_at stays None), as search_alerts.confirm does, and the page
+    says so; its link works again within UNCONFIRMED_DAYS once one is stopped."""
     alert = StockAlert.objects.select_related("product").filter(token=token).first()
     if alert is not None and alert.confirmed_at is None:
+        if confirmed_count(alert.email) >= MAX_PER_EMAIL:
+            return alert
         alert.confirmed_at = timezone.now()
         alert.save(update_fields=["confirmed_at"])
         note("confirmed")

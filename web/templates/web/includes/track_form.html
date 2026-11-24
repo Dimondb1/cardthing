@@ -2,11 +2,9 @@
 <div class="alert-box buybox-panel track-box{% if track_state %} is-open{% endif %}" id="track">
   {% if track_state == "sent" %}
     <p class="alert-box__done" role="status">{% copy "alerts.track.sent" %}</p>
-  {% elif track_state == "already" %}
-    <p class="alert-box__done" role="status">{% copy "alerts.form.already" %}</p>
   {% else %}
     <p class="alert-box__title">{% copy "alerts.track.title" %}</p>
-    {% if track_state == "under" %}<p class="alert-box__error" role="alert">{% copy "alerts.track.under" %}</p>{% elif track_state == "price" %}<p class="alert-box__error" role="alert">{% copy "alerts.track.price_invalid" %}</p>{% elif track_state == "limit" %}<p class="alert-box__error" role="alert">{% copy "alerts.form.limit" %}</p>{% elif track_state == "invalid" %}<p class="alert-box__error" role="alert">{% copy "alerts.form.invalid" %}</p>{% elif track_state == "failed" %}<p class="alert-box__error" role="alert">{% copy "alerts.form.failed" %}</p>{% endif %}
+    {% if track_state == "under" %}<p class="alert-box__error" role="alert">{% copy "alerts.track.under" %}</p>{% elif track_state == "price" %}<p class="alert-box__error" role="alert">{% copy "alerts.track.price_invalid" %}</p>{% elif track_state == "invalid" %}<p class="alert-box__error" role="alert">{% copy "alerts.form.invalid" %}</p>{% elif track_state == "failed" %}<p class="alert-box__error" role="alert">{% copy "alerts.form.failed" %}</p>{% endif %}
     <form class="track-box__form" method="post" action="{% url 'web:alert_ask' product.slug %}">
       {% csrf_token %}
       <input type="hidden" name="track" value="1">

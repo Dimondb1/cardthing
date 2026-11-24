@@ -645,9 +645,9 @@ def forget(found):
         back = owed(claims).count()
         claims.delete()
         if isinstance(found, Referral):
-            if found.status == Referral.Status.WAITING:
-                found.delete()
-            else:
+            # Decided from the row as it is now, inside this transaction, never from ``found``: the friend's own
+            # claim may have completed it since find_token, and deleting it then would take the referrer's keyring.
+            if not Referral.objects.filter(pk=found.pk, status=Referral.Status.WAITING).delete()[0]:
                 Referral.objects.filter(pk=found.pk).update(friend_email="", connection="", network="")
         elif isinstance(found, Referrer):
             Referral.objects.filter(referrer=found, status=Referral.Status.WAITING).delete()

@@ -187,6 +187,34 @@ class FlowTests(ReferTestCase):
         self.assertTrue(PromoMark.objects.filter(digest=referrals.email_key("friend@example.com")).exists())
 
 
+    def test_a_delete_that_races_the_friends_own_claim_keeps_the_referrers_keyring(self):
+        # The friend presses delete on a waiting referral and, at the same moment, their claim completes it: the
+        # delete read the row while it was waiting, and acts after the claim.
+        referrer = self.referrer()
+        before = len(self.sent)
+        self.ask_friend(referrer, ip="51.9.9.9", agent="Browser B")
+        stale = Referral.objects.get()
+        self.assertEqual(stale.status, Referral.Status.WAITING)
+        self.post(self.link_in(self.sent[before], "/refer/claim/"), {}, ip="51.9.9.9", agent="Browser B")
+        self.assertEqual(Referral.objects.get().status, Referral.Status.COMPLETE)
+        referrals.forget(stale)
+        # The referrer keeps their keyring; only the friend's details and their own keyring go.
+        self.assertTrue(KeyringClaim.objects.filter(role=KeyringClaim.Role.REFERRER).exists())
+        self.assertFalse(KeyringClaim.objects.filter(role=KeyringClaim.Role.FRIEND).exists())
+        self.assertEqual(self.referral_row().friend_email, "")
+        self.row.refresh_from_db()
+        self.assertEqual(self.row.keyrings_left, 9)
+
+    def test_deleting_a_referral_still_waiting_removes_it(self):
+        referrer = self.referrer()
+        self.ask_friend(referrer, ip="51.9.9.9", agent="Browser B")
+        referrals.forget(Referral.objects.get())
+        self.assertFalse(Referral.objects.exists())
+
+    def referral_row(self):
+        return Referral.objects.get()
+
+
 class AbuseRuleTests(ReferTestCase):
     def test_email_addresses_are_compared_as_people(self):
         same = ["a.b+x@gmail.com", "AB@googlemail.com", "ab@gmail.com"]

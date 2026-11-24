@@ -3,6 +3,7 @@ import datetime
 from datetime import timedelta
 from unittest import mock
 
+from django.core.cache import cache
 from django.core.management import call_command
 from django.test import TestCase, override_settings
 from django.urls import reverse
@@ -35,6 +36,8 @@ class StockAlertTests(TestCase):
         patcher = mock.patch.object(mail, "send", self.outbox)
         patcher.start()
         self.addCleanup(patcher.stop)
+        cache.clear()   # the day's confirmations for each address are counted in the cache
+        self.addCleanup(cache.clear)
 
     def ask(self, email="Ben@Example.com", **extra):
         return self.client.post(reverse("web:alert_ask", args=[self.product.slug]), {"email": email, **extra})
@@ -69,11 +72,13 @@ class StockAlertTests(TestCase):
         self.assertIn('/static/img/logo.png" width="180" alt="RipRaptor"', message["html"])
         self.assertIn("#ff5a1f", message["html"])
         self.assertContains(self.client.get(self.product.get_absolute_url() + "?alert=sent"), "Check your inbox and confirm")
-        # Asking again before confirming resends; after confirming it says so.
+        # Asking again before confirming resends; after confirming it sends nothing, and says only what it says to
+        # anyone, since whoever asks may not own the address.
         self.ask()
         self.assertEqual((StockAlert.objects.count(), len(self.outbox.sent)), (1, 2))
         alerts.confirm(alert.token)
-        self.assertRedirects(self.ask(), f"{self.product.get_absolute_url()}?alert=already#alert", fetch_redirect_response=False)
+        self.assertRedirects(self.ask(), f"{self.product.get_absolute_url()}?alert=sent#alert", fetch_redirect_response=False)
+        self.assertEqual((StockAlert.objects.count(), len(self.outbox.sent)), (1, 2))
 
     def test_robots_and_bad_addresses_are_turned_away(self):
         self.ask(website="spam")
@@ -130,13 +135,72 @@ class StockAlertTests(TestCase):
         self.assertFalse(StockAlert.objects.exists())
         self.assertContains(self.client.get(reverse("web:alert_confirm", args=[token])), "This link has expired")
 
+    def other_product(self, n=0):
+        other = make_product(self.product.product_set, name=f"30th Celebration Elite Trainer Box {n}", slug=f"30th-etb-{n}")
+        make_listing(other, self.shop, availability="out_of_stock")
+        return other
+
+    def ask_for(self, product, email="ben@example.com"):
+        return self.client.post(reverse("web:alert_ask", args=[product.slug]), {"email": email})
+
     def test_one_address_is_limited(self):
         with mock.patch.object(alerts, "MAX_PER_EMAIL", 1):
             self.ask()
-            other = make_product(self.product.product_set, name="30th Celebration Elite Trainer Box", slug="30th-etb")
-            make_listing(other, self.shop, availability="out_of_stock")
-            response = self.client.post(reverse("web:alert_ask", args=[other.slug]), {"email": "ben@example.com"})
-        self.assertIn("alert=limit", response["Location"])
+            StockAlert.objects.update(confirmed_at=timezone.now())   # only confirmed alerts count
+            response = self.ask_for(self.other_product())
+        self.assertIn("alert=sent", response["Location"])
+        self.assertEqual((StockAlert.objects.count(), len(self.outbox.sent)), (1, 1))
+
+    def test_a_stranger_learns_nothing_about_an_address(self):
+        # An address with a confirmed alert for the product, one at its limit and a new one get the same answer.
+        with mock.patch.object(alerts, "MAX_PER_EMAIL", 1):
+            self.ask("held@example.com")
+            self.ask_for(self.other_product(1), "full@example.com")
+            StockAlert.objects.update(confirmed_at=timezone.now())
+            places = {email: self.ask(email)["Location"] for email in ("held@example.com", "full@example.com",
+                                                                        "new@example.com")}
+        self.assertEqual(len(set(places.values())), 1, places)
+        self.assertIn("alert=sent", places["new@example.com"])
+        # The page has no words for either case any more.
+        for state in ("already", "limit"):
+            page = self.client.get(self.product.get_absolute_url() + f"?alert={state}")
+            self.assertNotContains(page, "You already have an alert for this product")
+            self.assertNotContains(page, "waiting on 30 products already")
+
+    def test_unconfirmed_alerts_made_by_a_stranger_do_not_fill_an_address(self):
+        with mock.patch.object(alerts, "MAX_PER_EMAIL", 3):
+            for n in range(3):
+                self.ask_for(self.other_product(n))
+            self.assertEqual(StockAlert.objects.filter(confirmed_at__isnull=True).count(), 3)
+            # The owner's own request still makes an alert and sends its confirmation.
+            self.ask()
+        self.assertTrue(StockAlert.objects.filter(product=self.product, email="ben@example.com").exists())
+        self.assertEqual(len(self.outbox.sent), 4)
+
+    def test_a_confirm_link_past_the_limit_leaves_the_alert_unset_and_says_so(self):
+        with mock.patch.object(alerts, "MAX_PER_EMAIL", 1):
+            self.ask()
+            self.ask_for(self.other_product())
+            first, second = StockAlert.objects.order_by("pk")
+            self.client.get(reverse("web:alert_confirm", args=[first.token]))
+            page = self.client.get(reverse("web:alert_confirm", args=[second.token]))
+            second.refresh_from_db()
+            self.assertIsNone(second.confirmed_at)
+            self.assertContains(page, "Alert not set")
+            self.assertContains(page, "This address already has 1 alerts, the most we keep.")
+            # Once one is stopped, the same link confirms it.
+            self.client.get(reverse("web:alert_stop", args=[first.token]))
+            self.assertContains(self.client.get(reverse("web:alert_confirm", args=[second.token])), "Alert confirmed")
+
+    def test_an_address_gets_at_most_ten_confirmations_a_day(self):
+        products = [self.other_product(n) for n in range(alerts.CONFIRMS_PER_EMAIL_DAY + 2)]
+        for product in products:
+            self.assertIn("alert=sent", self.ask_for(product)["Location"])
+        self.assertEqual(len(self.outbox.sent), alerts.CONFIRMS_PER_EMAIL_DAY)
+        self.assertEqual(StockAlert.objects.count(), alerts.CONFIRMS_PER_EMAIL_DAY)
+        # Another address is not held back by it.
+        self.ask_for(products[0], "someone@example.com")
+        self.assertEqual(len(self.outbox.sent), alerts.CONFIRMS_PER_EMAIL_DAY + 1)
 
     def test_terms_explain_what_is_kept_and_robots_keep_alert_links_private(self):
         terms = self.client.get(reverse("web:terms"))

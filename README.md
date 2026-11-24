@@ -726,11 +726,16 @@ price list (`offer_amazon.html`, `views.amazon_offer`), with the time it was
 checked, Amazon's disclaimer and the Associates statement beside it, and
 Buy on Amazon through `/go/`, for `RIPRAPTOR_AMAZON_SHOW_HOURS` (24) after
 each check; the price box's Amazon button then opens it too. Amazon is read
-every 6 hours (`importers.AMAZON_EVERY_HOURS`), each run taking a quarter of
-`RIPRAPTOR_AMAZON_DAILY_LIMIT` new lookups. To stop showing Amazon prices,
+every hour since 24 Nov 2026 (`importers.AMAZON_EVERY_HOURS`; every 6 before),
+each run spending its hour's share of `RIPRAPTOR_AMAZON_DAILY_LIMIT` calls. To stop showing Amazon prices,
 untick Active on Amazon's shop page. RipRaptor still has price tracking and
 alerts for the UK shops, so ask Amazon Associates to confirm in writing
 that this is allowed (the Amazon page says so too).
+The Amazon page ends with a **Log to copy** (`amazon_admin.log_text`; the owner,
+24 Nov 2026: "Need to ensure Amazon health area has a log"): whether the keys are
+set (never their values), Amazon's shop row, the prices shown and products found,
+the day's calls and a read's share, the last 6 reads with the end of each one's
+log, and the background reader's own lines about Amazon.
 
 Clicks on the Amazon buttons are counted on the dashboard under Amazon
 Associates, like any shop's (`go_search` saves them against the Amazon
@@ -782,10 +787,13 @@ Amazon" when we hold Amazon's price. Also:
 - Each place records itself on the click (`OutboundClick.Button`:
   `amazon_box`, `amazon_list`, `amazon_rip`; `amazon` for links from older
   pages), so the clicks show which spot people use. We do not record how far
-  people scroll. The hourly import reads Amazon every 6 hours: every product already
-found there is refreshed ten at a time, then up to a quarter of
-`RIPRAPTOR_AMAZON_DAILY_LIMIT` products are looked up, by barcode where we
-have one and otherwise by name. The products visitors want most go first
+  people scroll. Amazon is read every hour, each read spending an hour's share of
+`RIPRAPTOR_AMAZON_DAILY_LIMIT` calls (about 83 of 2,000): the products already
+found there are refreshed ten a call, the one refreshed longest ago first, with
+all but a fifth of the calls (`amazon.NEW_SHARE`; the rest go first next time),
+then new products are looked up with what is left, by barcode where we have
+one and otherwise by name. A read asked for within 45 minutes of one that
+fetched anything (`importers.AMAZON_AGAIN`, a hand-run import) spends nothing. The products visitors want most go first
 (clicks, views, watchlists, alerts and the owner's "Search other shops
 now" tap; being new or on pre-order does not count here), then those never
 tried, then those tried longest ago. A wanted product searched in the last
@@ -2908,7 +2916,8 @@ slice of its sitemap. Every page the sitemap lists that is worth fetching
 (up to 3,000 a shop, sealed products first) is kept as a shop page with the
 words of its address, when the sitemap says it last changed, when it was
 last fetched and, once a price from it is linked, the product it sells.
-Each read fetches at most 600 pages, in this order:
+Each read fetches at most 300 pages (`importers.PAGES_PER_READ`; 600 until 24 Nov 2026), about ten minutes, so a
+website shop can be read every hour, in this order:
 
 1. pages never fetched;
 2. pages not fetched for a day, longest unread first, so no price nears the
@@ -2922,7 +2931,7 @@ fetched for a day, so a stock change the shop does not date is still caught.
 A date in the future, or one that cannot be read, counts as no date.
 
 A shop whose sitemap carries no dates is read round the whole index in
-turn: 600 pages a read, so 3,000 pages are all refreshed within five reads.
+turn: 300 pages a read, so 3,000 pages are all refreshed within ten reads.
 A page that fails to load counts as fetched, so it cannot hold the front of
 every read. Pages a shop's sitemap has not listed for 30 days are removed
 by `tidy_all`. A website read never marks unseen products out of stock.
@@ -2930,61 +2939,66 @@ by `tidy_all`. A website read never marks unseen products out of stock.
 ## Crawl health
 
 Admin, Crawl health (`/admin/crawl/`, linked from the admin home page and
-from each shop under Shop health on Insights) shows whether shops are being
-read and lets you change it with one tap, from a phone:
+from each shop under Shop health on Insights) shows whether every shop is
+being read each hour and lets you change it with one tap, from a phone. Made
+plain on 24 Nov 2026 (the owner: "Crawl health needs to be more simple as well
+all stores must update at least every hour ... visually show the ones that
+aren't going ... nothing feels like it works"):
 
-- The status line says whether the background reader is running: green
-  while its heartbeat is under ten minutes old, red when it has stopped or
-  never started (the hourly schedule then reads the shops). Below it: when
-  the last read finished, how many products are checked every ten minutes
-  and every hour, the requests to shops and the errors in the last hour,
-  the jobs done since it started, and why it last restarted itself, if it
-  did. The admin home page shows a red line under Crawl health when the
-  reader has stopped. One line says how crawl problems reach you: by push,
-  email or both, turned off (`RIPRAPTOR_CRAWL_PUSHES=0`), or in red when
-  neither `RIPRAPTOR_NTFY_TOPIC` nor `RIPRAPTOR_INBOX_NOTIFY_EMAIL` with
-  ZeptoMail is set, so nothing is sent.
-- **Drop day**: **Turn on faster reads** makes every shop be read at least
-  every 10, 15 or 30 minutes (your choice) for 6, 12 or 24 hours, so new
-  listings and stock show within minutes on a release day; every shop is
-  made due at once, and when the time is up each goes back to its own
-  schedule from its next read (`WorkerState.fast_until`, `fast_minutes`,
-  applied in `Retailer.cadence_for`; a slow shop is still never read more
-  than a third of the time, and the hourly schedule is unchanged, so it
-  needs the background reader running). **Turn off faster reads** ends it
-  early. **Read all** makes every shop that is not paused due at once and
-  forgets its errors, as Read now does for one shop; paused shops stay
-  paused and the message says how many.
-- **eBay today** says what eBay last said was left of the day's two
-  allowances, searches (which find products not yet on eBay) and item
-  lookups (which keep known listings fresh, twenty at a time), when it was
-  asked and when they reset (`WorkerState.ebay_usage`, written whenever a
-  run or a check asks eBay). The owner, 6 Nov 2026: "in the past we've
-  always exhausted it", which was the searches, one a product, against
-  thousands of products not yet looked up; the lookups were barely used.
+- **At the top**, one verdict (`crawl.verdict`): All shops up to date, Behind
+  (how many shops were not read in the last hour) or Not reading (Pause all
+  on, or the background reader stopped), then three counts with a coloured
+  dot: up to date (green), late (amber) and not going (red). Each shop has the
+  same light (`crawl.light_for`): **Up to date** when its last read that worked
+  is under 75 minutes old, **Late** under three hours, **Not going** when it
+  is paused, failing (waiting after errors, or its last read failed), never
+  read, or not read for three hours.
+- **Read all** and **Pause all** / **Resume all** sit right under the counts.
+- **Need a look**: the shops that are not up to date, not going first (failing,
+  then paused), then late, each with its light, why ("Read 2 hours ago",
+  "Failing: waiting after 3 failed tries", "Never read"), what it is doing now
+  ("Reading now", "2nd in line", or when its next read is), how long its last
+  read took, its last error with **See what happened**, and **Read now**,
+  **Pause** or **Resume**. The shops up to date are folded under **Up to
+  date**, open when nothing needs a look.
+- **Read now** puts the shop first in line (`crawl.read_now`: its next read is
+  set a day back, so it is the most overdue shop and the reader takes it next,
+  after eBay's hourly search) and forgets its errors and its wait. Until 24 Nov
+  2026 it made the shop due now, which put it behind every shop already
+  overdue: with many waiting, hours later. **Pause** and **Resume** set the
+  shop's Reading paused box, which stops its stock checks too.
+- **Read all** puts every shop that is not paused in line at once and forgets
+  its errors; paused shops stay paused and the message says how many.
 - **Pause all** stops every scheduled read and stock check until you tap
-  **Resume all**: the background reader starts no new job (the ones
-  running finish, and its heartbeat goes on), `import_prices --due` and
-  `watch_stock` read nothing, and a run already reading stops before its
-  next shop. Runs left open by a crash or a timeout are still closed.
-  Reading a shop by name still works. Shops you paused one by one stay
-  paused when you resume. The switch is a row in the database (the
-  background reader's), so the site, the reader and the cron all see the
-  same thing and a deploy that empties the cache leaves it alone. A
-  `crawl-paused` file left in the cache folder by the earlier version still
-  counts as paused until Resume all removes it. If the database is busy the
-  page says so and nothing changes.
-- One row per shop read on a schedule: Reading (its latest run has not
-  finished), Paused, Backing off until a time, or Idle, then its last read
-  that worked, how long that took, its next read (paused while it or every
-  shop is paused, and never before a wait after errors ends), its errors in
-  a row and its last error, with **See what happened**: the log of the
-  shop's latest failed read.
-- **Read now** makes the shop due at once and forgets its errors and its
-  wait, so the background reader takes it within a few minutes (or the next
-  hourly read does when the reader is not running). **Pause** and
-  **Resume** set the shop's Reading paused box, which stops its stock
-  checks too.
+  **Resume all**: the background reader starts no new job (the ones running
+  finish, and its heartbeat goes on), `import_prices --due` and `watch_stock`
+  read nothing, and a run already reading stops before its next shop. Runs
+  left open by a crash or a timeout are still closed. Reading a shop by name
+  still works. Shops you paused one by one stay paused when you resume. The
+  switch is a row in the database (the background reader's), so the site, the
+  reader and the cron all see the same thing and a deploy that empties the
+  cache leaves it alone. A `crawl-paused` file left in the cache folder by the
+  earlier version still counts as paused until Resume all removes it. If the
+  database is busy the page says so and nothing changes.
+- Folded below: **Drop day** (**Turn on faster reads** makes every shop be read
+  at least every 10, 15 or 30 minutes for 6, 12 or 24 hours, every shop put in
+  line at once, then back to every hour; `WorkerState.fast_until`,
+  `fast_minutes`, applied in `Retailer.cadence_for`; a slow shop is still never
+  read more than a third of the time; **Turn off faster reads** ends it
+  early), **Background reader** (whether it is running, when the last read
+  finished, requests and errors in the last hour, jobs done, memory, why it
+  last restarted, how many products are checked one by one, what eBay last
+  said was left of the day's searches, and how crawl problems reach you: by
+  push, email or both, turned off with `RIPRAPTOR_CRAWL_PUSHES=0`, or in red
+  when neither `RIPRAPTOR_NTFY_TOPIC` nor `RIPRAPTOR_INBOX_NOTIFY_EMAIL` with
+  ZeptoMail is set), and **Log to copy**.
+- **Log to copy** (`crawl.log_text`): the verdict and counts, the background
+  reader, its limits and what it last planned, the import lock and who is
+  waiting for it now, how long each kind of shop took to read against the
+  reading time the reader has an hour, the reads of the last hour, every shop
+  worst first (light, kind, why, what it is doing, last good read, time taken,
+  how often, errors, last error), and the reader's own warnings. No key or
+  address of a person is in it (`worklog.scrub`).
 
 ### What a failed read logged
 
@@ -3056,10 +3070,13 @@ single-listing checks, which outweighed them once listings were an hour old,
 so on a two-thread server shops went two hours or more between reads.
 It is polite: one job per shop at a time; at most one request
 a second to a Shopify shop (three at once), one every two seconds to a
-website shop and one every ten seconds to a feed; two a second in all;
-half a second between Shopify product pages; at most two whole-shop reads
-at once and only one of a website shop, so one of its three threads is
-always free for single listings. A shop waiting after errors or paused is
+website shop and one every ten seconds to a feed; three a second in all;
+half a second between Shopify product pages; at most three whole-shop
+reads at once and two of website shops, so one of its four threads is
+always free for single listings (two, one and three threads until 24 Nov 2026,
+which could not read every shop each hour). Every shop is read at least every
+hour, whatever its own setting says (`Retailer.every_minutes`, at most
+`Retailer.READ_AT_LEAST_EVERY`, 60), and never more than a third of the time. A shop waiting after errors or paused is
 not asked about single listings either. A shop that answers a single-listing
 check with 429 (asked too often), or fails three checks in a row (a listing
 it no longer has does not count), waits exactly as after a failed read: 30
@@ -3072,8 +3089,14 @@ import lock (`/tmp/ripraptor-import.lock`) only while a whole-shop read is
 running, so `import_prices` run by hand, the nightly snapshot and the weekly
 delivery check wait only for reads in flight; after 20 minutes of holding it
 without a break it starts no new read until it has let go, so they always
-get a turn. Each job has a time limit: 20 minutes for a shop read, 45 for a
-website shop (600 pages at one every two seconds), 60 for eBay and Amazon,
+get a turn, but only while one of them is waiting (`worker.lock_waiters`): a
+cron line waiting in `flock` shows in the kernel's list of locks
+(`/proc/locks`), and an uploaded spreadsheet's changes, which ask again and
+again, leave `/tmp/ripraptor-import.wanted.data-files` beside the lock while
+they wait. Until 24 Nov 2026 it let go every 20 minutes whatever, and a
+reading slot stood empty until the longest read in flight ended. Each job has a
+time limit: 20 minutes for a shop read, 45 for a website shop (300 pages at one
+every two seconds), 60 for eBay and Amazon,
 or twice the shop's last healthy read when that is longer (at most two
 hours), and a minute for a single-listing check, where each request is
 given up after 10 seconds however slowly the shop sends it. A job past its
@@ -3168,11 +3191,11 @@ sudo systemctl enable --now ripraptor-worker
 ```
 
 `run_worker --once` plans once, runs every job due in the calling thread
-and stops. It runs `RIPRAPTOR_WORKER_THREADS` jobs at once (3 unless set);
+and stops. It runs `RIPRAPTOR_WORKER_THREADS` jobs at once (4 unless set; 3 until 24 Nov 2026);
 `install.sh` writes 2 in `.env` on a server with under 1.5 GB of memory (a
 "1 GB" server reports about 960 MB), and takes that 2 out again at the
 first update after the server is resized to 1.5 GB or more, so a resized
-server runs three jobs with no edit (a 2 typed by hand on a big server
+server runs four jobs with no edit (a 2 typed by hand on a big server
 goes too; any other value stays). `install.sh` copies the unit file on
 every update, so the setting belongs in `.env`, not in the unit. `--max-threads` overrides it for one run.
 With 2 threads one whole-shop read runs at a time, so a long website read
@@ -3736,7 +3759,7 @@ index.
 | `RIPRAPTOR_PAGE_CACHE_SECONDS` | 300     | How long a built game or set page (each tab and set of filters under its own address) is served whole from the shared cache. 0 turns it off. |
 | `RIPRAPTOR_LIST_MAX_STALE_SECONDS` | 600 | A cached page list is never served once its build started longer ago than this: the visitor who finds it builds it first. |
 | `RIPRAPTOR_CACHE_DIR`          | `/var/lib/ripraptor/cache` (`.cache` with `DJANGO_DEBUG` on) | The cache folder the site and every command share. Must be writable by the user the site runs as. |
-| `RIPRAPTOR_WORKER_THREADS`     | 3       | Jobs the background reader runs at once. 2 suits a server with under 1.5 GB of memory, and `deploy/install.sh` writes 2 on such a server when the setting is missing, and removes that 2 once the server has 1.5 GB or more. Restart `ripraptor-worker` after changing it. |
+| `RIPRAPTOR_WORKER_THREADS`     | 4       | Jobs the background reader runs at once. 2 suits a server with under 1.5 GB of memory, and `deploy/install.sh` writes 2 on such a server when the setting is missing, and removes that 2 once the server has 1.5 GB or more. Restart `ripraptor-worker` after changing it. |
 | `RIPRAPTOR_AMAZON_CREDENTIAL_ID` |       | Creators API Credential ID from Amazon Associates. Usually typed in Admin, Amazon instead; set here, it wins. |
 | `RIPRAPTOR_AMAZON_CREDENTIAL_SECRET` |   | Its Credential Secret. |
 | `RIPRAPTOR_AMAZON_PARTNER_TAG` |         | The Associates tracking tag, for example `ripraptor-21`. Alone, it tags the Amazon search links; with a credential, Amazon is read every 6 hours. |

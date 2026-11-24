@@ -82,6 +82,16 @@ reports script errors, horizontal overflow, unlabelled controls and tap
 targets under 24px. It needs `pip install playwright` and a running dev
 server.
 
+Claude Code has Cloudflare's security audit skill in
+`.claude/skills/security-audit` (from `cloudflare/security-audit-skill`, MIT,
+its licence beside it), added on 24 Nov 2026 with `npx skills add
+https://github.com/cloudflare/security-audit-skill --skill security-audit`;
+`skills-lock.json` records the exact version. Ask Claude Code for a security
+audit of the codebase to use it; `npx skills update security-audit` brings
+the newest. It reads the code only and never probes the live site. Its
+reports go to a folder outside the repository and are never committed: the
+repository is public, and a list of unfixed holes would help an attacker.
+
 A Shopify shop that sells far more than cards (Zatu: board games, puzzles,
 books, about 660,000 product pages) can be read from some of its
 collections instead of the whole store: set "Shopify collections" on the

@@ -30,6 +30,7 @@ import tempfile
 import time
 import urllib.error
 import urllib.request
+from datetime import timedelta
 from decimal import Decimal, InvalidOperation
 from urllib.parse import urlsplit
 from pathlib import Path
@@ -50,6 +51,7 @@ API_URL = "https://creatorsapi.amazon/catalog/v1/"
 SCOPE = "creatorsapi::default"
 MARKETPLACE = "www.amazon.co.uk"
 BATCH = 10         # items a getItems request, and results a search
+NEW_SHARE = 0.2    # of a run's calls kept for products not yet found on Amazon
 PAUSE = 1.1        # seconds between calls: new credentials get one a second
 TOKEN_MARGIN = 300 # a token is asked for again this many seconds before Amazon says it ends
 RESOURCES = [
@@ -324,8 +326,11 @@ def forget_other_stores(retailer):
 # The import ----------------------------------------------------------------------------------------------------------
 
 def amazon_offers(retailer, limit=None, call_api=None, pause=PAUSE):
-    """Offers for every product known on Amazon plus up to ``limit`` new lookups (RIPRAPTOR_AMAZON_DAILY_LIMIT
-    shared over the day's runs, importers.AMAZON_EVERY_HOURS apart).
+    """Offers from up to ``limit`` calls (RIPRAPTOR_AMAZON_DAILY_LIMIT shared over the day's runs,
+    importers.AMAZON_EVERY_HOURS apart): first the products already known on Amazon, ten a call, the one refreshed
+    longest ago first, with all but NEW_SHARE of the calls; then new lookups with the rest. Known products left over
+    go first next time. Until 24 Nov 2026 every known product was refreshed each run whatever the limit, which a run
+    every hour could not afford.
 
     ``call_api(operation, payload)`` can replace the real call in tests.
     """
@@ -343,6 +348,13 @@ def amazon_offers(retailer, limit=None, call_api=None, pause=PAUSE):
     calls = 0
 
     known = list(products.exclude(amazon_asin=""))
+    # Longest unrefreshed first: the Amazon listing's last check, a product never priced before any.
+    checked_at = dict(Listing.objects.filter(retailer__source_type=Retailer.Source.AMAZON, product__in=known)
+                      .values_list("product_id", "last_checked"))
+    epoch = timezone.now() - timedelta(days=3650)
+    known.sort(key=lambda product: (checked_at.get(product.pk) or epoch, product.pk))
+    known_calls = limit - max(1, int(limit * NEW_SHARE)) if limit > 1 else limit
+    known = known[:max(0, known_calls) * BATCH]
     for start in range(0, len(known), BATCH):
         batch = known[start:start + BATCH]
         answer = api("getItems", items_payload([p.amazon_asin for p in batch], tag))

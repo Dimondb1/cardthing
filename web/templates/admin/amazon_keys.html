@@ -1,7 +1,8 @@
 {% extends "admin/base_site.html" %}
 {# Amazon (web/amazon_admin.py): the Creators API credential and the Associates tag, saved into a file only the site can read, tested on each save. #}
 {% block title %}Amazon | {{ site_title }}{% endblock %}
-{% block extrahead %}{{ block.super }}<meta name="robots" content="noindex, nofollow">{% endblock %}
+{% load static %}
+{% block extrahead %}{{ block.super }}<meta name="robots" content="noindex, nofollow"><script nonce="{{ csp_nonce }}" src="{% static 'js/copy-log.js' %}" defer></script>{% endblock %}
 {% block extrastyle %}{{ block.super }}<style>
   .amazon-keys { display: grid; gap: 20px; max-width: 44rem; }
   .amazon-keys h2 { margin: 0 0 4px; }
@@ -11,6 +12,11 @@
   .amazon-keys input[type="text"], .amazon-keys input[type="password"] { width: 100%; max-width: 36rem; box-sizing: border-box; padding: 8px; font-size: 1rem; }
   .amazon-keys .save { margin-top: 16px; }
   .amazon-keys .warn { padding: 12px; border-left: 4px solid var(--message-warning-bg, #ffc); background: var(--darkened-bg); }
+  .amazon-keys details { border: 1px solid var(--hairline-color); border-radius: 6px; padding: 0 16px; }
+  .amazon-keys details[open] { padding-bottom: 16px; }
+  .amazon-keys summary { cursor: pointer; padding: 12px 0; font-weight: 600; font-size: 1.05rem; }
+  .amazon-keys summary span { font-weight: 400; color: var(--body-quiet-color); }
+  .amazon-keys textarea.log { display: block; width: 100%; height: 22rem; box-sizing: border-box; margin: 0; padding: 8px; font: 12px/1.45 ui-monospace, Menlo, Consolas, monospace; white-space: pre; overflow: auto; }
 </style>{% endblock %}
 {% block breadcrumbs %}<div class="breadcrumbs"><a href="{% url 'admin:index' %}">Home</a> &rsaquo; Amazon</div>{% endblock %}
 {% block content %}
@@ -47,5 +53,11 @@
     </form>
     {% endif %}
   </section>
+  <details id="log">
+    <summary>Log to copy <span>for Claude, when something looks wrong</span></summary>
+    <p class="note">Everything about Amazon's reading as plain text, with the background reader's own lines about Amazon. It holds no key or password. Copy it and paste it into a message.</p>
+    <p><button type="button" class="button" data-copy-from="amazon-log" data-label="Copy the log" data-done="Copied" data-failed="Selected: now copy it" hidden>Copy the log</button></p>
+    <textarea id="amazon-log" class="log" rows="14" readonly spellcheck="false" aria-label="Log to copy">{{ log }}</textarea>
+  </details>
 </div>
 {% endblock %}

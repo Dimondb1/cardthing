@@ -234,13 +234,32 @@ class LookupTests(TestCase):
         self.assertEqual(offers[0].price, Decimal("79.00"))
         self.assertEqual(sum(1 for op, _ in self.calls if op == "searchItems"), 1)
 
+    def test_an_hourly_run_refreshes_the_known_products_longest_unrefreshed_first_within_its_calls(self):
+        from .models import Listing, Retailer
+
+        shop = Retailer.objects.create(name="Amazon", slug="amazon", website="https://www.amazon.co.uk/",
+                                       source_type=Retailer.Source.AMAZON)
+        known = []
+        for n in range(25):
+            product = make_product(self.set, name=f"Known Box {n}", slug=f"known-box-{n}")
+            Product.objects.filter(pk=product.pk).update(amazon_asin=f"B0K{n:03d}")
+            Listing.objects.create(product=product, retailer=shop, url=f"https://www.amazon.co.uk/dp/B0K{n:03d}",
+                                   price=Decimal("10"), last_checked=timezone.now() - datetime.timedelta(hours=25 - n))
+            known.append(f"B0K{n:03d}")
+        api = self.fake_api({"getItems": {}, "searchItems": {}})
+        amazon.amazon_offers(None, limit=3, call_api=api, pause=0)
+        asked = [payload["itemIds"] for op, payload in self.calls if op == "getItems"]
+        # Three calls: two refresh the twenty refreshed longest ago, one looks for a product not yet found.
+        self.assertEqual(asked, [known[:10], known[10:20]])
+        self.assertEqual(sum(1 for op, _ in self.calls if op == "searchItems"), 1)
+
     def test_a_run_takes_a_share_of_the_days_lookups(self):
         from .importers import AMAZON_EVERY_HOURS
 
         api = self.fake_api({"searchItems": {}})
         with override_settings(RIPRAPTOR_AMAZON_DAILY_LIMIT=8):
             amazon.amazon_offers(None, call_api=api, pause=0)
-        self.assertLessEqual(len(self.calls), 8 * AMAZON_EVERY_HOURS // 24)
+        self.assertLessEqual(len(self.calls), max(1, 8 * AMAZON_EVERY_HOURS // 24))
 
 
 @override_settings(**KEYS)
@@ -263,13 +282,14 @@ class ImportTests(TestCase):
         self.assertEqual(listing.price, Decimal("89.99"))
         self.assertEqual(listing.delivered_price, Decimal("89.99"))   # free over £35
 
-    def test_import_runs_every_six_hours(self):
+    def test_import_runs_every_hour_and_a_read_asked_again_sooner_spends_nothing(self):
+        """The owner, 24 Nov 2026: "all stores must update at least every hour". It was every six."""
         ImportRun.objects.create(retailer=self.retailer, offers_found=10,
-                                 finished_at=timezone.now() - datetime.timedelta(hours=2))
+                                 finished_at=timezone.now() - datetime.timedelta(minutes=20))
         with mock.patch.object(amazon, "call") as called:
             run_import(self.retailer)
         called.assert_not_called()
-        ImportRun.objects.update(finished_at=timezone.now() - datetime.timedelta(hours=7))
+        ImportRun.objects.update(finished_at=timezone.now() - datetime.timedelta(minutes=55))
         with mock.patch.object(amazon, "call", return_value={}) as called, mock.patch.object(amazon, "PAUSE", 0):
             run_import(self.retailer)
         called.assert_called()
@@ -463,6 +483,40 @@ class KeysPageTests(TestCase):
                                         follow=True)
         self.assertContains(response, "Amazon did not accept them yet: AssociateNotEligible")
         self.assertFalse(Retailer.objects.filter(source_type=Retailer.Source.AMAZON).exists())
+
+    def test_the_page_has_a_log_to_copy_with_no_key_in_it(self):
+        """The owner, 24 Nov 2026: "Need to ensure Amazon health area has a log"."""
+        import html
+
+        from catalogue import worklog
+
+        shop = Retailer.objects.create(name="Amazon", slug="amazon", website="https://www.amazon.co.uk/",
+                                       source_type=Retailer.Source.AMAZON, error_streak=1,
+                                       last_error="Amazon API 429: TooManyRequests")
+        ImportRun.objects.create(retailer=shop, finished_at=timezone.now(), offers_found=12, listings_updated=9,
+                                 log="12:00:01 INFO Amazon: 40 known products refreshed, 5 looked up, 12 offers")
+        self.addCleanup(lambda: worklog.path().unlink(missing_ok=True))
+        import logging
+
+        worklog.Keeper().emit(logging.makeLogRecord({
+            "name": "catalogue.amazon", "levelno": logging.INFO, "levelname": "INFO",
+            "msg": "Amazon: 40 known products refreshed, 5 looked up, 12 offers"}))
+        with override_settings(RIPRAPTOR_AMAZON_CREDENTIAL_ID="amzn1.secret-id-123456",
+                               RIPRAPTOR_AMAZON_CREDENTIAL_SECRET="very-secret-value-99"):
+            page = self.client.get(self.url).content.decode()
+        start = page.index('<textarea id="amazon-log"')
+        text = html.unescape(page[page.index(">", start) + 1:page.index("</textarea>", start)])
+        self.assertTrue(text.startswith("RipRaptor Amazon log, "))
+        self.assertIn("keys: set (in the server settings)", text)
+        self.assertIn(f"Amazon (id {shop.pk}): switched on yes, paused no, reads every 60 min", text)
+        self.assertIn("last error: Amazon API 429: TooManyRequests", text)
+        self.assertIn(": 12 offers found, 9 listings updated\n    12:00:01 INFO Amazon: 40 known products", text)
+        self.assertIn("READER LOG: LINES ABOUT AMAZON", text)
+        self.assertIn("INFO Amazon: 40 known products refreshed, 5 looked up, 12 offers", text)
+        self.assertIn("about 83 a read, every 1 h", text)
+        for secret in ("amzn1.secret-id-123456", "very-secret-value-99"):
+            self.assertNotIn(secret, page)
+        self.assertIn('data-copy-from="amazon-log"', page)
 
     def test_it_names_amazons_rule_on_price_tracking(self):
         self.assertContains(self.client.get(self.url), "must not have price tracking or price alerts")

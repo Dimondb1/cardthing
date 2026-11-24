@@ -29,9 +29,9 @@ KEEP = 600            # lines kept when the file is trimmed
 TRIM_AT = 1200        # and it is trimmed once it holds this many
 LINE_CHARS = 600
 TRACE_LINES = 6       # the end of a traceback: the failing lines and the error itself
-# Lines below a warning are kept when they are about these: eBay's checks and reads, the lock reads share, the
-# reader starting, and its memory after each shop read (worker.MEMORY_SHARE).
-ABOUT = ("ebay", "import lock", "background reader", "memory")
+# Lines below a warning are kept when they are about these: eBay's and Amazon's reads (the eBay health and Amazon
+# pages' logs), the lock reads share, the reader starting, and its memory after each shop read (worker.MEMORY_SHARE).
+ABOUT = ("ebay", "amazon", "import lock", "background reader", "memory")
 PLAN_KEY = "worker:last-plan"
 PLAN_SECONDS = 15 * 60
 # Never in a kept line or in the Log to copy box, which is pasted into messages: the value of any setting that reads

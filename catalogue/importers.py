@@ -1271,7 +1271,11 @@ CRUMB_NAME = re.compile(r"itemprop=[\"']name[\"'][^>]*>([^<]+)<|<meta[^>]+itempr
                         re.I)
 PRODUCT_PATH_WORDS = ("/product", "/products/", "/p/", "/item", "/shop/", "-p-")
 MAX_PAGES = 3000   # pages of one shop kept in its index, the ones worth fetching first
-PAGES_PER_READ = 600   # pages fetched in one read, so a 3,000 page shop is read through in five
+# Pages fetched in one read: about ten minutes at one every two seconds, so a website shop can be read every hour
+# and still never be read more than a third of the time (the owner, 24 Nov 2026: "all stores must update at least
+# every hour"). A 3,000 page shop is read through in ten reads, well inside RECHECK_UNCHANGED. It was 600, twenty
+# minutes, and a website shop was read about every two hours or less often.
+PAGES_PER_READ = 300
 # A page unread this long is read before any page the sitemap says has changed, and a page the
 # sitemap dates as unchanged is read again once it is this old. Its listing then never nears the
 # 72 hour stale cutoff, even when a shop dates hundreds of pages as changed on every read, and a

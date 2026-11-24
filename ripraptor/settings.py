@@ -272,7 +272,7 @@ RIPRAPTOR_PAGE_CACHE_SECONDS = 0 if TESTING else int(os.environ.get("RIPRAPTOR_P
 # A product counts as "back in stock" for this long after a shop restocks it.
 
 # Jobs the background reader (manage.py run_worker) runs at once. 2 suits a server with under 1 GB of memory.
-RIPRAPTOR_WORKER_THREADS = int(os.environ.get("RIPRAPTOR_WORKER_THREADS", "3"))
+RIPRAPTOR_WORKER_THREADS = int(os.environ.get("RIPRAPTOR_WORKER_THREADS", "4"))
 
 # Google AdSense publisher id (ca-pub-...). Empty means no adverts and no
 # Google script on any page. Set it once AdSense has approved the site.

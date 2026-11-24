@@ -8,6 +8,7 @@ import socket
 import sys
 import tempfile
 import threading
+import time
 from datetime import datetime, timedelta
 from decimal import Decimal
 from io import StringIO
@@ -250,7 +251,7 @@ class PolitenessTests(WorkerTestCase):
         self.assertEqual(bucket.take(), 0)
         self.assertGreater(bucket.take(), 0)
 
-    def test_the_two_a_second_limit_holds_across_threads(self):
+    def test_the_three_a_second_limit_holds_across_threads(self):
         politeness = worker.Politeness(lambda: self.clock().timestamp(), self.clock.sleep)
         taken, start = [], threading.Barrier(8)
 
@@ -264,7 +265,7 @@ class PolitenessTests(WorkerTestCase):
         for thread in threads:
             thread.join(timeout=10)
         self.assertEqual(len(taken), 8)
-        self.assertEqual(taken.count(0), 2)
+        self.assertEqual(taken.count(0), 3)
 
     def test_a_website_shop_is_asked_once_every_two_seconds(self):
         shop = self.shop("Web Shop", source_type=Retailer.Source.WEBSITE)
@@ -276,19 +277,23 @@ class PolitenessTests(WorkerTestCase):
         self.assertEqual([round((at - asked[0][1]).total_seconds(), 3) for _url, at in asked], [0, 2, 4])
         self.assertEqual(politeness.requests_last_hour(), 3)
 
-    def test_at_most_two_reads_and_one_website_read_run_at_once(self):
-        for name in ("Web A", "Web B"):
+    def test_at_most_three_reads_and_two_website_reads_run_at_once(self):
+        """The owner, 24 Nov 2026: "all stores must update at least every hour". Two reads at once, one of them a
+        website shop's, could not read every shop each hour."""
+        # Named so the website shops come first in line.
+        for name in ("A Web", "B Web", "C Web"):
             self.shop(name, due=True, source_type=Retailer.Source.WEBSITE)
         self.shop("Shopify A", due=True)
+        self.shop("Shopify B", due=True)
         executor = HeldExecutor()
         reader = self.make_worker(executor=executor)
         reader.queue = reader.plan(self.clock())
-        # Every due read is queued; only two start, one of them a website shop.
-        self.assertEqual(sum(t.kind == worker.SHOP_READ for t in reader.queue), 3)
+        # Every due read is queued; only three start, two of them website shops.
+        self.assertEqual(sum(t.kind == worker.SHOP_READ for t in reader.queue), 5)
         reader.dispatch(self.clock())
-        self.assertEqual([t.kind for t in executor.jobs], [worker.SHOP_READ, worker.SHOP_READ])
-        self.assertEqual(sum(t.source_type == Retailer.Source.WEBSITE for t in executor.jobs), 1)
-        # The next pass starts no read while both are running, and the import lock is held for them.
+        self.assertEqual([t.kind for t in executor.jobs], [worker.SHOP_READ] * 3)
+        self.assertEqual(sum(t.source_type == Retailer.Source.WEBSITE for t in executor.jobs), 2)
+        # The next pass starts no read while all three are running, and the import lock is held for them.
         self.clock.advance(minutes=1)
         reader.queue = reader.plan(self.clock())
         self.assertEqual(reader.dispatch(self.clock()), 0)
@@ -332,15 +337,44 @@ class PolitenessTests(WorkerTestCase):
         reader.dispatch(self.clock())
         self.assertEqual((executor.jobs[-1].kind, executor.jobs[-1].retailer_id), (worker.SHOP_READ, second.pk))
 
-    def test_after_twenty_minutes_of_reads_the_import_lock_is_let_go_before_another_read(self):
+    def test_after_twenty_minutes_of_reads_the_import_lock_is_let_go_for_a_command_waiting_for_it(self):
         lock = worker.ImportLock(self.import_lock)
         self.assertTrue(lock.acquire(self.clock()))
         self.clock.advance(minutes=21)
+        # Nobody waits: reads go on, rather than a slot standing empty until the longest read ends.
+        self.assertTrue(lock.acquire(self.clock()))
+        lock.release()
+        # A command waits (a spreadsheet's changes, asking again and again): the next read waits for it.
+        worker.want_lock("data-files", self.import_lock)
         self.assertFalse(lock.acquire(self.clock()))
+        self.assertIn("lets a waiting command go first (data-files)", lock.refused)
         lock.release()
         self.assertFalse(lock.held)
         self.assertTrue(lock.acquire(self.clock()))
         lock.release()
+        worker.want_lock("data-files", self.import_lock, waiting=False)
+        self.assertEqual(worker.lock_waiters(self.import_lock), [])
+
+    def test_a_cron_line_waiting_in_flock_is_seen_in_the_kernels_list_of_locks(self):
+        inode = os.stat(self.import_lock if os.path.exists(self.import_lock) else self.touch_lock()).st_ino
+        table = self.folder / "locks"
+        table.write_text(f"1: FLOCK  ADVISORY  WRITE 508 fe:00:{inode} 0 EOF\n"
+                         f"1: -> FLOCK  ADVISORY  WRITE 512 fe:00:{inode} 0 EOF\n"
+                         "2: -> FLOCK  ADVISORY  WRITE 93 fe:00:1 0 EOF\n")
+        self.assertEqual(worker.lock_waiters(self.import_lock, proc_locks=str(table)), ["a command in flock"])
+        table.write_text(f"1: FLOCK  ADVISORY  WRITE 508 fe:00:{inode} 0 EOF\n")
+        self.assertEqual(worker.lock_waiters(self.import_lock, proc_locks=str(table)), [])
+
+    def touch_lock(self):
+        open(self.import_lock, "a").close()
+        return self.import_lock
+
+    def test_a_note_left_by_a_command_that_gave_up_is_not_believed(self):
+        worker.want_lock("data-files", self.import_lock)
+        note = os.path.join(os.path.dirname(self.import_lock), worker.LOCK_WANTED + "data-files")
+        old = time.time() - worker.LOCK_WANTED_FOR.total_seconds() - 60
+        os.utime(note, (old, old))
+        self.assertEqual(worker.lock_waiters(self.import_lock), [])
 
 
 class ShopReadTests(WorkerTestCase):

@@ -617,9 +617,9 @@ class Retailer(models.Model):
     read_every_minutes = models.PositiveIntegerField(
         "read every (minutes)",
         default=60,
-        help_text="How often to read this shop's prices. The hourly read rounds it to whole hours: up to 75 "
-        "minutes is every hour, 76 to 135 every two hours. A shop that takes a long time to read is read less "
-        "often: never more than a third of the time.",
+        help_text="How often to read this shop's prices, at most 60: every shop is read at least every hour, "
+        "and a longer setting counts as 60. A shop that takes a long time to read is read less often: never more "
+        "than a third of the time.",
     )
     next_read_at = models.DateTimeField("next read", null=True, blank=True, db_index=True)
     last_read_seconds = models.PositiveIntegerField("last read took (seconds)", null=True, blank=True)
@@ -709,6 +709,15 @@ class Retailer(models.Model):
             .order_by(F("collections_polled_at").asc(nulls_first=True), "name")
         )
 
+    # Every shop is read at least this often, whatever its setting says (the owner, 24 Nov 2026: "all stores must
+    # update at least every hour").
+    READ_AT_LEAST_EVERY = 60
+
+    @property
+    def every_minutes(self):
+        """How often the shop is read: its setting, never more than READ_AT_LEAST_EVERY."""
+        return min(self.read_every_minutes or self.READ_AT_LEAST_EVERY, self.READ_AT_LEAST_EVERY)
+
     def cadence_for(self, finished, seconds, since=None):
         """When to read next after a read that ended at ``finished`` and took ``seconds``.
 
@@ -716,7 +725,7 @@ class Retailer(models.Model):
         in an hourly run is still due at the next one) or from ``finished``. Never sooner than three times
         the read time after it ended, so a slow shop is never being read more than a third of the time.
         """
-        minutes = self.read_every_minutes
+        minutes = self.every_minutes
         # A drop day (WorkerState.fast_until, the Crawl health page): every shop at least this often while it lasts.
         fast = WorkerState.fast_read_minutes(finished)
         if fast:

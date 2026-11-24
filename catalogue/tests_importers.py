@@ -1840,14 +1840,15 @@ class CadenceTests(TestCase):
         self.assertGreater(reads["Hourly Shop"][0], 0.6)
         self.assertEqual([int(hour) for hour in reads["Hourly Shop"]], [0, 1, 2, 3, 4, 5])
 
-        # An owner's 80 or 120 minutes is every other hour, not every hour.
+        # An owner's 80 or 120 minutes is every hour all the same: every shop is read at least every hour (the
+        # owner, 24 Nov 2026: "all stores must update at least every hour"). It was every other hour.
         Retailer.objects.all().delete()
         self.shop("Eighty Shop", read_every_minutes=80)
         self.shop("Two Hour Shop", read_every_minutes=120)
         self.shop("Seventy Shop", read_every_minutes=70)
         reads = self.hourly(6)
-        self.assertEqual([int(hour) for hour in reads["Eighty Shop"]], [0, 2, 4])
-        self.assertEqual([int(hour) for hour in reads["Two Hour Shop"]], [0, 2, 4])
+        self.assertEqual([int(hour) for hour in reads["Eighty Shop"]], [0, 1, 2, 3, 4, 5])
+        self.assertEqual([int(hour) for hour in reads["Two Hour Shop"]], [0, 1, 2, 3, 4, 5])
         self.assertEqual([int(hour) for hour in reads["Seventy Shop"]], [0, 1, 2, 3, 4, 5])
 
     def test_a_shop_backing_off_is_not_read_before_its_wait_ends(self):
@@ -2081,17 +2082,17 @@ class PageIndexTests(TestCase):
     def address(self, n):
         return f"https://shop.example/products/pokemon-set-{n}-booster-box"
 
-    def test_first_read_of_1500_pages_fetches_600_and_indexes_all_then_the_next_600(self):
+    def test_first_read_of_900_pages_fetches_300_and_indexes_all_then_the_next_300(self):
         from .models import ShopPage
 
-        self.pages = [(self.address(n), "2026-01-05") for n in range(1500)]
+        self.pages = [(self.address(n), "2026-01-05") for n in range(900)]
         urls = [u for u, _lastmod in self.pages]
-        self.assertEqual(self.read(), urls[:600])
-        self.assertEqual(ShopPage.objects.filter(retailer=self.retailer).count(), 1500)
-        self.assertEqual(ShopPage.objects.filter(last_fetched_at__isnull=False).count(), 600)
+        self.assertEqual(self.read(), urls[:300])
+        self.assertEqual(ShopPage.objects.filter(retailer=self.retailer).count(), 900)
+        self.assertEqual(ShopPage.objects.filter(last_fetched_at__isnull=False).count(), 300)
         self.assertEqual(ShopPage.objects.get(url=urls[0]).slug_words, "pokemon set 0 booster box")
-        self.assertEqual(self.read(), urls[600:1200])
-        self.assertEqual(self.read(), urls[1200:])
+        self.assertEqual(self.read(), urls[300:600])
+        self.assertEqual(self.read(), urls[600:])
         # Every page read and none changed since: nothing to fetch until a day has passed.
         self.assertEqual(self.read(), [])
 
@@ -2108,7 +2109,7 @@ class PageIndexTests(TestCase):
                 chosen = pages_to_read(self.retailer, pages)
             # One insert per batch of rows (SQLite caps the values in one statement) and one read.
             self.assertLessEqual(len(queries), 15)
-            self.assertEqual(len(chosen), 600)
+            self.assertEqual(len(chosen), 300)
         self.assertEqual(ShopPage.objects.count(), 1500)
 
     def test_a_page_whose_lastmod_moved_is_fetched_first_and_an_unchanged_page_waits_a_day(self):

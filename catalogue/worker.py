@@ -17,8 +17,9 @@ Politeness, so a small shop never notices it:
 - each shop has a token bucket (Shopify 1 request a second with a burst of 3, website shops one every
   2 seconds, feeds one every 10 seconds) and every request also takes a token from a bucket of 2 a
   second for the whole process;
-- at most 2 whole-shop reads run at once, and at most 1 of a website shop, so one thread is always
-  free for probes;
+- at most 3 whole-shop reads run at once, and at most 2 of website shops, so one thread is always
+  free for probes (until 24 Nov 2026 2 and 1, which could not read every shop each hour: the owner, "all
+  stores must update at least every hour");
 - Shopify product pages are read 0.5 seconds apart on top of that.
 
 Safety:
@@ -26,7 +27,11 @@ Safety:
 - it holds /tmp/ripraptor-import.lock only while a shop read is running, so a hand-run import_prices
   or the nightly snapshot under flock waits only for the reads in flight. After 20 minutes of holding
   it without a break it starts no new reads until the lock has been let go, so a command waiting for
-  it always gets a turn;
+  it always gets a turn, but only while one is waiting: a cron line waiting in flock shows in the
+  kernel's list of locks (/proc/locks), and a command that waits by asking again (data_jobs) leaves a
+  note beside the lock (ripraptor-import.wanted.<name>) for as long as it waits (lock_waiters). Until
+  24 Nov 2026 the reader let it go every 20 minutes whatever, and a slot stood empty until the longest
+  read in flight ended;
 - every job has a deadline (shop read 20 minutes, website shop 45, marketplace 60, or twice the shop's
   last healthy read when that is longer; probe 60 seconds, with each probe request cut off after 10).
   A job past it marks its shop "Stuck, restarting" and backs it off like a failed read, closes its run,
@@ -69,7 +74,7 @@ logger = logging.getLogger(__name__)
 WORKER_LOCK = "/tmp/ripraptor-worker.lock"
 IMPORT_LOCK = "/tmp/ripraptor-import.lock"
 
-THREADS = 3
+THREADS = 4
 TICK_SECONDS = 5
 PLAN_EVERY = timedelta(seconds=60)
 BEAT_EVERY = timedelta(seconds=30)
@@ -89,8 +94,8 @@ WEIGHTS = {SHOP_READ: 500, "hot": 1000, "warm": 100, "cold": 10, PULSE: 300, FIN
 # A shop never read before has no next read; it counts as an hour overdue.
 NEVER_READ_MINUTES = 60
 
-MAX_READS = 2
-MAX_WEBSITE_READS = 1
+MAX_READS = 3
+MAX_WEBSITE_READS = 2
 # Longer than any healthy job, short enough that a wedged thread cannot hide behind a green heartbeat.
 # A website read fetches up to 600 pages at one every 2 seconds, 20 minutes on its own, so it gets 45.
 READ_DEADLINE = timedelta(minutes=20)
@@ -137,6 +142,12 @@ VISITS_EVERY = timedelta(minutes=1)
 # How often shops pasted on the Add shops page are looked for (catalogue/shop_adding.py).
 SHOPS_EVERY = timedelta(seconds=30)
 IMPORT_LOCK_HOLD_LIMIT = timedelta(minutes=20)
+# A command that waits for the import lock by asking again and again (data_jobs) leaves a file named this, plus its
+# own name, beside the lock while it waits; a cron line waiting in flock shows in /proc/locks instead. A note older
+# than LOCK_WANTED_FOR is left from a command that has given up.
+LOCK_WANTED = "ripraptor-import.wanted."
+LOCK_WANTED_FOR = timedelta(minutes=35)
+PROC_LOCKS = "/proc/locks"
 # Memory. On 18 Nov 2026 the reader passed its memory limit (MemoryMax in ripraptor-worker.service) four times and was
 # killed each time, part way through its reads; the owner, 19 Nov: "look at the memory too". Each shop read builds an
 # index of every product (about 30 MB for 10,000), up to three at once in separate threads, and a threaded Python
@@ -160,7 +171,7 @@ RATES = {
     Retailer.Source.WEBSITE: (0.5, 1),
     Retailer.Source.FEED: (0.1, 1),
 }
-GLOBAL_RATE = (2.0, 2)
+GLOBAL_RATE = (3.0, 3)
 STUCK = "Stuck, restarting"
 # The owner hears about a shop that has failed every read for this long, and about doubtful prices once
 # there are more than this many: enough to act on, never a stream.
@@ -212,7 +223,9 @@ class TokenBucket:
             if self.tokens >= 1:
                 self.tokens -= 1
                 return 0.0
-            return (1 - self.tokens) / self.rate
+            # At least a millisecond: a wait shorter than a clock can count (three a second leaves a token a hair short
+            # of whole) would never let the clock move on, and the caller would ask again for ever.
+            return max((1 - self.tokens) / self.rate, 0.001)
 
 
 # When the worker last asked each shop (wall-clock seconds), in the shared cache, so the Claude judge's
@@ -317,13 +330,17 @@ class ImportLock:
                     self.refused = "another command holds it"
                     return False
                 self.fd, self.held_since = fd, now
-            elif now - self.held_since >= IMPORT_LOCK_HOLD_LIMIT:
+            elif now - self.held_since >= IMPORT_LOCK_HOLD_LIMIT and self.wanted():
                 self.refused = (f"this reader has held it since {timezone.localtime(self.held_since):%H:%M} and lets a "
-                                "waiting command go first")
+                                f"waiting command go first ({', '.join(self.wanted())})")
                 return False
             self.count += 1
             self.refused = ""
             return True
+
+    def wanted(self):
+        """Who is waiting for the lock now (lock_waiters)."""
+        return lock_waiters(self.path)
 
     def release(self):
         with self.lock:
@@ -336,6 +353,52 @@ class ImportLock:
     @property
     def held(self):
         return self.count > 0
+
+
+def lock_waiters(path=None, now=None, proc_locks=PROC_LOCKS):
+    """Who is waiting for the import lock at ``path``, in words: "a command in flock" for each process the kernel
+    lists as blocked on it (/proc/locks: a line with "->" naming the lock file's inode), and the name on each note a
+    command leaves beside it while it asks again and again (want_lock), left out once older than LOCK_WANTED_FOR."""
+    path = path or IMPORT_LOCK
+    found = []
+    try:
+        inode = os.stat(path).st_ino
+        with open(proc_locks) as table:
+            for line in table:
+                parts = line.split()
+                # "12: -> FLOCK  ADVISORY  WRITE 4321 fd:01:262145 0 EOF": the process waits; its file is the last
+                # number of the major:minor:inode field.
+                if len(parts) > 6 and parts[1] == "->" and parts[2] == "FLOCK" and \
+                        parts[6].rsplit(":", 1)[-1] == str(inode):
+                    found.append("a command in flock")
+    except (OSError, ValueError):
+        pass
+    folder = os.path.dirname(path) or "."
+    cutoff = (now or time.time()) - LOCK_WANTED_FOR.total_seconds()
+    try:
+        names = sorted(name for name in os.listdir(folder) if name.startswith(LOCK_WANTED))
+    except OSError:
+        names = []
+    for name in names:
+        try:
+            if os.stat(os.path.join(folder, name)).st_mtime >= cutoff:
+                found.append(name[len(LOCK_WANTED):])
+        except OSError:
+            continue
+    return found
+
+
+def want_lock(name, path=None, waiting=True):
+    """Leave (or, with ``waiting`` False, take away) the note that ``name`` waits for the import lock at ``path``."""
+    note = os.path.join(os.path.dirname(path or IMPORT_LOCK) or ".", LOCK_WANTED + name)
+    try:
+        if waiting:
+            with open(note, "a"):
+                os.utime(note)
+        else:
+            os.unlink(note)
+    except OSError:
+        pass
 
 
 def hold_worker_lock(path=None):
@@ -534,7 +597,7 @@ class Worker:
 
     def plan(self, now):
         """Every job due now: the due reads, then the rest highest priority first. A shop whose read has room
-        to start is neither probed nor pulsed, except eBay, whose checks go on. Reads nothing from any shop."""
+        to start is neither probed nor pulsed. Reads nothing from any shop."""
         if crawl.all_paused():
             worklog.note_plan({"at": now.isoformat(), "paused": True})
             return []
@@ -790,7 +853,7 @@ class Worker:
         shop = Retailer.due(now).filter(pk=task.retailer_id).first()
         if shop is None:
             return False
-        shop.next_read_at = now + timedelta(minutes=shop.read_every_minutes)
+        shop.next_read_at = now + timedelta(minutes=shop.every_minutes)
         shop.save(update_fields=["next_read_at"])
         reads = [{"retailer": task.retailer_id, "since": now.isoformat()}]
         with self.lock:

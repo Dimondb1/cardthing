@@ -655,7 +655,7 @@ class WorkerThreadsInstallTests(TestCase):
         (folder / "meminfo").write_text("MemTotal:       2000000 kB\n")
         line = line.replace("/proc/meminfo", str(folder / "meminfo"))
         said = subprocess.run(["bash", "-euo", "pipefail", "-c", line], check=True, capture_output=True, text=True).stdout
-        self.assertEqual(said.strip(), "The background reader runs 3 jobs at once on this server's 1953 MB of memory.")
+        self.assertEqual(said.strip(), "The background reader runs 4 jobs at once on this server's 1953 MB of memory.")
 
     def test_it_is_written_before_the_reader_starts(self):
         text = (DEPLOY / "install.sh").read_text()

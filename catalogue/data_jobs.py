@@ -341,21 +341,27 @@ def wait_for_import_lock(job, until):
     # Read when called, not when imported, so the tests can point it at a file of their own.
     lock = worker.ImportLock(worker.IMPORT_LOCK)
     noted = False
-    while True:
-        now = timezone.now()
-        if lock.acquire(now):
-            # Also a note left from a wait in an earlier run.
-            beat(job, note="")
-            return lock
-        if not noted:
-            noted = True
-            beat(job, note=WAITING_FOR_READ)
-        else:
-            beat(job)
-        if now >= until:
-            return None
-        if not run_unlocked(until):
-            sleep(LOCK_POLL_SECONDS)
+    try:
+        while True:
+            now = timezone.now()
+            if lock.acquire(now):
+                # Also a note left from a wait in an earlier run.
+                beat(job, note="")
+                return lock
+            # The background reader lets the lock go only while someone is waiting for it, and this file asks
+            # again and again rather than waiting in flock, where the reader would see it: so it says so.
+            worker.want_lock("data-files", lock.path)
+            if not noted:
+                noted = True
+                beat(job, note=WAITING_FOR_READ)
+            else:
+                beat(job)
+            if now >= until:
+                return None
+            if not run_unlocked(until):
+                sleep(LOCK_POLL_SECONDS)
+    finally:
+        worker.want_lock("data-files", lock.path, waiting=False)
 
 
 def run_unlocked(deadline):

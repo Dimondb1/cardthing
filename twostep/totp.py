@@ -44,7 +44,9 @@ def current_step(now=None):
 def matching_step(secret, code, after=0, now=None):
     """The step ``code`` belongs to, near now and later than ``after`` (so a code works once), or None."""
     code = "".join(code.split())
-    if len(code) != DIGITS or not code.isdigit():
+    # isdigit() alone lets in other scripts' digits (Arabic-Indic, fullwidth), which compare_digest refuses with an
+    # error: the sign-in then failed only when the password was right, and so gave the password away.
+    if len(code) != DIGITS or not (code.isascii() and code.isdigit()):
         return None
     step = current_step(now)
     for candidate in range(step - DRIFT, step + DRIFT + 1):

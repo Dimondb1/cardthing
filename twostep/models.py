@@ -9,6 +9,10 @@ from django.utils import timezone
 from . import totp
 
 BACKUP_CODES = 8
+# The session key holding the secret shown on this sign-in's set-up page and not yet confirmed. It lives in the
+# session (kept in the database), not on the login's row, so only the sign-in that was shown it can confirm it: a
+# sign-in with the password alone, before the owner sets up their phone, never sees the key the owner's app gets.
+PENDING_KEY = "two_step_pending"
 # No 0, o, 1, i or l: a backup code is read off paper.
 BACKUP_LETTERS = "abcdefghjkmnpqrstuvwxyz23456789"
 
@@ -27,11 +31,10 @@ class TwoStep(models.Model):
     (or one of the backup codes, each good once) once ``secret`` is set."""
 
     user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="two_step")
-    # Set once the first code from the app is right; blank until then.
+    # Set once the first code from the app is right; blank until then. A secret shown on the set-up page and not
+    # yet confirmed (the first one, or a new phone's) is kept in that sign-in's session (PENDING_KEY); the one here
+    # keeps working until it is confirmed.
     secret = models.CharField(max_length=64, blank=True)
-    # A secret shown on the set-up page and not yet confirmed with a code: the first one, or a new phone's.
-    # The one in ``secret`` keeps working until this one is confirmed.
-    pending_secret = models.CharField(max_length=64, blank=True)
     confirmed_at = models.DateTimeField(null=True, blank=True)
     # The 30-second step of the last code used, so a code seen over someone's shoulder cannot be used again.
     last_step = models.BigIntegerField(default=0)
@@ -67,21 +70,38 @@ class TwoStep(models.Model):
                 return True
         return False
 
-    def start(self):
-        """The secret to show on the set-up page: the one already shown, so a reload keeps what the app has."""
-        if not self.pending_secret:
-            self.pending_secret = totp.new_secret()
-            self.save()
-        return self.pending_secret
+    def pending(self, session):
+        """The secret this sign-in's set-up page showed for this login, or ""."""
+        kept = session.get(PENDING_KEY)
+        if isinstance(kept, dict) and kept.get("user") == self.user_id and isinstance(kept.get("secret"), str):
+            return kept["secret"]
+        return ""
 
-    def confirm(self, code):
-        """Switch to the pending secret when ``code`` is its current code. Returns the new backup codes, or None."""
-        step = totp.matching_step(self.pending_secret, code) if self.pending_secret else None
+    def start(self, session):
+        """The secret to show on the set-up page: the one this sign-in was already shown, so a reload keeps what
+        the app has. Another session (one with only the password) gets its own, which only it could confirm."""
+        secret = self.pending(session)
+        if not secret:
+            secret = totp.new_secret()
+            session[PENDING_KEY] = {"user": self.user_id, "secret": secret}
+        return secret
+
+    def confirm(self, code, session):
+        """Switch to this sign-in's pending secret when ``code`` is its current code. Returns the new backup codes,
+        or None."""
+        pending = self.pending(session)
+        step = totp.matching_step(pending, code) if pending else None
         if step is None:
             return None
-        self.secret, self.pending_secret = self.pending_secret, ""
+        session.pop(PENDING_KEY, None)
+        self.secret = pending
         self.last_step, self.confirmed_at = step, timezone.now()
         return self.new_backup_codes()
+
+    @staticmethod
+    def forget_pending(session):
+        """Drop the key shown for a new phone: the old phone carries on."""
+        session.pop(PENDING_KEY, None)
 
     def new_backup_codes(self):
         """Fresh backup codes, saved hashed. The old ones stop working. Returns them to show once."""

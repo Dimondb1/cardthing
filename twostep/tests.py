@@ -20,7 +20,7 @@ from django.urls import reverse
 from . import lockout, totp
 from .forms import LOCKED, WRONG
 from .middleware import TwoStepMiddleware
-from .models import TwoStep, hashed
+from .models import PENDING_KEY, TwoStep, hashed
 from .views import SESSION_KEY
 
 LOGIN = reverse("admin:login")
@@ -87,9 +87,14 @@ class StaffCase(TestCase):
     def signed_in(self):
         return self.client.session.get(AUTH_SESSION_KEY) == str(self.staff.pk)
 
+    def pending(self):
+        """The key this test client's sign-in was shown on the set-up page and has not confirmed."""
+        return self.client.session.get(PENDING_KEY, {}).get("secret", "")
+
     def turn_on(self):
-        two_step = TwoStep.objects.create(user=self.staff, pending_secret=totp.new_secret())
-        self.codes = two_step.confirm(now_code(two_step.pending_secret))
+        two_step = TwoStep.objects.create(user=self.staff)
+        session = {}
+        self.codes = two_step.confirm(now_code(two_step.start(session)), session)
         # The code used to confirm cannot be used again; the tests sign in with the next step's.
         two_step.last_step = 0
         two_step.save()
@@ -145,6 +150,27 @@ class LockoutTests(StaffCase):
             self.client.post(LOGIN, {"username": "", "password": ""})
         self.assertEqual(self.sign_in().status_code, 302)
 
+    def test_another_accounts_right_sign_in_leaves_the_count_against_the_owner(self):
+        get_user_model().objects.create_user("editor", password=PASSWORD, is_staff=True)
+        for _ in range(lockout.LIMIT - 1):
+            self.sign_in("wrong")
+        self.assertEqual(self.client.post(LOGIN, {"username": "editor", "password": PASSWORD, "next": ADMIN})
+                         .status_code, 302)
+        self.client.logout()
+        self.sign_in("wrong")
+        self.assertContains(self.sign_in(), LOCKED)
+
+    def test_a_code_in_other_digits_is_a_wrong_try_like_any_other(self):
+        self.turn_on()
+        for typed in ("\u0661\u0662\u0663\u0664\u0665\u0666", "\uff11\uff12\uff13\uff14\uff15\uff16"):
+            with self.subTest(code=typed):
+                self.assertIsNone(totp.matching_step(self.staff.two_step.secret, typed))
+                cache.clear()
+                response = self.sign_in(code=typed)
+                self.assertEqual(response.status_code, 200)
+                self.assertContains(response, WRONG)
+                self.assertEqual(sum(lockout.record(response.wsgi_request, lockout.time.time())[1].values()), 1)
+
     def test_a_wrong_code_counts(self):
         self.turn_on()
         for _ in range(lockout.LIMIT):
@@ -160,7 +186,7 @@ class SetupTests(StaffCase):
         response = self.client.get(ADMIN)
         self.assertRedirects(response, f"{SETUP}?next=/admin/")
         page = self.client.get(response["Location"])
-        secret = TwoStep.objects.get(user=self.staff).pending_secret
+        secret = self.pending()
         self.assertContains(page, totp.grouped(secret))
         self.assertContains(page, "otpauth://totp/RipRaptor%3Aowner?")
         self.assertContains(page, 'value="/admin/"')
@@ -182,10 +208,10 @@ class SetupTests(StaffCase):
     def test_the_first_right_code_turns_it_on_and_shows_backup_codes_once(self):
         self.client.force_login(self.staff)
         self.client.get(SETUP)
-        secret = TwoStep.objects.get(user=self.staff).pending_secret
+        secret = self.pending()
         response = self.client.post(SETUP, {"action": "confirm", "code": now_code(secret), "next": "/admin/checks/"})
         two_step = TwoStep.objects.get(user=self.staff)
-        self.assertEqual((two_step.secret, two_step.pending_secret), (secret, ""))
+        self.assertEqual((two_step.secret, self.pending()), (secret, ""))
         self.assertIsNotNone(two_step.confirmed_at)
         self.assertEqual(len(response.context["codes"]), 8)
         self.assertEqual(two_step.backup_codes, [hashed(code) for code in response.context["codes"]])
@@ -199,10 +225,34 @@ class SetupTests(StaffCase):
     def test_next_never_leaves_the_site(self):
         self.client.force_login(self.staff)
         self.client.get(SETUP)
-        secret = TwoStep.objects.get(user=self.staff).pending_secret
+        secret = self.pending()
         response = self.client.post(SETUP, {"action": "confirm", "code": now_code(secret),
                                             "next": "https://elsewhere.example/"})
         self.assertNotContains(response, "elsewhere.example")
+
+    def test_a_sign_in_with_only_the_password_never_learns_the_owners_key(self):
+        # Someone with the password opens the set-up page first, then the owner sets up their phone.
+        stranger = self.client_class()
+        stranger.force_login(self.staff)
+        stranger.get(SETUP)
+        seen = stranger.session[PENDING_KEY]["secret"]
+        self.client.force_login(self.staff)
+        page = self.client.get(SETUP)
+        secret = self.pending()
+        self.assertNotEqual(secret, seen)
+        self.assertNotContains(page, totp.grouped(seen))
+        self.client.post(SETUP, {"action": "confirm", "code": now_code(secret)})
+        self.assertEqual(TwoStep.objects.get(user=self.staff).secret, secret)
+        # The stranger's key never became the login's, so their code signs nobody in.
+        two_step = TwoStep.objects.get(user=self.staff)
+        two_step.last_step = 0
+        two_step.save()
+        stranger.logout()
+        response = stranger.post(LOGIN, {"username": "owner", "password": PASSWORD, "code": now_code(seen),
+                                         "next": ADMIN})
+        self.assertContains(response, WRONG)
+        # Nor can they confirm theirs over the owner's now.
+        self.assertIsNone(two_step.confirm(now_code(seen), {}))
 
     def test_the_setup_page_reads_little(self):
         self.client.force_login(self.staff)
@@ -266,7 +316,8 @@ class SignInTests(StaffCase):
     def test_a_new_phone_takes_over_only_once_it_gives_a_code(self):
         self.sign_in(code=now_code(self.two_step.secret))
         self.client.post(SETUP, {"action": "new"})
-        pending = TwoStep.objects.get(pk=self.two_step.pk).pending_secret
+        pending = self.pending()
+        self.assertTrue(pending)
         self.assertNotEqual(pending, self.two_step.secret)
         # Until then the old phone still signs in.
         self.client.logout()
@@ -274,6 +325,8 @@ class SignInTests(StaffCase):
         self.two_step.last_step = 0
         self.two_step.save()
         self.assertEqual(self.sign_in(code=now_code(self.two_step.secret)).status_code, 302)
+        self.client.post(SETUP, {"action": "new"})
+        pending = self.pending()
         self.client.post(SETUP, {"action": "confirm", "code": now_code(pending)})
         self.assertEqual(TwoStep.objects.get(pk=self.two_step.pk).secret, pending)
 
@@ -282,7 +335,7 @@ class SignInTests(StaffCase):
         self.client.post(SETUP, {"action": "new"})
         self.client.post(SETUP, {"action": "cancel"})
         two_step = TwoStep.objects.get(pk=self.two_step.pk)
-        self.assertEqual((two_step.secret, two_step.pending_secret), (self.two_step.secret, ""))
+        self.assertEqual((two_step.secret, self.pending()), (self.two_step.secret, ""))
 
     def test_the_reset_command_turns_it_off_for_a_lost_phone(self):
         out = StringIO()

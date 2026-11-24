@@ -51,20 +51,19 @@ def setup(request):
         return render(request, "twostep/setup.html", {**context, "codes": two_step.new_backup_codes(),
                                                       "state": "codes"})
     if action == "cancel" and two_step.is_on:
-        two_step.pending_secret = ""
-        two_step.save(update_fields=["pending_secret"])
+        two_step.forget_pending(request.session)
         return redirect("twostep_setup")
     if two_step.is_on and action != "new" and action != "confirm":
         return render(request, "twostep/setup.html", {**context, "state": "on"})
     form = ConfirmForm(request.POST if action == "confirm" else None)
     if form.is_valid():
-        codes = two_step.confirm(form.cleaned_data["code"])
+        codes = two_step.confirm(form.cleaned_data["code"], request.session)
         if codes is not None:
             request.session[SESSION_KEY] = request.user.pk
             return render(request, "twostep/setup.html", {**context, "codes": codes, "state": "done"})
         form.add_error("code", "That code is not the one the app shows now. Check the key was typed in full, "
                                "then try the newest code.")
-    secret = two_step.start()
+    secret = two_step.start(request.session)
     return render(request, "twostep/setup.html", {
         **context, "form": form, "state": "new", "key": totp.grouped(secret),
         "link": totp.app_link(secret, request.user.get_username(), settings.RIPRAPTOR_SITE_NAME),

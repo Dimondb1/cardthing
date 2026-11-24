@@ -30,18 +30,19 @@ class LoginForm(AdminAuthenticationForm):
         try:
             cleaned = super().clean()
         except ValidationError:
-            lockout.failed(self.request)
+            lockout.failed(self.request, self.cleaned_data.get("username"))
             raise
         if self.user_cache is None:
             return cleaned   # a field was left empty: that is not a guess
         two_step = TwoStep.objects.filter(user=self.user_cache).first()
         if two_step is not None and two_step.is_on:
             if not two_step.check_code(cleaned.get("code", "")):
-                lockout.failed(self.request)
+                lockout.failed(self.request, self.cleaned_data.get("username"))
                 raise ValidationError(WRONG, code="invalid_login")
             # Read by views.mark_passed once Django has signed the user in.
             self.request.two_step_passed = self.user_cache.pk
-        lockout.cleared(self.request)
+        # Forget only this account's own wrong tries from this address.
+        lockout.cleared(self.request, self.cleaned_data.get("username"))
         return cleaned
 
 

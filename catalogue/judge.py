@@ -74,7 +74,7 @@ from django.utils import timezone
 from . import autopilot, checks, languages, sanity, set_judge, shop_pages
 from .importers import ean_key
 from .classify import box_contents, find_type
-from .models import CheckAnswer, ClaudeAsk, ClaudeJudge, Listing, Product, ShopProduct
+from .models import CheckAnswer, ClaudeAsk, ClaudeJudge, Listing, Product, Retailer, ShopProduct
 from .types import type_label
 
 logger = logging.getLogger(__name__)
@@ -146,6 +146,9 @@ HIDES_PER_RUN = 30
 CAREFUL_LOOK = "Claude takes a careful second look before it acts"
 PARTNER_FIRST = "Claude settles the cheaper price first"
 BARCODE_NEXT_READ = "the shop's barcode is not recorded yet. Claude acts after its next read records it"
+# Claude names only a language difference while the shop's own title reads as our language: a price is not taken off
+# on Claude's word against the row's own reading.
+LANGUAGE_READS_OURS = "Claude says the language differs, but the shop's title reads as ours"
 NOT_THE_OWNERS = {CAREFUL_LOOK, PARTNER_FIRST, BARCODE_NEXT_READ}
 # merge_duplicates.certainty's levels (a test keeps them the same): a pair is never merged across DIFFERENT.
 CERTAIN, LIKELY, DIFFERENT = "certain", "likely", "different"
@@ -603,8 +606,11 @@ class Evidence:
         self.product_ids = set(product_ids)
         self.rates = autopilot.going_rates(product_ids)
         self.titles = {}
+        # Only shops' own titles: an eBay or Amazon seller writes theirs, and a stranger's words must never reach
+        # the row of a shop's price that Claude may take off (the security audit, 24 Nov 2026).
         for product_id, retailer_id, title in (
             Listing.objects.live().filter(product_id__in=product_ids).exclude(title="")
+            .exclude(retailer__source_type__in=(Retailer.Source.EBAY, Retailer.Source.AMAZON))
             .order_by("pk").values_list("product_id", "retailer_id", "title")
         ):
             self.titles.setdefault(product_id, []).append((retailer_id, title))
@@ -1267,6 +1273,10 @@ def ruling(row, answer, partner=None):
                 return None, BARCODE_NEXT_READ
             return ("hide", "") if barred else ("check", "")
         if verdict == "different":
+            product = listing.product
+            if plain == {"language"} and (title_language(product, listing.title)
+                                          == languages.name(languages.product_language(product))):
+                return None, LANGUAGE_READS_OURS
             if not acting and not careful:
                 return None, CAREFUL_LOOK
             if row.partner and not row.cheaper:

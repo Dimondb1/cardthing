@@ -93,8 +93,9 @@ class PageCacheTests(TestCase):
         self.assertNotIn(f"page:{path}", warming.due())
         self.assertNotIn(f"page: {path}", warming.warm_pages())   # kept: not built again
         self.assertIn(f"page: {path}", warming.warm_pages(fresh=True))
+        host, scheme = pagecache.warm_host()   # kept for the site's own address (pagecache.keepable)
         with self.assertNumQueries(0):
-            page = self.client.get(path)
+            page = self.client.get(path, HTTP_HOST=host, secure=scheme == "https")
         self.assertEqual(page[pagecache.HEADER], "cached")
         # Built for the site's own address, so its links are the site's, and marked as the game page.
         from django.conf import settings

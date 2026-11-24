@@ -53,8 +53,27 @@ def forget():
     cache.set(GENERATION_KEY, time.time(), None)
 
 
+def page_key(path, host, scheme):
+    """A whole page's key. The page's own links (canonical, og:url, the breadcrumbs' JSON-LD) carry the address it
+    was asked at, so a page is kept per host and scheme, and only for the site's own hosts (keepable)."""
+    return key_for(f"{scheme}://{host}{path}")
+
+
+def keepable(request):
+    """Whether this request's page may be read from or kept in the cache: asked at one of the site's own hosts as
+    named, without a port (Django lets ripraptor.com:1 through as ripraptor.com), or at the host pages are warmed
+    for. Any other is built for that visitor alone, so no one can choose the address everyone else's copy names."""
+    try:
+        host = request.get_host()
+    except Exception:   # DisallowedHost: Django answers it itself
+        return False
+    named = {h.lower() for h in settings.ALLOWED_HOSTS if h and not h.startswith(("*", "."))}
+    return host.lower() in named or host.lower() == warm_host()[0].lower()
+
+
 def has(path):
-    return cache.has_key(key_for(path))
+    host, scheme = warm_host()
+    return cache.has_key(page_key(path, host, scheme))
 
 
 def cached_page(view):
@@ -63,9 +82,10 @@ def cached_page(view):
     def wrapper(request, *args, **kwargs):
         # A staff preview of a seasonal theme (?theme=, web.seasons) or a look (?look=, web.look) is never kept or
         # served from the cache.
-        if request.method != "GET" or not on() or seasons.PREVIEW in request.GET or look.PREVIEW in request.GET:
+        if (request.method != "GET" or not on() or seasons.PREVIEW in request.GET or look.PREVIEW in request.GET
+                or not keepable(request)):
             return view(request, *args, **kwargs)
-        key = key_for(request.get_full_path())
+        key = page_key(request.get_full_path(), request.get_host().lower(), request.scheme)
         found = cache.get(key)
         # The nonce on the page's scripts (ripraptor/csp.py) is this response's own: a kept page is served with a
         # fresh one written in where the one it was built with was.

@@ -39,6 +39,7 @@ import ipaddress
 import re
 import secrets
 import socket
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as LookupTimeout
@@ -162,12 +163,33 @@ def crawler_name(agent):
 _lookups = None
 
 
+LOOKUP_THREADS = 4
+# Lookups waiting or running in this process at most. Past it nothing more is asked or remembered, so names whose
+# servers never answer cannot fill the queue and leave a real search engine's lookup waiting until it counts as
+# unanswered (the security audit, 24 Nov 2026).
+MAX_PENDING = 2 * LOOKUP_THREADS
+_pending = {"count": 0}
+_pending_lock = threading.Lock()
+
+
 def lookups():
     """A few threads for name lookups, so one that hangs is given up on after LOOKUP_SECONDS."""
     global _lookups
     if _lookups is None:
-        _lookups = ThreadPoolExecutor(max_workers=4, thread_name_prefix="visitor-check")
+        _lookups = ThreadPoolExecutor(max_workers=LOOKUP_THREADS, thread_name_prefix="visitor-check")
     return _lookups
+
+
+def finished(key, job):
+    """A lookup has ended, in time or not: its place in the queue is free, and a real answer is remembered even when
+    it came after its request was answered, so that address is proven on its next visit."""
+    with _pending_lock:
+        _pending["count"] = max(0, _pending["count"] - 1)
+    if job.cancelled() or job.exception() is not None:
+        return
+    result = job.result()
+    if result is not None:
+        cache.set(key, result, VERIFIED_SECONDS)
 
 
 def addresses_of(host):
@@ -206,10 +228,18 @@ def verified(ip, suffixes, lookup=None, forward=None):
     found = cache.get(key)
     if found is not None:
         return None if found == LATER else found
+    with _pending_lock:
+        if _pending["count"] >= MAX_PENDING:
+            return None   # every lookup place is taken: no answer now, and nothing remembered against this address
+        _pending["count"] += 1
     job = lookups().submit(resolves, ip, suffixes, lookup or socket.gethostbyaddr, forward or addresses_of)
+    job.add_done_callback(lambda done: finished(key, done))
     try:
         result = job.result(timeout=LOOKUP_SECONDS)
     except LookupTimeout:
+        if job.cancel():
+            # It never started, waiting behind lookups that hang: nothing is known about this address yet.
+            return None
         result = None
     if result is None:
         cache.set(key, LATER, UNANSWERED_SECONDS)

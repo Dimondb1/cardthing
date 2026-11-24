@@ -136,7 +136,8 @@ class PolicyTests(PageTestCase):
         cache.clear()
         look.remember()
         self.assertTrue(pagecache.warm(url))
-        served = self.client.get(url)
+        host, scheme = pagecache.warm_host()   # a warmed page is kept for the site's own address
+        served = self.client.get(url, HTTP_HOST=host, secure=scheme == "https")
         self.assertEqual(served[pagecache.HEADER], "cached")
         self.check(served.content.decode(), served[csp.HEADER], strict=True)
 

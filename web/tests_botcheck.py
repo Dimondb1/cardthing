@@ -4,8 +4,11 @@ A first visit from outside the UK and Ireland works out a small sum in the brows
 pass for its address for a week. Search engines proven by their addresses, AI assistants and link previews by name,
 staff, the files pages load and the files crawlers read are never checked."""
 
+import hashlib
 import json
 import re
+import socket
+import threading
 import time
 from unittest import mock
 
@@ -261,6 +264,39 @@ class CheckTests(TestCase):
                                                forward=lambda host: ["203.0.113.11"]))
             self.assertLess(time.monotonic() - started, 0.4)
         self.assertEqual(kept.call_args.args[2], botcheck.UNANSWERED_SECONDS)
+
+    def test_lookups_that_never_answer_cannot_crowd_out_a_real_search_engine(self):
+        hang = threading.Event()
+        self.addCleanup(hang.set)
+
+        def never(ip):
+            hang.wait(5)
+            raise socket.herror(2, "no answer")
+
+        def google(ip):
+            return ("crawl-66-249-66-1.googlebot.com", [], [ip])
+
+        forward = lambda host: ["66.249.66.1"]   # noqa: E731
+        with mock.patch.object(botcheck, "LOOKUP_SECONDS", 0.05):
+            for n in range(botcheck.LOOKUP_THREADS):
+                self.assertIsNone(botcheck.verified(f"203.0.113.{20 + n}", (".googlebot.com",), lookup=never,
+                                                    forward=forward))
+            # Every lookup thread hangs. Google's lookup waits unstarted, so nothing is remembered against it.
+            self.assertIsNone(botcheck.verified("66.249.66.1", (".googlebot.com",), lookup=google, forward=forward))
+            key = botcheck.VERIFIED_KEY + hashlib.sha256(b"66.249.66.1|.googlebot.com").hexdigest()[:24]
+            self.assertIsNone(cache.get(key))
+            # Once the threads are free it is proven at once.
+            hang.set()
+            deadline = time.monotonic() + 5
+            while botcheck._pending["count"] and time.monotonic() < deadline:
+                time.sleep(0.01)
+            self.assertTrue(botcheck.verified("66.249.66.1", (".googlebot.com",), lookup=google, forward=forward))
+
+    def test_past_the_most_lookups_waiting_nothing_more_is_asked_or_remembered(self):
+        with mock.patch.dict(botcheck._pending, {"count": botcheck.MAX_PENDING}), \
+                mock.patch.object(botcheck, "lookups") as pool:
+            self.assertIsNone(botcheck.verified("203.0.113.40", (".googlebot.com",)))
+        pool.assert_not_called()
 
     def test_a_search_engine_whose_address_cannot_be_looked_up_is_asked_to_come_back(self):
         # The audit of 17 Nov 2026: the check page is marked not to be indexed, so shown to Google on a real address

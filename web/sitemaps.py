@@ -173,6 +173,19 @@ class TypeSitemap(Sitemap):
         return type_pages.url_for(game, code)
 
 
+class BlackFridaySitemap(Sitemap):
+    """The Black Friday hub, and each game's Black Friday page while it is published (web/black_friday.py: enough
+    genuine price drops now). One query."""
+
+    def items(self):
+        from web import black_friday
+
+        return black_friday.sitemap_paths()
+
+    def location(self, path):
+        return path
+
+
 SITEMAPS = {
     "products": ProductSitemap,
     "games": GameSitemap,
@@ -181,4 +194,5 @@ SITEMAPS = {
     "pages": PageSitemap,
     "prices": PricesSitemap,
     "guides": GuideSitemap,
+    "black-friday": BlackFridaySitemap,
 }

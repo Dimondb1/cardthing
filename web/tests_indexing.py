@@ -165,13 +165,14 @@ class SitemapTests(TestCase):
         # A count and a page each for products, games and sets; the fixed pages need none. The UK prices pages
         # (web/price_list.py) need a count, and a page once a game has one: none here. The games' pages of one kind
         # (web/type_pages.py): their kinds and the sets' addresses.
-        with self.assertNumQueries(9):
+        # The Black Friday section's one: which games have enough genuine price drops (web/black_friday.py).
+        with self.assertNumQueries(10):
             self.client.get("/sitemap.xml")
         for n in range(15):
             product = make_product(self.set, name=f"Extra Box {n}", slug=f"extra-{n}")
             make_listing(product, self.shop)
             make_listing(product, self.other_shop, availability=OUT)
-        with self.assertNumQueries(9):
+        with self.assertNumQueries(10):
             response = self.client.get("/sitemap.xml")
         self.assertContains(response, "/products/extra-14/")
 
@@ -318,7 +319,8 @@ class PageEditTests(TestCase):
     def test_the_sitemap_still_costs_two_queries_a_section(self):
         product = make_product(self.set, slug="pe-etb")
         make_listing(product, self.shop)
-        with self.assertNumQueries(9):
+        # The Black Friday section's one: which games have enough genuine price drops (web/black_friday.py).
+        with self.assertNumQueries(10):
             self.client.get("/sitemap.xml")
 
 

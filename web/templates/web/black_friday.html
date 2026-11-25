@@ -1,0 +1,76 @@
+{% extends "web/base.html" %}
+{% load sitecopy ripraptor %}
+{# Black Friday (web/black_friday.py): the genuine price drops at UK shops, the hub at /black-friday/ and a page for each game. Plain links and lists, so every product and filter works without script; the questions are given again as FAQPage in the page's structured data, word for word. #}
+{% block content %}
+<div class="bf">
+  <nav class="breadcrumbs" aria-label="Breadcrumb">
+    <ol>{% for name, url in crumbs %}{% if not forloop.last %}<li><a href="{{ url }}">{{ name }}</a></li>{% endif %}{% endfor %}</ol>
+  </nav>
+  <p class="bf__eyebrow">{% copy "blackfriday.slogan" %}</p>
+  <h1 class="page-title">{{ heading }}</h1>
+  <p class="page-intro">{{ intro }}</p>
+  <p class="page-head__line">{{ season_line }}{% if checked %}<span aria-hidden="true"> · </span><span class="visually-hidden">. </span>{% copy "blackfriday.checked" time=checked|ago %}{% endif %}</p>
+
+  {% if games %}
+  <nav class="chips bf__games" aria-label="{% copy 'blackfriday.games' %}">
+    <ul class="chips__list">
+      {% for each, n in games.items %}<li><a class="chip" href="{% url 'web:black_friday_game' each.slug %}">{{ each.display_short }} <span class="chip__count">{{ n }}</span></a></li>{% endfor %}
+    </ul>
+  </nav>
+  {% endif %}
+
+  {% if every %}
+  <nav class="bf__filters" aria-label="{% copy 'blackfriday.filters' %}">
+    {% if kinds|length > 1 %}
+    <div class="chips"><ul class="chips__list">
+      <li><a class="chip" href="{{ path }}{% if sort != 'percent' %}?sort={{ sort }}{% endif %}"{% if not kind %} aria-current="page"{% endif %}>{% copy "blackfriday.kinds.all" %}</a></li>
+      {% for code, label in kinds %}<li><a class="chip" href="{{ path }}?type={{ code }}{% if sort != 'percent' %}&amp;sort={{ sort }}{% endif %}"{% if kind == code %} aria-current="page"{% endif %}>{{ label }}</a></li>{% endfor %}
+    </ul></div>
+    {% endif %}
+    <div class="chips"><ul class="chips__list">
+      {% for each in sorts %}<li><a class="chip" href="{{ path }}{% if each != 'percent' or kind %}?{% endif %}{% if kind %}type={{ kind }}{% endif %}{% if each != 'percent' %}{% if kind %}&amp;{% endif %}sort={{ each }}{% endif %}"{% if sort == each %} aria-current="page"{% endif %}>{% if each == "percent" %}{% copy "blackfriday.sort.percent" %}{% elif each == "pounds" %}{% copy "blackfriday.sort.pounds" %}{% else %}{% copy "blackfriday.sort.lowest" %}{% endif %}</a></li>{% endfor %}
+    </ul></div>
+  </nav>
+  {% endif %}
+
+  <p class="bf__count"><strong>{% if count == 1 %}{% copy "blackfriday.count.one" count=count %}{% else %}{% copy "blackfriday.count.other" count=count %}{% endif %}</strong>{% if count > shown_limit %} {% copy "blackfriday.shown" shown=shown_limit count=count %}{% endif %}</p>
+  <p class="bf__kinds-note">{% copy "blackfriday.two_kinds" %}</p>
+
+  {% if rows %}
+  <ol class="drop-list bf__list">
+    {% for product in rows %}
+    <li class="drop-card bf-deal">
+      <a class="bf-deal__head" href="{{ product.get_absolute_url }}">
+        {% product_image product "thumb" %}
+        <span class="bf-deal__title"><span class="drop-card__game">{{ product.game.display_short }} · {{ product.type_name }}</span><span class="bf-deal__name">{{ product.name }}</span></span>
+      </a>
+      <p class="bf-deal__price">{% price product.lowest_known size="md" %} <span class="delivered">{% copy "browse.price.label" %}</span>{% if product.best %} <span class="bf-deal__shop">{% copy "product.rank.at" retailer=product.best.retailer.name %}</span>{% endif %}</p>
+      <dl class="bf-deal__facts">
+        <div class="bf-deal__fact bf-deal__fact--lead"><dt>{% copy "blackfriday.row.history" %}</dt><dd>{% if product.saving_money %}<span class="bf-down">{% copy "blackfriday.row.under" amount=product.saving_money|gbp percent=product.saving_percent average=product.average|gbp %}</span>{% else %}{% copy "blackfriday.row.level" average=product.average|gbp %}{% endif %}</dd></div>
+        {% for moved in product.changes %}<div class="bf-deal__fact"><dt>{% if moved.days == 7 %}{% copy "blackfriday.row.week" %}{% else %}{% copy "blackfriday.row.month" %}{% endif %}</dt><dd>{% if moved.direction == "down" %}<span class="bf-down"><span aria-hidden="true">↓</span> {% copy "blackfriday.row.down" amount=moved.amount|gbp percent=moved.percent %}</span>{% elif moved.direction == "up" %}<span class="bf-up"><span aria-hidden="true">↑</span> {% copy "blackfriday.row.up" amount=moved.amount|gbp percent=moved.percent %}</span>{% else %}{% copy "blackfriday.row.same" %}{% endif %}</dd></div>{% endfor %}
+        <div class="bf-deal__fact"><dt>{% copy "blackfriday.row.lowest" %}</dt><dd>{% if product.at_low %}<span class="bf-down">{% copy "blackfriday.row.lowest_today" %}</span>{% else %}{% copy "blackfriday.row.lowest_on" price=product.low_price|gbp date=product.low_date|date:"j M Y" %}{% endif %}</dd></div>
+        {% if product.summary.saving %}<div class="bf-deal__fact"><dt>{% copy "blackfriday.row.between" %}</dt><dd>{% copy "blackfriday.row.between_value" amount=product.summary.saving|gbp %}</dd></div>{% endif %}
+        <div class="bf-deal__fact"><dt>{% copy "blackfriday.row.stock" %}</dt><dd>{% if product.in_stock_count == 1 %}{% copy "blackfriday.row.stock_value.one" count=product.in_stock_count %}{% else %}{% copy "blackfriday.row.stock_value.other" count=product.in_stock_count %}{% endif %}</dd></div>
+        {% if product.best %}<div class="bf-deal__fact"><dt>{% copy "blackfriday.row.checked" %}</dt><dd><time datetime="{{ product.best.last_checked|date:'c' }}">{{ product.best.last_checked|date:"j M Y, H:i" }}</time></dd></div>{% endif %}
+      </dl>
+      {% if product.best %}<a class="button button--small bf-deal__buy" {% go_link product.best "deal" product %} target="_blank" rel="sponsored nofollow noopener">{% include "web/includes/bag.html" %}{% copy "product.buy.button" %}<span class="visually-hidden"> {{ product.name }} at {{ product.best.retailer.name }} (opens in a new tab)</span></a>{% endif %}
+    </li>
+    {% endfor %}
+  </ol>
+  {% elif every %}
+  <p class="page-intro">{% copy "blackfriday.empty_filtered" %} <a href="{{ path }}">{% copy "blackfriday.all" %}</a></p>
+  {% else %}
+  <p class="page-intro">{% copy "blackfriday.empty" %}</p>
+  {% endif %}
+
+  {% if questions %}
+  <section class="hub-faq bf__faq" aria-labelledby="bf-faq-title">
+    <h2 id="bf-faq-title" class="section-head__title hub-faq__title">{% copy "blackfriday.faq.title" %}</h2>
+    {% for question, answer in questions %}<div class="hub-faq__item"><h3 class="hub-faq__q">{{ question }}</h3><p class="hub-faq__a">{{ answer }}</p></div>{% endfor %}
+    <p class="hub-faq__more">{% if game %}<a href="{% url 'web:black_friday' %}">{% copy "blackfriday.hub_link" year=when.year %}</a> · {% endif %}<a href="{% url 'web:deals' %}">{% copy "blackfriday.deals_link" %}</a></p>
+  </section>
+  {% endif %}
+
+  <p class="small-print">{% copy "product.small_print" %} <a href="{% url 'web:terms' %}">{% copy "site.nav.terms" %}</a></p>
+</div>
+{% endblock %}

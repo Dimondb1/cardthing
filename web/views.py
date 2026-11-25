@@ -1572,6 +1572,8 @@ def game_page(request, game, type_code=None):
             "heading": heading,
             "game": game,
             "type_page": bool(type_code),
+            # The seasonal Black Friday banner leads to the game's own Black Friday page (web/black_friday.py).
+            "bf_game": None if type_code else game,
             "sets": sets[:GAME_PAGE_SETS],
             "more_sets": len(sets) > GAME_PAGE_SETS,
             "intro": intro,

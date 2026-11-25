@@ -136,6 +136,7 @@
   {% if not tab_row %}{% if not intro or filters_active %}<p class="browse-head__count" role="status">{% copy_count "browse.count" total %}</p>{% endif %}{% endif %}
 </div>
 {% endif %}
+{% if bf_game and not filters_active %}{% include "web/includes/black_friday_banner.html" with bf_game=bf_game %}{% endif %}
 
 {# With the new home page on, a game's sets are a row above its type tiles instead (feed_top.html); the compact layout lists them on the game's own page (web/compact.py). #}
 {% if sets and not feed and not compact %}

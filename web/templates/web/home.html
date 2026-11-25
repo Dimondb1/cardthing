@@ -13,6 +13,7 @@
   {% if season.scene %}<div class="season-scenes">{% include season.scene %}</div>{% endif %}
 </section>
 {% if season.key == "christmas" %}{% include "web/includes/season/christmas_gifts.html" %}{% endif %}
+{% include "web/includes/black_friday_banner.html" %}
 
 {% if games %}
 {# The games first, straight under the search (the owner, 2 Nov 2026: "i want the games back up the top again replacing the jump buttons"): each tile opens its game's page. #}

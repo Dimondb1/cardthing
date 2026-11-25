@@ -4,8 +4,9 @@
 {# The owner, 15 Nov 2026: "Talk about waffle central ... only the necessary really needed" and, of the headings, "Kill them": the heading is for search engines and screen readers only; one short line says when the prices were checked, which every price must. #}
 <div class="page-head">
   <h1 class="visually-hidden">{% copy "deals.title" %}</h1>
-  <p class="page-head__line">{% if last_checked %}{% copy "deals.intro" time=last_checked|ago %}<span aria-hidden="true"> · </span><span class="visually-hidden">. </span>{% endif %}<a href="{% url 'web:per_card' %}">{% copy "deals.percard" %}</a></p>
+  <p class="page-head__line">{% if last_checked %}{% copy "deals.intro" time=last_checked|ago %}<span aria-hidden="true"> · </span><span class="visually-hidden">. </span>{% endif %}<a href="{% url 'web:per_card' %}">{% copy "deals.percard" %}</a><span aria-hidden="true"> · </span><span class="visually-hidden">. </span><a href="{% url 'web:black_friday' %}">{% copy "blackfriday.deals_page_link" %}</a></p>
 </div>
+{% include "web/includes/black_friday_banner.html" %}
 
 {% if savings %}
 <section class="home-section" aria-labelledby="savings-title">

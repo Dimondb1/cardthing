@@ -67,6 +67,8 @@ class PageTestCase(TestCase):
             reverse("web:drops") + "?show=out",
             reverse("web:prices"),
             reverse("web:prices_game", args=[self.game.slug]),
+            reverse("web:black_friday"),
+            reverse("web:black_friday_game", args=[self.game.slug]),
             self.cheap.get_outbound_url(),   # opened away from our pages: the Continue page (web.views.gate)
         ]
 
@@ -1326,7 +1328,9 @@ class DealsAndAliasTests(PageTestCase):
         self.assertIn('<h1 class="visually-hidden">Today&#x27;s best sealed TCG deals in the UK</h1>', html)
         top = html[html.index('<div class="page-head">'):html.index("</div>", html.index('<div class="page-head">'))]
         self.assertIn('<p class="page-head__line">Delivered prices, checked ', top)
-        self.assertIn(f'<a href="{reverse("web:per_card")}">Cheapest per card</a></p>', top)
+        self.assertIn(f'<a href="{reverse("web:per_card")}">Cheapest per card</a>', top)
+        # And Black Friday's deals all year (web/black_friday.py), the address kept for every year's.
+        self.assertIn(f'<a href="{reverse("web:black_friday")}">Black Friday deals</a></p>', top)
         self.assertNotIn("page-intro", top)
         self.assertNotIn("biggest gaps", html)
 

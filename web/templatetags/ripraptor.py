@@ -493,3 +493,11 @@ def info(context, kind, value, title="", game=""):
 
 def format_html_join_lines(lines):
     return mark_safe("".join(format_html('<span class="info-card__text">{}</span>', line) for line in lines))
+
+
+@register.simple_tag
+def black_friday_banner(game=None):
+    """What the seasonal Black Friday banner shows (web/black_friday.banner), or None outside its days. No query."""
+    from web import black_friday
+
+    return black_friday.banner(game or None)

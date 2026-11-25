@@ -1,0 +1,9 @@
+{% load sitecopy ripraptor %}{% black_friday_banner bf_game as bf %}{% if bf %}
+{# The seasonal Black Friday banner (web/black_friday.py banner): from two weeks before Black Friday to Cyber Monday, on the home, Deals and game pages, leading to the hub or the game's own page. #}
+<aside class="bf-banner" aria-labelledby="bf-banner-title">
+  <p class="bf-banner__eyebrow">{% copy "blackfriday.banner.eyebrow" year=bf.when.year %}</p>
+  <h2 id="bf-banner-title" class="bf-banner__title">{% copy "blackfriday.slogan" %}</h2>
+  <p class="bf-banner__text">{% copy "blackfriday.banner.text" monday=bf.monday %}</p>
+  <a class="button bf-banner__button" href="{{ bf.url }}">{% if bf.game %}{% copy "blackfriday.banner.button_game" game=bf.game.display_short %}{% else %}{% copy "blackfriday.banner.button" %}{% endif %}</a>
+</aside>
+{% endif %}

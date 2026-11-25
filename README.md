@@ -4186,6 +4186,61 @@ sends a confirmation again: only its link turns restocks on. The reminder
 is deleted when its restock days are up. The wording is in Site wording
 under the home page ("Drop spotlight") and the drop reminder emails.
 
+## Black Friday pages
+
+**Black Friday** (`/black-friday/` and `/black-friday/<game>/`, such as
+`/black-friday/pokemon/`; `web/black_friday.py`) lists the genuine price
+drops at UK shops under the message "Real Black Friday deals. Not inflated
+discounts." The addresses stay all year and serve every year: the year in
+the titles is the current one, Black Friday is worked out as the day after
+the fourth Thursday of November and Cyber Monday as the Monday after it.
+The owner, 25 Nov 2026 (a brief for Black Friday and Cyber Monday 2026).
+
+A product is listed only when all of these hold, from our own daily record
+of each product's cheapest delivered price (`DailyLowestPrice`):
+
+- a UK shop has it in stock now at a confirmed delivered price that is not
+  doubtful;
+- its Price check rests on our own record (at least two UK shops list it,
+  with 14 days of prices) and calls today's price a good price or the
+  lowest yet. That check looks at the whole year, Cardmarket and the RRP,
+  so a price pushed up in November and then "cut" is not called good;
+- today's price is at least 5% (and 50p) under its average over the last
+  30 days, with 14 of those days recorded, or at or below the lowest we
+  have recorded;
+- the fall is under 70%: a larger one is a wrong product link, as on the
+  Deals page.
+
+Each deal is a card: today's cheapest delivered price and shop, its price
+history (how far under its 30-day average, the change on 7 and 30 days, in
+green when it fell and red when it rose, and its lowest recorded price and
+day), the difference from the next shop today (labelled Between shops and
+never called a reduction), how many shops have it in stock, when the price
+was checked, and Buy now (through `/go/`, sponsored and not followed).
+Filters are plain links: the games (on the hub, each to its own page), the
+kinds of product (`?type=`) and the order (`?sort=percent`, `pounds`, or
+`lowest` for the lowest recorded prices only). A filtered address keeps the
+page's own canonical. The hub shows the top 60, a game's page the top 120.
+
+The questions at the foot (cheapest cards this Black Friday, whether booster
+boxes are cheaper, which UK shops have the most deals, how a genuine drop is
+picked, and when Cyber Monday is) are answered with the page's own figures,
+and given again as FAQPage in its structured data with its breadcrumbs. The
+hub's name Pokémon; a game's page names its own game. eBay and Amazon are
+never counted among the shops.
+
+A game's page is published (indexed, in the sitemap's `black-friday`
+section, linked from the hub) while it has 3 genuine drops or more; below
+that it still answers but asks search engines not to index it. The hub is
+always indexed. `robots.txt` is unchanged: `/search/` stays disallowed.
+
+The banner (`web/includes/black_friday_banner.html`, the
+`black_friday_banner` tag; no query) shows on every home page layout, the
+Deals page and each game's page from two weeks before Black Friday to the
+end of Cyber Monday, leading to the hub or the game's own page. The Deals
+page links to `/black-friday/` all year. Every sentence is in Site wording
+under Black Friday pages; the pages are kept like any list page.
+
 ## Deals page
 
 `/deals/` is the page to link from social posts: the biggest savings

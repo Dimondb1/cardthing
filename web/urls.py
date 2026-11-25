@@ -3,7 +3,7 @@ from django.urls import path
 
 from guides import views as guides
 
-from . import dashboard, price_list, refer_views, report, views
+from . import black_friday, dashboard, price_list, refer_views, report, views
 from .feeds import DealsFeed
 from .sitemaps import SITEMAPS
 
@@ -19,6 +19,8 @@ urlpatterns = [
     path("api/note/", views.note_api, name="note_api"),
     path("swipe/", views.deck, name="deck"),
     path("deals/", views.deals, name="deals"),
+    path("black-friday/", black_friday.hub, name="black_friday"),
+    path("black-friday/<slug:game_slug>/", black_friday.game_page, name="black_friday_game"),
     path("find/", views.find, name="find"),
     path("find/list/", views.find_list, name="find_list"),
     path("find/photo/", views.search_photo, name="search_photo"),

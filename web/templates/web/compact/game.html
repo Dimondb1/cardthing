@@ -12,6 +12,7 @@
 {# The owner, 15 Nov 2026: "Talk about waffle central ... only the necessary": the heading is for search engines and screen readers only, and the counts sentence is at the foot (web/proof.py reads it there). #}
 <h1 class="visually-hidden">{% copy "browse.hub.answer.title" game=game.name %}</h1>
 {% include "web/includes/compact_strip.html" %}
+{% include "web/includes/black_friday_banner.html" with bf_game=game %}
 <section class="cx-section" aria-labelledby="cx-sets-title">
   {# On each landing (feed.js) a light label under the heading while the sets light up one by one, then one under All products while it lights (the owner, 17 Nov 2026: "very subtle, very light ... little highlights to say, select your product or pick all products"). Any tap, scroll or key ends them; without script they never show. #}
   <div class="cx-section__head"><h2 id="cx-sets-title" class="cx-section__title">{% copy "compact.game.sets" game=game.display_short %}</h2><a class="cx-section__all" href="{{ all_url }}">{% copy "compact.game.all_products" game=game.display_short %}</a>{% if dock.hints == "game" and sets %}<span class="feed-hint feed-hint--soft feed-hint--cx-sets" hidden aria-hidden="true" data-hint-hold="2000">{% copy "compact.hint.sets" %}</span><span class="feed-hint feed-hint--soft feed-hint--cx-all" hidden aria-hidden="true" data-hint-hold="2000" data-hint-glow="1600">{% copy "compact.hint.all" %}</span>{% endif %}</div>

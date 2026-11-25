@@ -28,6 +28,7 @@
     <button class="button dt-browse__go" type="submit">{% copy "compact.desk.show" %}</button>
   </form>
 </section>
+{% include "web/includes/black_friday_banner.html" %}
 {% if season.key == "christmas" %}{% include "web/includes/season/christmas_gifts.html" %}{% endif %}
 {% include "web/includes/compact_strip.html" %}
 {% if sets %}

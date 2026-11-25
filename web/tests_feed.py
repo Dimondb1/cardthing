@@ -425,8 +425,9 @@ class HomeFeedTests(FeedCase):
         self.assertIn('<h2 class="browse-head__title">Pokémon</h2>', html)   # the usual list below: one h1 a page
         self.assertEqual(html.count("<h1"), 1)
         tiles = re.findall(r'<li class="feed-tile"><a class="feed-tile__link" href="([^"]+)" data-browse-link>', html)
-        self.assertEqual(tiles, [f"{url}?type=all", f"{url}?type=booster_box", f"{url}?type=bundle", f"{url}?type=elite_trainer_box",
-                                 f"{url}?type=tin"])   # one of each in stock (the drop is on pre-order), so by type
+        # Each kind opens its own page (web/type_pages.py): one of each in stock (the drop is on pre-order), so by type.
+        self.assertEqual(tiles, [f"{url}?type=all", f"{url}booster-boxes/", f"{url}booster-bundles/",
+                                 f"{url}elite-trainer-boxes/", f"{url}tins/"])
         # The game's own deals, the most clicked first, each saying why, no game label.
         self.assertEqual(rail_title(html), "Today&#x27;s best deals")
         self.assertIn(f'<a class="feed__all" href="{reverse("web:deals")}?game=pokemon">See all</a>', html)
@@ -555,7 +556,7 @@ class TypeTileTests(FeedCase):
         self.assertNotIn("feed__title", html)
         self.assertNotIn("feed-rail-title", html)
         self.assertIn(f'<a class="feed-tile__link" href="{url}" data-browse-link aria-current="page">', html)
-        self.assertIn(f'<a class="feed-tile__link" href="{url}?type=booster_box" data-browse-link>', html)
+        self.assertIn(f'<a class="feed-tile__link" href="{url}booster-boxes/" data-browse-link>', html)
         self.assertIn('<h1 class="browse-head__title">ETBs</h1>', html)
         self.assertIn(f'<a class="feed-list-head__clear" href="{url}" data-browse-link>', html)
         self.assertNotIn('class="filter-panel"', html)   # the folded Sort and filter: the Filters pill serves instead
@@ -655,7 +656,7 @@ class TypeTileTests(FeedCase):
         self.assertIn('<h1 class="browse-head__title">All products</h1>', html)
         self.assertIn('<p class="browse-head__count" role="status">5 products</p>', html)
         self.assertIn(f'<a class="feed-tile__link" href="{url}" data-browse-link aria-current="page">', html)
-        self.assertIn(f'<a class="feed-tile__link" href="{url}?type=booster_box" data-browse-link>', html)
+        self.assertIn(f'<a class="feed-tile__link" href="{url}booster-boxes/" data-browse-link>', html)
         self.assertEqual(re.findall(r'<a class="chip" href="([^"]+)" data-browse-link>([^<]+)<span', self.sets_row(html)), [
             ("?type=all&amp;set=surging-sparks", "Surging Sparks"), ("?type=all&amp;set=prismatic-evolutions", "Prismatic Evolutions"),
             ("?type=all&amp;set=mega-evolution", "Mega Evolution")])   # the clicked sets first, then the newest

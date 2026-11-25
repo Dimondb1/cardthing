@@ -157,9 +157,26 @@ class GuideSitemap(Sitemap):
         return None if isinstance(item, str) else item.updated_at
 
 
+class TypeSitemap(Sitemap):
+    """A game's page of one kind of product (web/type_pages.py), for each kind with type_pages.PAGE_LEAST products or
+    more. Two queries."""
+
+    def items(self):
+        from web import type_pages
+
+        return type_pages.sitemap_pages()
+
+    def location(self, item):
+        from web import type_pages
+
+        game, code = item
+        return type_pages.url_for(game, code)
+
+
 SITEMAPS = {
     "products": ProductSitemap,
     "games": GameSitemap,
+    "types": TypeSitemap,
     "sets": SetSitemap,
     "pages": PageSitemap,
     "prices": PricesSitemap,

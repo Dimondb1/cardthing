@@ -31,7 +31,7 @@ from catalogue import offers, pricing
 from catalogue.models import FeaturedSettings, Game, Listing, OutboundClick, Product
 from content import service as copy
 
-from . import listcache
+from . import listcache, type_pages
 
 RAILS_KEY = "web:feed-rails:v2"
 # The first of the home page's rail on its own, for the Ask Rip popup on every page (today()): a small entry set
@@ -150,7 +150,11 @@ def tiles(game=None, current="", keep=None, all_label="", product_set=None):
         if product is None:
             continue
         chosen = kind == current
-        found.append(Tile(kind, TYPE_LABELS[kind], product, out_of_type if chosen else f"{base}?type={kind}{carried}", chosen))
+        # A game's tile opens the kind's own page (web/type_pages.py) when nothing else is kept; a set kept, or the
+        # home page's tiles across every game, open the list filtered as before.
+        own_page = type_pages.url_for(game, kind) if game is not None and not kept else ""
+        found.append(Tile(kind, TYPE_LABELS[kind], product,
+                          out_of_type if chosen else own_page or f"{base}?type={kind}{carried}", chosen))
     return found
 
 

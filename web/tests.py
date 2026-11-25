@@ -51,6 +51,7 @@ class PageTestCase(TestCase):
             reverse("web:search") + "?q=etb&type=tin",
             reverse("web:games"),
             self.game.get_absolute_url(),
+            self.game.get_absolute_url() + "elite-trainer-boxes/",   # a game's page of one kind (web/type_pages.py)
             self.pre.get_absolute_url(),
             self.etb.get_absolute_url(),
             self.sold_out.get_absolute_url(),

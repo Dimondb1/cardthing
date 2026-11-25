@@ -209,6 +209,33 @@ def game_meta(words, game, stats):
     return title, fit_description(tidy_stops(description))
 
 
+def type_meta(words, game, kinds, stats):
+    """(title, description) for a game's page of one kind of product (web/type_pages.py): ``kinds`` is the kind's
+    plural in the game's words ("booster boxes"). "Cheapest" only while a shop has one in stock, as everywhere."""
+    name = game.display_short
+    if stats.in_stock and stats.cheapest is not None and stats.stock_shops:
+        title = words("meta.type.title", game=name, types=kinds)
+        if len(title) > site_room():
+            title = words("meta.type.title_short", game=name, types=kinds)
+        description = words(
+            "meta.type.description_stock", game=name, types=kinds, count=f"{stats.in_stock:,}",
+            shops=words.count("meta.shops", stats.stock_shops), price=money(stats.cheapest.delivered_price),
+        )
+    else:
+        title = words("meta.type.title_plain", game=name, types=kinds)
+        description = words("meta.type.description", game=name, types=kinds)
+    return title, fit_description(tidy_stops(description))
+
+
+def type_about(words, stats, game, kinds):
+    """The About paragraph at the foot of a game's page of one kind (type_meta): what it compares, then the kind's
+    numbers in full with the cheapest in stock linked (intro). "" with no products."""
+    if not stats.products:
+        return ""
+    first = words("browse.hub.about.type", game=game.name, types=kinds)
+    return mark_safe(f"{escape(tidy_stops(first))} {intro(words, stats)}")
+
+
 # Set codes ----------------------------------------------------------------------------------------
 #
 # Searchers type a set's code with buying words ("eb05 booster box uk", "op18 booster box uk"), so set and product

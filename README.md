@@ -6623,6 +6623,22 @@ wording under "Page titles and search engine descriptions" and "Search
 results and browsing" (`browse.hub.*`). Set pages link back to their
 game under the heading as well as in the breadcrumb.
 
+**A page for each game and kind of product** (`web/type_pages.py`, `/games/<game>/<kind>/`, such as
+`/games/digimon/booster-boxes/`). The owner's Search Console, 25 Nov 2026: of the searches Google named over a week,
+89 of 147 impressions were "<game> booster boxes" or "<game> booster packs", answered by the game's own page at about
+position 70, because the list of one kind (`?type=`) named the game's page as its canonical address and no page was
+about the kind searched for. Each kind with products now has its own page: the game's page with the kind fixed
+(`views.game_page`, in whichever look the site wears), headed in the words people search ("Pokémon booster boxes",
+"Magic Commander decks"), titled "Cheapest {game} {types} UK: compare prices" while one is in stock (the short form
+"{game} {types}: UK prices" past 60 characters; "{game} {types}: UK prices and pre-orders" with none in stock), with
+the line of live figures and the cheapest in stock linked, the game's sets that hold the kind, an About paragraph,
+breadcrumbs and an ItemList (wording in Site wording: `meta.type.*`, `browse.hub.about.type`). The address is the
+kind's plural in the game's own words (`catalogue/types.py`; ETBs spell out as `elite-trainer-boxes`); a set with the
+same slug wins, since set pages are looked up first. A kind with no products answers 404. The type tiles on a game's
+page open these pages, and the game's `?type=` list still works and names the kind's page as its canonical address
+(not with a set chosen). Kinds with 3 products or more (`type_pages.PAGE_LEAST`) are in the sitemap and go to
+IndexNow with their game.
+
 Set codes are what searchers type ("eb05 booster box uk", "op18 booster
 box uk"), so titles carry them. A set whose code has letters and digits
 (OP-18, EB05, FB11, BT28, SV8.5; not FIN or PRE, which are not searched

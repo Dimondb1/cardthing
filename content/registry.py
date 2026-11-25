@@ -1676,6 +1676,10 @@ ENTRIES = [
           placeholders=("game", "types")),
     Entry("browse.hub.about.game_plain", T, "Game about: what it is, no kinds", "RipRaptor compares UK prices for sealed {game} products.",
           "The same when no kind of product can be named.", placeholders=("game",)),
+    Entry("browse.hub.about.type", T, "Game and kind about: what it is",
+          "RipRaptor compares UK shops' prices for {game} {types}, with delivery included.",
+          "First sentence of the About section on a game's page of one kind, such as Pokémon booster boxes.",
+          placeholders=("game", "types")),
     Entry("browse.hub.about.set", T, "Set about: what it is", "{set} is a {game} set.",
           "First sentence of the About section on a set page. Its date stays under the heading alone.",
           placeholders=("set", "game")),
@@ -4713,6 +4717,40 @@ ENTRIES = [
         "Search engine description for game pages while a shop has something in stock. {price} is the cheapest "
         "delivered price in stock now. Cut to 160 characters at a whole sentence or word.",
         placeholders=("game", "products", "shops", "price", "count"),
+    ),
+    Entry(
+        "meta.type.title", T, "Game and kind page title",
+        "Cheapest {game} {types} UK: compare prices",
+        "Browser tab title for a game's page of one kind of product (/games/<game>/<kind>/) while a shop has one in "
+        "stock. {types} is the kind in the game's own words, such as booster boxes. The site name is added after it.",
+        placeholders=("game", "types"),
+    ),
+    Entry(
+        "meta.type.title_short", T, "Game and kind page title, short form",
+        "{game} {types}: UK prices",
+        "Used instead of the game and kind page title when that would run past about 60 characters.",
+        placeholders=("game", "types"),
+    ),
+    Entry(
+        "meta.type.title_plain", T, "Game and kind page title with nothing in stock",
+        "{game} {types}: UK prices and pre-orders",
+        "Browser tab title for a game's page of one kind when no shop has one in stock.",
+        placeholders=("game", "types"),
+    ),
+    Entry(
+        "meta.type.description_stock", T, "Game and kind page description",
+        "{count} {game} {types} in stock at {shops}, from {price} delivered. Best price first, with most shops "
+        "checked every hour.",
+        "Search engine description for a game's page of one kind while a shop has one in stock. {price} is the "
+        "cheapest delivered price in stock now. Cut to 160 characters at a whole sentence or word.",
+        placeholders=("game", "types", "count", "shops", "price"),
+    ),
+    Entry(
+        "meta.type.description", T, "Game and kind page description with nothing in stock",
+        "Compare delivered UK prices and pre-orders for {game} {types}, with stock at each shop and the time each "
+        "price was checked.",
+        "Search engine description for a game's page of one kind when no shop has one in stock.",
+        placeholders=("game", "types"),
     ),
     Entry(
         "meta.game.description", T, "Game page description with nothing in stock",

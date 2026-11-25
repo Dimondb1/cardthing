@@ -62,7 +62,8 @@ def changed_urls(since, now=None):
 
 def page_urls(since, now=None):
     """The full addresses of the pages other than products worth sending, for the daily batch: the home page, Deals
-    and Drops; every game's page with a shop's price, delivery or stock changed since ``since``; every set's page
+    and Drops; every game's page with a shop's price, delivery or stock changed since ``since``, and its pages of one
+    kind of product (web/type_pages.py); every set's page
     changed since then (the sitemap's own date: its edits, its products', their prices); and, while the Guides pages
     are open, the Guides page, the guide built from live prices and each published guide edited since."""
     from django.db.models import Exists, OuterRef
@@ -76,7 +77,13 @@ def page_urls(since, now=None):
     site = settings.RIPRAPTOR_SITE_URL
     paths = [reverse(name) for name in FIXED_PAGES]
     moved = Listing.objects.filter(product__game=OuterRef("pk"), product__is_active=True, changed_at__gte=since)
-    paths += [game.get_absolute_url() for game in Game.objects.filter(is_active=True).filter(Exists(moved)).order_by("pk")]
+    changed_games = list(Game.objects.filter(is_active=True).filter(Exists(moved)).order_by("pk"))
+    paths += [game.get_absolute_url() for game in changed_games]
+    # Each of those games' pages of one kind of product (web/type_pages.py), as the sitemap lists them.
+    from web import type_pages
+
+    changed = {game.pk for game in changed_games}
+    paths += [type_pages.url_for(game, code) for game, code in type_pages.sitemap_pages() if game.pk in changed]
     sets = SetSitemap()
     paths += [product_set.get_absolute_url() for product_set in sets.items()
               if (sets.lastmod(product_set) or since) > since]

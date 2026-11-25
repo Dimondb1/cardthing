@@ -50,7 +50,7 @@
 {% if feed.filtered %}
 {# Filtered to a type from the feed's tiles: the type as the heading with its count, the sort beside it and Clear, which leads back to the feed. The other filters wait on the usual page. #}
 <div class="browse-head feed-list-head">
-  <div class="feed-list-head__text"><h1 class="browse-head__title">{{ feed.list_title }}</h1><p class="browse-head__count" role="status">{% copy_count "browse.count" total %}</p></div>
+  <div class="feed-list-head__text"><h1 class="browse-head__title">{{ feed.list_title }}</h1><p class="browse-head__count" role="status">{% copy_count "browse.count" total %}</p>{% if type_page and intro %}<p class="browse-head__intro">{{ intro }}</p>{% endif %}</div>
   <form class="feed-sort" method="get" action="" data-autosubmit>
     <input type="hidden" name="type" value="{{ feed.kind }}">
     {% if chosen_set %}<input type="hidden" name="set" value="{{ chosen_set.slug }}">{% endif %}
@@ -110,11 +110,11 @@
   <nav class="breadcrumbs" aria-label="Breadcrumb">
     <ol>
       <li><a href="{% url 'web:games' %}">{% copy "site.nav.games" %}</a></li>
-      {% if product_set %}<li><a href="{{ game.get_absolute_url }}">{{ game.name }}</a></li>{% endif %}
+      {% if product_set or type_page %}<li><a href="{{ game.get_absolute_url }}">{{ game.name }}</a></li>{% endif %}
     </ol>
   </nav>
   {% endif %}
-  {% if game and not product_set %}<div class="browse-head__title-row">{% if feed %}<h2 class="browse-head__title">{{ heading }}</h2>{% else %}<h1 class="browse-head__title">{{ heading }}</h1>{% endif %}{% info "game" game.slug game.display_short %}</div>{% else %}<h1 class="browse-head__title">{{ heading }}</h1>{% endif %}
+  {% if game and not product_set and not type_page %}<div class="browse-head__title-row">{% if feed %}<h2 class="browse-head__title">{{ heading }}</h2>{% else %}<h1 class="browse-head__title">{{ heading }}</h1>{% endif %}{% info "game" game.slug game.display_short %}</div>{% else %}<h1 class="browse-head__title">{{ heading }}</h1>{% endif %}
   {# The words searched for in place of what was typed, which found nothing (catalogue.search.corrected), and a way back to exactly what was typed. #}
   {% if said %}<p class="browse-head__fix">{% copy "browse.voice.said" said=said %}</p>{% elif asked %}<p class="browse-head__fix">{% copy "browse.rip.asked" asked=asked %}</p>{% endif %}
   {% if understood %}<p class="browse-head__fix">{{ understood|join:" " }}</p>{% endif %}

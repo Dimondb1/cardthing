@@ -1461,12 +1461,22 @@ def game_detail(request, game_slug):
     if sports.moved_from(game_slug):
         return moved(request, reverse("web:game", args=[sports.GAME]))   # /games/football/ is Sports cards now
     game = get_object_or_404(Game, slug=game_slug, is_active=True)
+    return game_page(request, game)
+
+
+def game_page(request, game, type_code=None):
+    """A game's page, or with ``type_code`` its page of one kind of product (web/type_pages.py, /games/<game>/<kind>/):
+    the same list with the kind fixed, its own heading, title, description, line of figures, About and canonical
+    address, and the game's sets that hold the kind."""
+    from web import type_pages
+
     # Only the page as people land on it needs the numbers and the sets: a tab's list fetched by script shows
     # none of them.
     pane = bool(request.GET.get("pane"))
     # The compact layout (web/compact.py): the game's sets as a list. A filtered address (a type, a set, a sort) is the
     # usual list, drawn as compact rows.
-    if not pane and look.compact_for_request(request) and not any(request.GET.get(name) for name in COMPACT_LIST_PARAMS):
+    if type_code is None and not pane and look.compact_for_request(request) and \
+            not any(request.GET.get(name) for name in COMPACT_LIST_PARAMS):
         # Its written answer and questions (web/answers.py) quote the same counts as its description: one HubStats.
         words = hubs.Words(text, request)
         stats = game_stats(game)
@@ -1484,7 +1494,7 @@ def game_detail(request, game_slug):
     # Only sets with products in the language and type in view: a Korean list offers only Korean sets, and
     # counts only Korean products in stock.
     in_view = apply_languages(Product.objects.active().filter(game=game), [request.GET.get("lang", "")])
-    kind = request.GET.get("type", "")
+    kind = type_code or request.GET.get("type", "")
     kind = kind if kind in Product.Type.values or kind == feed.ALL else ""
     if kind in Product.Type.values:
         in_view = in_view.filter(product_type=kind)
@@ -1532,33 +1542,54 @@ def game_detail(request, game_slug):
         set_options = [{"name": item.name, "url": set_link(item.slug), "in_stock": item.in_stock} for item in sets]
         set_clear_url = set_link("")
     words = hubs.Words(text, request)
-    stats = hubs.HubStats() if pane else game_stats(game)
-    keep_counts(request, game, stats)
-    meta_title, meta_description = hubs.game_meta(words, game, stats)
-    page_url = request.build_absolute_uri(game.get_absolute_url())
-    crumbs = breadcrumbs_json(request, [(game.name, game.get_absolute_url())], page_url=page_url)
+    if type_code:
+        kinds = type_pages.plural(game.slug, type_code)
+        heading = type_pages.heading(game, type_code)
+        stats = hubs.HubStats() if pane else shared_for_game(
+            f"stats/{game.pk}/{type_code}", lambda: hubs.hub_stats(game=game, product_type=type_code))
+        meta_title, meta_description = hubs.type_meta(words, game, kinds, stats)
+        page_path = type_pages.url_for(game, type_code)
+        page_url = canonical_url = request.build_absolute_uri(page_path)
+        crumbs = breadcrumbs_json(request, [(game.name, game.get_absolute_url()), (heading, page_path)],
+                                  page_url=page_url)
+        intro, about = hubs.intro(words, stats), hubs.type_about(words, stats, game, kinds)
+        base = Product.objects.for_lists().filter(game=game, product_type=type_code)
+    else:
+        heading = game.name
+        stats = hubs.HubStats() if pane else game_stats(game)
+        keep_counts(request, game, stats)
+        meta_title, meta_description = hubs.game_meta(words, game, stats)
+        page_url = request.build_absolute_uri(game.get_absolute_url())
+        # The game's list of one kind (?type=) is that kind's own page in search engines' eyes (web/type_pages.py).
+        kind_path = type_pages.url_for(game, kind) if kind in Product.Type.values and chosen_set is None else ""
+        canonical_url = request.build_absolute_uri(kind_path) if kind_path else page_url
+        crumbs = breadcrumbs_json(request, [(game.name, game.get_absolute_url())], page_url=page_url)
+        intro, about = hubs.intro(words, stats, brief=True), hubs.about(words, stats, game)
+        base = Product.objects.for_lists().filter(game=game)
     return _browse(
         request,
         {
-            "heading": game.name,
+            "heading": heading,
             "game": game,
+            "type_page": bool(type_code),
             "sets": sets[:GAME_PAGE_SETS],
             "more_sets": len(sets) > GAME_PAGE_SETS,
-            "intro": hubs.intro(words, stats, brief=True),
-            "about": hubs.about(words, stats, game),
+            "intro": intro,
+            "about": about,
             "meta_title": meta_title,
             "meta_description": meta_description,
-            "canonical_url": page_url,
+            "canonical_url": canonical_url,
             "coming_soon": coming_soon_sets(game),
             # With the new home page on (web/look.py), the game's page leads with the feed's top (web/feed.py).
             "feed": (feed.context(request, game, kind=kind, keep={"set": chosen_set.slug} if chosen_set else None,
-                                  list_title=chosen_set.name if chosen_set and kind == feed.ALL else "",
+                                  list_title=(chosen_set.name if chosen_set and kind == feed.ALL
+                                              else heading if type_code else ""),
                                   product_set=chosen_set)
                      if feed_on else None),
             "chosen_set": chosen_set, "set_options": set_options, "set_clear_url": set_clear_url,
             "sets_in_row": FEED_SETS,
         },
-        base_queryset=Product.objects.for_lists().filter(game=game),
+        base_queryset=base,
         fixed_game=game,
         tabs=True,
         narrow=(lambda products: products.filter(product_set=chosen_set)) if chosen_set else None,
@@ -1573,12 +1604,18 @@ def game_detail(request, game_slug):
 def set_detail(request, game_slug, set_slug):
     if sports.moved_from(game_slug):
         return moved(request, reverse("web:set", args=[sports.GAME, set_slug]))
-    product_set = get_object_or_404(
-        ProductSet.objects.select_related("game"),
-        game__slug=game_slug,
-        game__is_active=True,
-        slug=set_slug,
-    )
+    product_set = (ProductSet.objects.select_related("game")
+                   .filter(game__slug=game_slug, game__is_active=True, slug=set_slug).first())
+    if product_set is None:
+        # A game's page of one kind of product (web/type_pages.py) shares the shape of a set's address; a set with the
+        # same slug wins.
+        from web import type_pages
+
+        game = Game.objects.filter(slug=game_slug, is_active=True).first()
+        code = type_pages.code_for(game_slug, set_slug) if game is not None else None
+        if code and Product.objects.active().filter(game=game, product_type=code).exists():
+            return game_page(request, game, type_code=code)
+        raise Http404("No such set.")
     game = product_set.game
     # A set still to come says when it is out and who said so; an undated one says so only while shops take
     # pre-orders, since an old set entered without a date is not still to come.

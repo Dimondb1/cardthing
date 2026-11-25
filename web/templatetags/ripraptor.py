@@ -375,6 +375,22 @@ def refer_waiting():
 
 
 @register.simple_tag
+def server_busy():
+    """The processors' busy run (catalogue.server_health.Busy) while they have been at or over BUSY_PERCENT for
+    BUSY_FOR, for Admin home's Needs you, else None. One query while they are calm."""
+    from datetime import timedelta
+
+    from catalogue import server_health
+    from catalogue.models import ServerSample
+
+    now = timezone.now()
+    latest = ServerSample.objects.order_by("-at").values_list("at", "cpu").first()
+    if latest is None or latest[1] < server_health.BUSY_PERCENT or now - latest[0] > timedelta(minutes=5):
+        return None
+    return server_health.busy_now(now)
+
+
+@register.simple_tag
 def worker_stopped():
     """The time of the background reader's last heartbeat when it is older than ten minutes, else an empty string.
 

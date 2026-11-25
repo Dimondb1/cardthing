@@ -17,6 +17,7 @@ from web import online as web_online
 from web import people_ask as web_people_ask
 from web import rip_wants as web_rip_wants
 from web import shop_report as web_shop_report
+from web import server_health as web_server_health
 from web import shop_stock as web_shop_stock
 from web import story_deals as web_story_deals
 from web import visibility as web_visibility
@@ -35,6 +36,7 @@ urlpatterns = [
     path("admin/checks/", web_views.checks_page, name="checks"),
     path("admin/claude/", web_views.claude_page, name="claude"),
     path("admin/crawl/", web_views.crawl_page, name="crawl"),
+    path("admin/server/", web_server_health.server_page, name="server_health"),
     path("admin/online/", web_online.online_page, name="online"),
     path("admin/clicks/", web_click_timeline.click_timeline_page, name="click_timeline"),
     path("admin/rip-wants/", web_rip_wants.rip_wants_page, name="rip_wants"),

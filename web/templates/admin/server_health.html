@@ -1,0 +1,114 @@
+{% extends "admin/base_site.html" %}
+{% load static %}
+{# Server health (web/server_health.py): how busy the processors are now, what is using them, the last 24 hours, memory and disk, from the background reader's sample each minute (catalogue/server_health.py). #}
+{% block title %}Server health | {{ site_title }}{% endblock %}
+{% block extrahead %}{{ block.super }}<meta name="robots" content="noindex, nofollow"><script nonce="{{ csp_nonce }}" src="{% static 'js/copy-log.js' %}" defer></script>{% endblock %}
+{% block extrastyle %}{{ block.super }}<style>
+  .server { --light-ok: #2e7d32; --light-late: #d18b00; --light-stopped: var(--error-fg, #ba2121);
+            display: grid; gap: 24px; max-width: 60rem; }
+  .server h2 { margin: 0 0 8px; }
+  .server p { margin: 0 0 8px; }
+  .server .note { color: var(--body-quiet-color); }
+  .server .verdict { padding: 12px 16px; border-radius: 6px; border: 1px solid var(--hairline-color); font-size: 1.05rem; }
+  .server .verdict b { display: block; font-size: 1.2rem; margin-bottom: 2px; }
+  .server .verdict.ok b { color: var(--light-ok); }
+  .server .verdict.high b, .server .verdict.stale b, .server .verdict.none b { color: var(--light-late); }
+  .server .verdict.busy b { color: var(--light-stopped); }
+  .server .figures { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 8px 0; padding: 0; list-style: none; }
+  @media (min-width: 48rem) { .server .figures { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+  .server .figures li { list-style-type: none; padding: 10px 12px; border: 1px solid var(--hairline-color); border-radius: 6px; }
+  .server .figures b { display: block; font-size: 1.5rem; font-weight: 600; }
+  .server .figures span { color: var(--body-quiet-color); font-size: 0.9em; }
+  .server .using { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+  .server .using li { list-style-type: none; display: grid; grid-template-columns: minmax(0, 1fr) 4rem; gap: 2px 12px; align-items: center; }
+  .server .using meter { grid-column: 1 / -1; width: 100%; height: 0.6rem; }
+  .server .using .share { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
+  /* The line stretches to the width; the labels are text beside and under it, so they stay readable on a phone. */
+  .server .plot { display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-rows: 11rem auto; gap: 4px 8px; margin: 8px 0; }
+  .server .chart svg { display: block; width: 100%; height: 100%; overflow: visible; }
+  .server .y-axis { display: flex; flex-direction: column; justify-content: space-between; text-align: right; }
+  .server .x-axis { grid-column: 2; display: flex; justify-content: space-between; }
+  .server .y-axis, .server .x-axis { color: var(--body-quiet-color); font-size: 0.8rem; line-height: 1; font-variant-numeric: tabular-nums; }
+  .server .chart .grid { stroke: var(--hairline-color); stroke-width: 1; }
+  .server .chart .busy-line { stroke: var(--light-stopped); stroke-width: 1; stroke-dasharray: 4 3; }
+  .server .chart .line { fill: none; stroke: var(--primary); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+  .server .chart .hit { fill: transparent; }
+  .server .chart .hit:hover { fill: var(--hairline-color); opacity: 0.5; }
+  .server table { width: 100%; }
+  .server td.num, .server th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .server textarea.log { display: block; width: 100%; height: 18rem; box-sizing: border-box; margin: 0; padding: 8px; font: 12px/1.45 ui-monospace, Menlo, Consolas, monospace; white-space: pre; overflow: auto; }
+</style>{% endblock %}
+{% block breadcrumbs %}<div class="breadcrumbs"><a href="{% url 'admin:index' %}">Home</a> &rsaquo; Server health</div>{% endblock %}
+{% block content %}
+<div class="server">
+  <section class="verdict {{ state }}" role="status">
+    {% if state == "busy" %}<b>Busy: processors at least {{ busy_percent }}% for {{ busy.minutes }} minutes</b>
+      {{ busy.cpu|floatformat:0 }}% now, since {{ busy_since }}. You were emailed, once a day at most. The background reader is reading one shop at a time until it calms down.
+    {% elif state == "high" %}<b>Busy now: {{ latest.cpu|floatformat:0 }}%</b>
+      Not for {{ busy_minutes }} minutes yet. The background reader eases off from {{ ease_at }}%.
+    {% elif state == "ok" %}<b>Fine: processors {{ latest.cpu|floatformat:0 }}% busy</b>
+      Checked {{ latest_ago }}.
+    {% elif state == "stale" %}<b>No sample since {{ latest_ago }}</b>
+      The background reader takes one a minute, so it is not running. <a href="{% url 'crawl' %}">Crawl health</a> says why.
+    {% else %}<b>No samples yet</b>
+      The background reader takes one a minute once the update is installed.
+    {% endif %}
+  </section>
+
+  {% if latest %}
+  <section aria-labelledby="now-title">
+    <h2 id="now-title">Now</h2>
+    <ul class="figures">
+      <li><b>{{ latest.cpu|floatformat:0 }}%</b><span>processors busy, {{ latest.cpus }} processor{{ latest.cpus|pluralize }}</span></li>
+      <li><b>{{ latest.load|floatformat:2 }}</b><span>load: above {{ latest.cpus }} means jobs are waiting their turn</span></li>
+      <li><b>{{ latest.memory_used_mb }} MB</b><span>memory used of {{ latest.memory_total_mb }} MB</span></li>
+      <li><b>{{ latest.disk_used_percent }}%</b><span>disk used</span></li>
+    </ul>
+    <p class="note">{% if latest.easing %}The background reader is reading one shop at a time{% if easing_since %}, since {{ easing_since }}{% endif %}, because the processors are busy. It goes back to its usual pace under {{ ease_until }}%.{% else %}The background reader is at its usual pace. From {{ ease_at }}% it reads one shop at a time, and the website always comes first for the processors.{% endif %}</p>
+  </section>
+
+  <section aria-labelledby="using-title">
+    <h2 id="using-title">What is using the processors</h2>
+    <p class="note">The last 15 minutes on average, as a share of all the processors.</p>
+    {% if using %}
+    <ul class="using">
+      {% for words, share in using %}<li><span>{{ words }}</span><span class="share">{{ share|floatformat:1 }}%</span><meter min="0" max="100" value="{{ share|floatformat:1 }}" aria-label="{{ words }}">{{ share|floatformat:1 }}%</meter></li>{% endfor %}
+    </ul>
+    {% else %}<p class="note">Nothing in the last 15 minutes.</p>{% endif %}
+  </section>
+
+  <section aria-labelledby="day-title" class="chart">
+    <h2 id="day-title">Processors busy, last 24 hours</h2>
+    <p class="note">Ten minutes a point{% if peak is not None %}, highest {{ peak|floatformat:0 }}%{% endif %}. The dashed line is {{ busy_percent }}%: held there for {{ busy_minutes }} minutes, you get an email. Touch or point at the chart for each ten minutes.</p>
+    <div class="plot">
+      <div class="y-axis" aria-hidden="true"><span>100%</span><span>50%</span><span>0%</span></div>
+      <svg viewBox="0 0 {{ chart.width }} 100" preserveAspectRatio="none" role="img" aria-labelledby="day-title">
+        <line class="grid" x1="0" x2="{{ chart.width }}" y1="0" y2="0" vector-effect="non-scaling-stroke"/>
+        <line class="grid" x1="0" x2="{{ chart.width }}" y1="50" y2="50" vector-effect="non-scaling-stroke"/>
+        <line class="grid" x1="0" x2="{{ chart.width }}" y1="100" y2="100" vector-effect="non-scaling-stroke"/>
+        <line class="busy-line" x1="0" x2="{{ chart.width }}" y1="{{ chart.busy_y }}" y2="{{ chart.busy_y }}" vector-effect="non-scaling-stroke"/>
+        {% for points in chart.lines %}<polyline class="line" points="{{ points }}" vector-effect="non-scaling-stroke"/>{% endfor %}
+        {% for target in chart.targets %}<rect class="hit" x="{{ target.x }}" y="0" width="1" height="100"><title>{{ target.label }}</title></rect>{% endfor %}
+      </svg>
+      <div class="x-axis" aria-hidden="true"><span>24 hours ago</span><span>12 hours ago</span><span>Now</span></div>
+    </div>
+    {% if hours %}
+    <details>
+      <summary>Each hour as a table</summary>
+      <table>
+        <thead><tr><th>Hour</th><th class="num">Average</th><th class="num">Highest</th></tr></thead>
+        <tbody>{% for hour, average, highest in hours %}<tr><td>{{ hour|date:"j M H:00" }}</td><td class="num">{{ average|floatformat:0 }}%</td><td class="num">{{ highest|floatformat:0 }}%</td></tr>{% endfor %}</tbody>
+      </table>
+    </details>
+    {% else %}<p class="note">No samples in the last 24 hours.</p>{% endif %}
+  </section>
+
+  <section aria-labelledby="log-title">
+    <h2 id="log-title">Log to copy</h2>
+    <p class="note">The figures above as text, to paste into a message. Samples are kept for {{ keep_days }} days.</p>
+    <p><button type="button" class="button" data-copy-from="server-log" data-label="Copy the log" data-done="Copied" data-failed="Selected: now copy it" hidden>Copy the log</button></p>
+    <textarea id="server-log" class="log" rows="12" readonly spellcheck="false" aria-label="Log to copy">{{ log }}</textarea>
+  </section>
+  {% endif %}
+</div>
+{% endblock %}

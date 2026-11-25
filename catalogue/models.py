@@ -2149,6 +2149,28 @@ class OnlineCount(models.Model):
         return f"{self.at:%d %b %H:%M} {self.people}"
 
 
+class ServerSample(models.Model):
+    """One minute of the server: how busy its processors were, which programs used them, its memory and disk, as
+    the background reader sampled it (catalogue/server_health.py). Kept for server_health.KEEP_DAYS."""
+
+    at = models.DateTimeField(db_index=True)
+    cpu = models.FloatField("processors busy (%)")
+    cpus = models.PositiveSmallIntegerField("processors", default=1)
+    load = models.FloatField("load average over a minute", default=0)
+    memory_used_mb = models.PositiveIntegerField(default=0)
+    memory_total_mb = models.PositiveIntegerField(default=0)
+    disk_used_percent = models.PositiveSmallIntegerField(default=0)
+    programs = models.JSONField(default=dict, blank=True, help_text="{program: percent of all the processors}")
+    easing = models.BooleanField("reader easing off", default=False,
+                                 help_text="Whether the background reader was reading one shop at a time.")
+
+    class Meta:
+        ordering = ["-at"]
+
+    def __str__(self):
+        return f"{self.at:%d %b %H:%M}: {self.cpu:.0f}%"
+
+
 class WorkerState(models.Model):
     """The one row the background reader (run_worker) keeps: whether it is alive, paused and busy.
 

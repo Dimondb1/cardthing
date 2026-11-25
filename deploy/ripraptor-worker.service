@@ -38,6 +38,10 @@ MemorySwapMax=100M
 # When the whole server runs out of memory, the kernel stops the reader before the site.
 OOMScoreAdjust=500
 Nice=10
+# When the website and the reader both want the processors, the website gets about five times the reader's share
+# (the site's default weight is 100). With the processors free, the reader still uses them all. It also reads one
+# shop at a time while they are busy (catalogue/server_health.py).
+CPUWeight=20
 KillSignal=SIGINT
 TimeoutStopSec=60
 

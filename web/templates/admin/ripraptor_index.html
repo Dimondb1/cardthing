@@ -32,6 +32,7 @@
 {% shops_waiting as shops %}
 {% outreach_due as follow_ups %}
 {% worker_stopped as stopped %}
+{% server_busy as server %}
 {% refer_waiting as refer %}
 {% guides_due as due_guides %}
 {% guide_editor_only as editor_only %}
@@ -41,13 +42,14 @@
     <h2 id="rr-needs">Needs you</h2>
     <ul>
       {% if stopped %}<li class="rr-stopped"><a href="{% url 'crawl' %}"><strong>Background reader stopped at {{ stopped }}.</strong> The hourly schedule reads the shops.</a></li>{% endif %}
+      {% if server %}<li class="rr-stopped"><a href="{% url 'server_health' %}"><strong>Server busy: processors {{ server.cpu|floatformat:0 }}% for {{ server.minutes }} minutes.</strong> See what is using them.</a></li>{% endif %}
       {% if unread %}<li><a href="{% url 'admin:inbox_conversation_changelist' %}?unread__exact=1"><strong>{{ unread }} new message{{ unread|pluralize }}</strong></a></li>{% endif %}
       {% if shops %}<li><a href="{% url 'admin:inbox_shopenquiry_changelist' %}?handled=no"><strong>{{ shops }} shop{{ shops|pluralize }} asking to be listed</strong></a></li>{% endif %}
       {% if follow_ups %}<li><a href="{% url 'admin:inbox_shopcontact_changelist' %}?follow_up=due"><strong>{{ follow_ups }} shop{{ follow_ups|pluralize }} to follow up</strong></a></li>{% endif %}
       {% if due_guides %}<li><a href="{% url 'admin:guides_guide_changelist' %}?review=due"><strong>{{ due_guides }} guide{{ due_guides|pluralize }} due for review</strong></a></li>{% endif %}
       {% if refer.to_post %}<li><a href="{% url 'admin:catalogue_keyringclaim_changelist' %}?state=to_post"><strong>{{ refer.to_post }} keyring{{ refer.to_post|pluralize }} to post</strong>{% if refer.check %}, {{ refer.check }} to check first{% endif %}</a></li>{% endif %}
       {% if refer.review %}<li><a href="{% url 'admin:catalogue_referral_changelist' %}?status__exact=review"><strong>{{ refer.review }} referral{{ refer.review|pluralize }} for review</strong></a></li>{% endif %}
-      {% if not stopped and not unread and not shops and not follow_ups and not due_guides and not refer.to_post and not refer.review %}<li class="rr-calm">Nothing waiting.</li>{% endif %}
+      {% if not stopped and not server and not unread and not shops and not follow_ups and not due_guides and not refer.to_post and not refer.review %}<li class="rr-calm">Nothing waiting.</li>{% endif %}
       <li class="rr-more"><a href="{% url 'admin:inbox_conversation_changelist' %}">All messages</a> &middot; <a href="{% url 'checks' %}">Things to check</a></li>
     </ul>
   </section>
@@ -83,6 +85,7 @@
       <h2 id="rr-shops">Shops</h2>
       <ul>
         <li><a href="{% url 'crawl' %}" class="section">Crawl health</a><span class="rr-note">Whether each shop is being read, with buttons to read one now or pause reading</span></li>
+        <li><a href="{% url 'server_health' %}" class="section">Server health</a><span class="rr-note">How busy the server's processors are, what is using them, the last 24 hours, memory and disk</span></li>
         <li><a href="{% url 'admin:catalogue_retailer_changelist' %}" class="section">Shops</a><span class="rr-note">Every shop's address, delivery charges and settings</span></li>
         <li><a href="{% url 'shop_stock' %}" class="section">Shop stock</a><span class="rr-note">Every product a shop lists, with its price, whether it is in stock and when it was last checked</span></li>
         <li><a href="{% url 'add_shops' %}" class="section">Add shops</a><span class="rr-note">Paste shop addresses: each is checked and added if it passes</span></li>

@@ -13,7 +13,7 @@ import os
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
-from catalogue import worker, worklog
+from catalogue import server_health, worker, worklog
 
 
 class Command(BaseCommand):
@@ -37,7 +37,8 @@ class Command(BaseCommand):
         keeper = worklog.install()
         try:
             # Held to the service's MemoryMax: past three quarters of it the reader restarts itself between reads.
-            reader = worker.Worker(threads=max_threads, warm=True, limit=worker.memory_limit())
+            reader = worker.Worker(threads=max_threads, warm=True, limit=worker.memory_limit(),
+                                   sampler=server_health.Sampler())
             closed = reader.begin()
             if closed:
                 self.stdout.write(f"Closed {closed} earlier runs that stopped before they finished.")

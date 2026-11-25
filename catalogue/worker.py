@@ -66,7 +66,7 @@ from django.db import OperationalError, connections
 from django.db.models import Q
 from django.utils import timezone
 
-from . import checks, crawl, finder, heat, importers, notify, probe, releases, worklog
+from . import checks, crawl, finder, heat, importers, notify, probe, releases, server_health, worklog
 from .models import ImportRun, Listing, Retailer, WorkerState
 
 logger = logging.getLogger(__name__)
@@ -542,7 +542,7 @@ def megabytes(size):
 class Worker:
     def __init__(self, clock=None, fetch=None, sleep=None, threads=THREADS, executor=None, import_lock=None,
                  page_pause=None, release_fetch=None, warm=False, memory=None, limit=None,
-                 free=None, exit=None):
+                 free=None, exit=None, sampler=None):
         self.clock = clock or timezone.now
         self.sleep = sleep or time.sleep
         self.fetch = fetch
@@ -587,11 +587,20 @@ class Worker:
         self.last_free = None
         self.freed_after = 0       # jobs done at the last hand back
         self.draining_since = None  # when it stopped starting jobs to restart
+        # Server health (catalogue/server_health.py): a sample of the processors, memory and disk a minute, kept for
+        # the Admin page; while the processors are busy, one shop read at a time. run_worker passes a Sampler.
+        self.sampler = sampler
+        self.last_sample = None
+        self.last_prune = None
+        self.easing = False
 
     # Planning ---------------------------------------------------------------------------------
 
     def max_reads(self):
         if self.limit and self.memory_now and self.memory_now > self.limit * MEMORY_ONE_READ:
+            return 1
+        # The processors busy (server_health.easing): one read at a time, so the website keeps time for visitors.
+        if self.easing:
             return 1
         return max(1, min(MAX_READS, self.threads - 1))
 
@@ -1179,6 +1188,7 @@ class Worker:
             self.beat(now)
         self.check_deadlines(now)
         self.keep_memory_down(now)
+        self.keep_server_sampled(now)
         try:
             if self.last_plan is None or now - self.last_plan >= PLAN_EVERY:
                 self.last_plan = now
@@ -1196,6 +1206,31 @@ class Worker:
         self.keep_dashboard_warm(now)
         self.keep_visits_tidy(now)
         self.keep_shops_checked(now)
+
+    def keep_server_sampled(self, now):
+        """Once a minute, a sample of the server (server_health.Sampler) for the Server health page; whether to ease
+        off; and, when the processors have been busy for long, a notice to the owner. Old samples go hourly. Never
+        stops the loop."""
+        if self.sampler is None or (self.last_sample is not None and now - self.last_sample < server_health.SAMPLE_EVERY):
+            return
+        self.last_sample = now
+        try:
+            reading = self.sampler.take()
+            if reading is None:
+                return
+            eased = server_health.easing(reading.cpu, self.easing)
+            if eased != self.easing:
+                logger.warning("Processors %s%% busy: %s", f"{reading.cpu:.0f}",
+                               "one shop read at a time" if eased else "back to the usual number of shop reads")
+            self.easing = eased
+            server_health.save(reading, now, eased)
+            if self.last_prune is None or now - self.last_prune >= server_health.PRUNE_EVERY:
+                self.last_prune = now
+                server_health.prune(now)
+            if reading.cpu >= server_health.BUSY_PERCENT:
+                server_health.notice_busy(now)
+        except Exception:  # noqa: BLE001 - a sample is never worth stopping the reader for
+            logger.exception("Could not sample the server")
 
     def keep_memory_down(self, now):
         """After jobs, hand freed memory back (FREE_EVERY); look at what the process uses (MEMORY_CHECK); past

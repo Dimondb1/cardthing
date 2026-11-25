@@ -570,6 +570,34 @@ emptied code from the list comes back at the next update. The owner,
 one fee per order) with RIPRAPTOR5, 5% off a first order: "include
 compatability for discount codes".
 
+## Server health
+
+**Server health** (Admin home, under Shops; `web/server_health.py`,
+`/admin/server/`) shows how busy the server's processors are, which program
+is using them (the website, the background reader, the scheduled jobs, the
+web server, everything else), memory, disk, the load, and the last 24 hours
+as a line with the 90% mark, with each hour as a table and a log to copy.
+The owner, 25 Nov 2026: "the server is running at 99% cpu how do we ensure
+that we monitor this from the ripraptor admin".
+
+The background reader takes the samples, once a minute
+(`catalogue/server_health.py`, the `ServerSample` table, kept 7 days). It
+reads Linux's own files (`/proc/stat`, each process's `/proc/<pid>/stat`,
+`/proc/meminfo`, `/proc/loadavg`), so nothing is installed. A sample that
+fails never stops the reader. With no sample for 5 minutes the page says
+the reader is not running.
+
+- **Busy**: the processors at 90% or more in every sample for 15 minutes.
+  The owner gets the push and email every crawl warning uses (at most once a
+  day), and Admin home says so under Needs you until it calms down.
+- **Easing off**: from a sample at 85% the reader starts one shop read at a
+  time, and goes back to its usual number under 60%, so the website keeps
+  time for visitors. The page says when it is easing off.
+- The reader runs with `CPUWeight=20` as well as `Nice=10`
+  (`deploy/ripraptor-worker.service`): when both want the processors, the
+  website gets about five times the reader's share. With them free, the
+  reader still uses them all.
+
 ## Shop stock
 
 **Shop stock** (Admin home, See its stock on each Crawl health row, or the

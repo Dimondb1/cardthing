@@ -731,6 +731,19 @@ each run spending its hour's share of `RIPRAPTOR_AMAZON_DAILY_LIMIT` calls. To s
 untick Active on Amazon's shop page. RipRaptor still has price tracking and
 alerts for the UK shops, so ask Amazon Associates to confirm in writing
 that this is allowed (the Amazon page says so too).
+**Waiting for Amazon** (the owner, 25 Nov 2026: "Amazon still failing what's going
+on?"). Amazon shares its prices through the Creators API only with an Associates
+account that has 10 qualified sales in the last 30 days (Amazon's Creators API
+error codes page); below that every call is refused with `AssociateNotEligible`,
+though the keys work. That answer is a wait, not a failure
+(`Retailer.waiting_for_access`, `awaiting_access`): Amazon is asked again every 6
+hours (`Retailer.ACCESS_WAIT`), its failed tries are not counted, so it never
+turns red on Crawl health or reaches the owner's phone, and Crawl health shows it
+grey under **Waiting**, not counted as behind. The Amazon page says so in plain
+words, and **Save and test** with working keys switches Amazon on and starts the
+wait. A read that works ends it, and Amazon prices show by themselves; if sales
+drop below the bar again, the wait comes back the same way.
+
 The Amazon page ends with a **Log to copy** (`amazon_admin.log_text`; the owner,
 24 Nov 2026: "Need to ensure Amazon health area has a log"): whether the keys are
 set (never their values), Amazon's shop row, the prices shown and products found,
@@ -2952,7 +2965,8 @@ aren't going ... nothing feels like it works"):
   same light (`crawl.light_for`): **Up to date** when its last read that worked
   is under 75 minutes old, **Late** under three hours, **Not going** when it
   is paused, failing (waiting after errors, or its last read failed), never
-  read, or not read for three hours.
+  read, or not read for three hours. Amazon waiting to share its prices with the
+  account (see Waiting for Amazon) is grey, under **Waiting**, and not counted.
 - **Read all** and **Pause all** / **Resume all** sit right under the counts.
 - **Need a look**: the shops that are not up to date, not going first (failing,
   then paused), then late, each with its light, why ("Read 2 hours ago",

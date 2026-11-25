@@ -37,6 +37,7 @@ def status():
     since = timezone.now() - timedelta(hours=settings.RIPRAPTOR_AMAZON_SHOW_HOURS)
     return {
         "shop": shop,
+        "waiting": shop.awaiting_access,
         "last": ImportRun.objects.filter(retailer=shop, finished_at__isnull=False).order_by("-finished_at").first(),
         "shown": Listing.objects.filter(retailer=shop, is_active=True, availability__in=Listing.BUYABLE,
                                         last_checked__gte=since).count(),
@@ -111,9 +112,20 @@ def amazon_page(request):
         amazon.save_keys(typed_id, typed_secret, typed_tag)
         ok, said = amazon.check()
         if ok:
-            amazon.ensure_shop(active=True)
+            shop = amazon.ensure_shop(active=True)
+            # A wait for Amazon to share its prices is over: read at the next turn, not hours later.
+            if shop.awaiting_access:
+                Retailer.objects.filter(pk=shop.pk).update(last_error="", backoff_until=None, next_read_at=timezone.now())
             messages.success(request, f"Saved. Amazon accepted the keys and answered a test search with {said} "
                                       "items. Amazon is read at the next hourly read, then every hour.")
+        elif Retailer.NOT_ELIGIBLE in str(said):
+            # The keys work: Amazon will not share its prices with this account yet. The shop is switched on and asked
+            # again every few hours, so prices show by themselves once Amazon says yes.
+            amazon.ensure_shop(active=True).waiting_for_access(timezone.now(), str(said))
+            messages.warning(request, f"Saved. The keys work, but Amazon will not share its prices with this account "
+                                      f"yet: it needs 10 sales in the last 30 days. The site asks Amazon again every "
+                                      f"{Retailer.ACCESS_WAIT.seconds // 3600} hours, and Amazon prices show by "
+                                      "themselves once it says yes.")
         else:
             messages.error(request, f"Saved, but Amazon did not accept them yet: {said}. Amazon says access can take up "
                                     "to 48 hours after a credential is made; save again later to check.")
@@ -128,6 +140,7 @@ def amazon_page(request):
         "tag": tag or "ripraptor-21",
         "from_settings": from_settings,
         "show_hours": settings.RIPRAPTOR_AMAZON_SHOW_HOURS,
+        "access_hours": Retailer.ACCESS_WAIT.seconds // 3600,
         **found,
     })
     response["Cache-Control"] = "private, no-store"

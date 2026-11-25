@@ -536,7 +536,8 @@ def shops_section(now, store):
         ok_at = retailer.last_ok_at
         failing = row["problem"] or retailer.error_streak > 0
         late = ok_at is None or ok_at < now - insights.stale_after(retailer)
-        if everything_paused or retailer.reading_paused:
+        # Amazon waiting to share its prices with the account is paused by Amazon, not late or failing.
+        if everything_paused or retailer.reading_paused or row["light"] == crawl.WAITING:
             counts["paused"] += 1
         elif failing or late:
             counts["late"] += 1

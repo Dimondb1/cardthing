@@ -486,7 +486,7 @@ class LightTests(TestCase):
             "Held Cards": ("stopped", "Paused"),
             "New Cards": ("stopped", "Never read"),
         })
-        self.assertEqual(crawl.lights(rows.values()), {"ok": 1, "late": 1, "stopped": 4})
+        self.assertEqual(crawl.lights(rows.values()), {"ok": 1, "late": 1, "stopped": 4, "waiting": 0})
         # Not going first (failing, then paused, then the rest), then late, then up to date.
         self.assertEqual([row["retailer"].name for row in crawl.shops(self.now)],
                          ["Broken Cards", "Held Cards", "New Cards", "Old Cards", "Slow Cards", "Fresh Cards"])
@@ -530,6 +530,29 @@ class LightTests(TestCase):
         self.assertLess(page.index('id="shop-old-cards"'), page.index('id="shop-fresh-cards"'))
         WorkerState.objects.filter(pk=1).update(heartbeat_at=timezone.now() - timedelta(hours=1))
         self.assertIn("<b>Not reading</b>The background reader has stopped.", self.client.get(self.url).content.decode())
+
+    def test_amazon_waiting_for_sales_is_grey_not_red_and_not_counted_as_behind(self):
+        self.alive()
+        self.shop("Fresh Cards", last_ok_at=self.now - timedelta(minutes=10), next_read_at=self.now + timedelta(minutes=50))
+        self.shop("Amazon", source_type=Retailer.Source.AMAZON, backoff_until=self.now + timedelta(hours=5),
+                  next_read_at=self.now + timedelta(hours=5),
+                  last_error="Amazon API 403 AccessDeniedException AssociateNotEligible: Your account does not "
+                             "currently meet the eligibility requirements.")
+        rows = crawl.shops(self.now)
+        self.assertEqual(crawl.lights(rows), {"ok": 1, "late": 0, "stopped": 0, "waiting": 1})
+        amazon_row = next(row for row in rows if row["retailer"].name == "Amazon")
+        self.assertEqual((amazon_row["word"], amazon_row["problem"]), ("Waiting for Amazon", False))
+        self.assertTrue(amazon_row["doing"].startswith("Asked again "))
+        page = self.client.get(self.url).content.decode()
+        self.assertIn("<b>All shops up to date</b>", page)
+        self.assertIn("Waiting (1)", page)
+        self.assertIn('<li class="item waiting" id="shop-amazon">', page)
+        self.assertIn('id="waiting-line">Not counted above: Amazon', page)
+        self.assertNotIn("AccessDeniedException", page[:page.index('<details id="log">')])
+        from catalogue import insights
+
+        self.assertTrue(insights.reading_state(amazon_row["retailer"], self.now)
+                        .startswith("Waiting for Amazon to share its prices with this account, asked again "))
 
     def test_every_shop_is_read_at_least_every_hour_whatever_its_setting(self):
         shop = self.shop("Rare Cards", read_every_minutes=240)

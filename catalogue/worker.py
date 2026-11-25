@@ -942,6 +942,9 @@ class Worker:
         ok = crawl.finish_read(shop, run, began, seconds, since=job.started, now=now)
         if not ok and run.error.startswith(importers.SHOP_CLOSED):
             logger.warning("%s: %s; looked at again tomorrow", shop, importers.SHOP_CLOSED)
+        elif not ok and shop.awaiting_access:
+            logger.info("Amazon: not sharing its prices with this account yet (%s); asked again in %d hours",
+                        Retailer.NOT_ELIGIBLE, Retailer.ACCESS_WAIT.total_seconds() // 3600)
         elif not ok:
             logger.error("%s: %s", shop, run.error)
         elif shop.source_type == Retailer.Source.EBAY:

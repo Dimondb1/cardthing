@@ -19,16 +19,20 @@
   .crawl .dot { display: inline-block; flex: none; width: 0.8rem; height: 0.8rem; border-radius: 50%; background: var(--light-ok); }
   .crawl .late .dot { background: var(--light-late); }
   .crawl .stopped .dot { background: var(--light-stopped); }
+  .crawl .waiting .dot { background: var(--body-quiet-color); }
   .crawl .controls { margin: 4px 0 8px; }
   .crawl ul.shops { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
   .crawl ul.shops li.item { list-style-type: none; padding: 10px 12px; border: 1px solid var(--hairline-color); border-left: 4px solid var(--light-ok); border-radius: 6px; background: var(--body-bg); }
   .crawl ul.shops li.late { border-left-color: var(--light-late); }
   .crawl ul.shops li.stopped { border-left-color: var(--light-stopped); }
+  .crawl ul.shops li.waiting { border-left-color: var(--body-quiet-color); }
   .crawl .head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin: 0; }
   .crawl .word { font-weight: 600; }
   .crawl .item.ok .word { color: var(--light-ok); }
   .crawl .item.late .word { color: var(--light-late); }
   .crawl .item.stopped .word { color: var(--light-stopped); }
+  .crawl .item.waiting .word { color: var(--body-quiet-color); }
+  .crawl #shops h2 + ul, .crawl #shops ul + h2 { margin-top: 12px; }
   .crawl .doing { border: 1px solid var(--hairline-color); border-radius: 999px; padding: 0 8px; font-size: 0.85em; }
   .crawl .facts { margin: 4px 0 0; overflow-wrap: anywhere; }
   .crawl .error { margin: 4px 0 0; overflow-wrap: anywhere; color: var(--light-stopped); }
@@ -54,6 +58,7 @@
       <li class="late"><b><i class="dot" aria-hidden="true"></i>{{ lights.late }}</b><span>late</span></li>
       <li class="stopped"><b><i class="dot" aria-hidden="true"></i>{{ lights.stopped }}</b><span>not going</span></li>
     </ul>
+    {% if lights.waiting %}<p class="note" id="waiting-line">Not counted above: Amazon, waiting for Amazon to share its prices with this account. It needs more sales first; see the Amazon page.</p>{% endif %}
     <p class="note">Up to date: read in the last hour. Late: read in the last three hours. Not going: paused, failing, never read or not read for three hours. Every shop is read at least every hour.</p>
     <div class="row controls">
       <form method="post">{% csrf_token %}<input type="hidden" name="action" value="read_all"><input type="submit" value="Read all"></form>
@@ -72,6 +77,10 @@
     <ul class="shops">{% for row in problems %}{% include "admin/crawl_shop.html" %}{% endfor %}</ul>
     {% elif not shops %}
     <p class="none">No shops are read on a schedule. Add a shop with a price source in Retailers.</p>
+    {% endif %}
+    {% if waiting %}
+    <h2>Waiting ({{ waiting|length }})</h2>
+    <ul class="shops">{% for row in waiting %}{% include "admin/crawl_shop.html" %}{% endfor %}</ul>
     {% endif %}
     {% if fine %}
     <details id="up-to-date"{% if not problems %} open{% endif %}>

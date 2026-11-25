@@ -653,6 +653,11 @@ class Retailer(models.Model):
     BACKOFF_LONGEST = timedelta(hours=6)
     BACKOFF_TOO_MANY = timedelta(minutes=30)
     # A shop closed behind its password page is looked at again a day later (closed_for_now).
+    # Amazon refuses its price data to an Associates account below its sales bar, "AssociateNotEligible" (10 qualified
+    # sales in the last 30 days, Amazon's Creators API documents say): asked again this much later, and not counted as
+    # failing (waiting_for_access). The owner, 25 Nov 2026, of the red line it made: "Amazon still failing".
+    ACCESS_WAIT = timedelta(hours=6)
+    NOT_ELIGIBLE = "AssociateNotEligible"
     CLOSED_WAIT = timedelta(hours=24)
 
     class Meta:
@@ -752,6 +757,20 @@ class Retailer(models.Model):
         pre-orders and single listings left alone until then, and not counted as failing, so the owner is not told
         each day of a shop that has simply shut. A read that works clears it."""
         self.backoff_until = self.next_read_at = now + self.CLOSED_WAIT
+        self.error_streak = 0
+        self.failing_since = None
+        self.last_error = error[:300]
+        self.save(update_fields=["backoff_until", "next_read_at", "error_streak", "failing_since", "last_error"])
+
+    @property
+    def awaiting_access(self):
+        """True while Amazon's last word was that this account may not have its price data yet (NOT_ELIGIBLE)."""
+        return self.source_type == self.Source.AMAZON and self.NOT_ELIGIBLE in (self.last_error or "")
+
+    def waiting_for_access(self, now, error):
+        """Record Amazon's refusal to an account below its sales bar: asked again ACCESS_WAIT later, not counted as
+        failing, so neither Crawl health nor the owner's phone calls it a fault. A read that works clears it."""
+        self.backoff_until = self.next_read_at = now + self.ACCESS_WAIT
         self.error_streak = 0
         self.failing_since = None
         self.last_error = error[:300]

@@ -5130,7 +5130,8 @@ def crawl_page(request):
         **admin.site.each_context(request), "title": "Crawl health",
         # The owner, 24 Nov 2026: "Crawl health needs to be more simple ... visually show the ones that aren't going".
         "verdict": verdict, "why": why, "lights": crawl.lights(rows),
-        "problems": [row for row in rows if row["light"] != crawl.OK],
+        "problems": [row for row in rows if row["light"] in (crawl.STOPPED, crawl.LATE)],
+        "waiting": [row for row in rows if row["light"] == crawl.WAITING],
         "fine": [row for row in rows if row["light"] == crawl.OK],
         "log": crawl.log_text(now, state, rows, worker, everything_paused),
         "all_paused": everything_paused, "last_finished": insights.clock(last, now) if last else None,

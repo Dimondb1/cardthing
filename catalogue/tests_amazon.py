@@ -294,6 +294,28 @@ class ImportTests(TestCase):
             run_import(self.retailer)
         called.assert_called()
 
+    def test_a_read_amazon_refuses_for_want_of_sales_waits_six_hours_and_is_not_a_failure(self):
+        from . import crawl
+
+        Retailer.objects.filter(pk=self.retailer.pk).update(error_streak=2, failing_since=timezone.now())
+        self.retailer.refresh_from_db()
+        refusal = ("Amazon API 403 AccessDeniedException AssociateNotEligible: Your account does not currently meet "
+                   "the eligibility requirements.")
+        with mock.patch.object(amazon, "call", side_effect=amazon.AmazonError(refusal)):
+            run = run_import(self.retailer)
+        began = timezone.now()
+        self.assertFalse(crawl.finish_read(self.retailer, run, began, 1))
+        self.retailer.refresh_from_db()
+        self.assertTrue(self.retailer.awaiting_access)
+        self.assertEqual((self.retailer.error_streak, self.retailer.failing_since), (0, None))
+        self.assertGreater(self.retailer.backoff_until, timezone.now() + datetime.timedelta(hours=5, minutes=59))
+        self.assertFalse(Retailer.due(timezone.now()).filter(pk=self.retailer.pk).exists())
+        light, why = crawl.light_for(self.retailer, timezone.now(), False)
+        self.assertEqual(light, crawl.WAITING)
+        # A read that works ends the wait.
+        self.retailer.read_ok(timezone.now(), 30)
+        self.assertFalse(self.retailer.awaiting_access)
+
     def test_missing_keys_are_reported_not_raised(self):
         with override_settings(**NO_KEYS):
             run = run_import(self.retailer)
@@ -478,11 +500,38 @@ class KeysPageTests(TestCase):
 
     def test_keys_amazon_refuses_are_saved_and_say_why(self):
         with override_settings(RIPRAPTOR_AMAZON_CREDENTIAL_ID="", RIPRAPTOR_AMAZON_CREDENTIAL_SECRET=""), \
-                mock.patch.object(amazon, "check", return_value=(False, "AssociateNotEligible")):
+                mock.patch.object(amazon, "check", return_value=(False, "InvalidClient")):
             response = self.client.post(self.url, {"credential_id": "x", "secret": "y", "tag": "ripraptor-21"},
                                         follow=True)
-        self.assertContains(response, "Amazon did not accept them yet: AssociateNotEligible")
+        self.assertContains(response, "Amazon did not accept them yet: InvalidClient")
         self.assertFalse(Retailer.objects.filter(source_type=Retailer.Source.AMAZON).exists())
+
+    def test_an_account_amazon_will_not_share_prices_with_yet_waits_quietly(self):
+        """The owner, 25 Nov 2026: "Amazon still failing what's going on?". The keys work; Amazon shares its prices
+        only with an account that has enough sales (AssociateNotEligible). Asked again every few hours, never red."""
+        refusal = ("Amazon API 403 AccessDeniedException AssociateNotEligible: Your account does not currently meet "
+                   "the eligibility requirements.")
+        with override_settings(RIPRAPTOR_AMAZON_CREDENTIAL_ID="", RIPRAPTOR_AMAZON_CREDENTIAL_SECRET=""), \
+                mock.patch.object(amazon, "check", return_value=(False, refusal)):
+            response = self.client.post(self.url, {"credential_id": "x", "secret": "y", "tag": "ripraptor-21"},
+                                        follow=True)
+        self.assertContains(response, "The keys work, but Amazon will not share its prices with this account yet: it "
+                                      "needs 10 sales in the last 30 days. The site asks Amazon again every 6 hours")
+        shop = Retailer.objects.get(source_type=Retailer.Source.AMAZON)
+        self.assertTrue(shop.is_active)
+        self.assertTrue(shop.awaiting_access)
+        self.assertEqual((shop.error_streak, shop.failing_since), (0, None))
+        self.assertGreater(shop.backoff_until, timezone.now() + datetime.timedelta(hours=5))
+        self.assertContains(response, '<p id="waiting"><strong>Waiting for Amazon.</strong> The keys work')
+        self.assertContains(response, "Your Amazon links earn as before.")
+        # Amazon says yes: the wait is over and it is read at the next turn.
+        with override_settings(RIPRAPTOR_AMAZON_CREDENTIAL_ID="", RIPRAPTOR_AMAZON_CREDENTIAL_SECRET=""), \
+                mock.patch.object(amazon, "check", return_value=(True, 7)):
+            self.client.post(self.url, {"credential_id": "x", "secret": "y", "tag": "ripraptor-21"})
+        shop.refresh_from_db()
+        self.assertFalse(shop.awaiting_access)
+        self.assertIsNone(shop.backoff_until)
+        self.assertLessEqual(shop.next_read_at, timezone.now())
 
     def test_the_page_has_a_log_to_copy_with_no_key_in_it(self):
         """The owner, 24 Nov 2026: "Need to ensure Amazon health area has a log"."""

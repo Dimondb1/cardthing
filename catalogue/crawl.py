@@ -154,6 +154,8 @@ def finish_read(item, run, began, seconds, since=None, now=None):
 
         if run.error.startswith(SHOP_CLOSED):
             item.closed_for_now(now, run.error)
+        elif Retailer.NOT_ELIGIBLE in run.error and item.source_type == Retailer.Source.AMAZON:
+            item.waiting_for_access(now, run.error)
         else:
             item.read_failed(now, http_status(run.error), run.error)
         return False
@@ -212,8 +214,10 @@ def next_read_for(retailer, now, everything_paused=False):
 # has never been read.
 UP_TO_DATE_FOR = timedelta(minutes=75)
 LATE_FOR = timedelta(hours=3)
-OK, LATE, STOPPED = "ok", "late", "stopped"
-WORDS = {OK: "Up to date", LATE: "Late", STOPPED: "Not going"}
+# Amazon waiting to open its price data to the account (Retailer.awaiting_access) is none of these: it is not counted
+# as behind and is never red.
+OK, LATE, STOPPED, WAITING = "ok", "late", "stopped", "waiting"
+WORDS = {OK: "Up to date", LATE: "Late", STOPPED: "Not going", WAITING: "Waiting for Amazon"}
 
 
 def ordinal(n):
@@ -229,6 +233,8 @@ def light_for(retailer, now, everything_paused):
         return STOPPED, "Pause all is on"
     if retailer.reading_paused:
         return STOPPED, "Paused"
+    if retailer.awaiting_access:
+        return WAITING, "Amazon will not share its prices with this account until it has more sales"
     if retailer.backoff_until is not None and retailer.backoff_until > now:
         tries = retailer.error_streak
         return STOPPED, (f"Failing: waiting after {tries} failed tr{'y' if tries == 1 else 'ies'}" if tries
@@ -288,14 +294,14 @@ def shops(now, state=_UNREAD):
         row = {
             "retailer": retailer,
             "state": state,
-            "problem": backing_off,
+            "problem": backing_off and light != WAITING,
             "light": light, "word": WORDS[light], "why": why,
             "doing": "Reading now" if retailer.reading else "",
             "last_ok": clock(retailer.last_ok_at, now) if retailer.last_ok_at else "never",
             "next_read": next_read,
             "last_error": retailer.last_error[:160],
             "failed_run": retailer.failed_run,
-            "order": ({STOPPED: 0, LATE: 1, OK: 2}[light],
+            "order": ({STOPPED: 0, LATE: 1, WAITING: 2, OK: 3}[light],
                       0 if backing_off or retailer.error_streak else 1 if retailer.reading_paused else 2,
                       retailer.name.lower()),
         }
@@ -303,7 +309,7 @@ def shops(now, state=_UNREAD):
             if next_read == "due now":
                 in_line.append(row)
             elif next_read != "paused":
-                row["doing"] = f"Next read {next_read}"
+                row["doing"] = f"{'Asked again' if light == WAITING else 'Next read'} {next_read}"
         rows.append(row)
     # Its place in line, as the reader takes them (Worker.plan): eBay's hourly search first, then the shop due longest.
     epoch = now - timedelta(days=3650)
@@ -317,7 +323,7 @@ def shops(now, state=_UNREAD):
 
 def lights(rows):
     """How many shops are OK, LATE and STOPPED."""
-    counts = {OK: 0, LATE: 0, STOPPED: 0}
+    counts = {OK: 0, LATE: 0, STOPPED: 0, WAITING: 0}
     for row in rows:
         counts[row["light"]] += 1
     return counts
@@ -396,7 +402,7 @@ def log_text(now, state, rows, worker, everything_paused):
     out = [f"RipRaptor crawl log, {timezone.localtime(now):%a %d %b %Y %H:%M} UK time",
            f"Verdict: {light}. {why}",
            f"Shops read on a schedule: {len(rows)}; up to date {counts[OK]}, late {counts[LATE]}, "
-           f"not going {counts[STOPPED]}"]
+           f"not going {counts[STOPPED]}, waiting for Amazon {counts[WAITING]}"]
 
     out += ["", "BACKGROUND READER"]
     if state is None:

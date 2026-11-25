@@ -23,7 +23,11 @@
 <div class="amazon-keys">
   <section>
     <h2>Amazon prices</h2>
-    {% if shop %}
+    {% if shop and waiting %}
+      <p id="waiting"><strong>Waiting for Amazon.</strong> The keys work, but Amazon shares its prices only with an Associates account that has 10 sales in the last 30 days, and it does not count this one yet. Sales are counted once the items are dispatched.</p>
+      <p>The site asks Amazon again every {{ access_hours }} hours{% if shop.backoff_until %}, next at {{ shop.backoff_until|date:"H:i" }}{% endif %}. Amazon prices show by themselves once it says yes. Your Amazon links earn as before.</p>
+      <p class="note"><a href="{% url 'admin:catalogue_retailer_change' shop.pk %}">Amazon's shop page</a>: untick Active and save to stop asking.</p>
+    {% elif shop %}
       <p>{% if shop.is_active %}Amazon is switched on.{% else %}Amazon prices are off: they switch on when Amazon accepts the keys saved here. Clicks on the Amazon buttons are counted all the same.{% endif %}
         {% if last %}Last read {{ last.finished_at|date:"j M H:i" }}{% if last.error %}, which failed: {{ last.error }}{% else %}, {{ last.listings_updated }} prices updated{% endif %}.{% else %}Not read yet: it is read at the next hourly read.{% endif %}</p>
       <p>{{ shown }} product page{{ shown|pluralize }} show{{ shown|pluralize:"s," }} an Amazon price now, of {{ known }} Amazon listing{{ known|pluralize }} found.</p>

@@ -787,6 +787,10 @@ def reading_state(retailer, now, error_shown=False):
         return f"Paused: {retailer.paused_note}" if retailer.paused_note else "Paused"
     if retailer.backoff_until and retailer.backoff_until > now and retailer.last_error.startswith(SHOP_CLOSED):
         return f"{SHOP_CLOSED}, looked at again {clock(retailer.backoff_until, now)}"
+    if retailer.awaiting_access:
+        again = f", asked again {clock(retailer.backoff_until, now)}" if retailer.backoff_until and \
+            retailer.backoff_until > now else ""
+        return f"Waiting for Amazon to share its prices with this account{again}"
     if retailer.backoff_until and retailer.backoff_until > now:
         line = f"Backing off until {clock(retailer.backoff_until, now)} after {plural(retailer.error_streak, 'error', 'errors')}"
         return f"{line}: {retailer.last_error[:160]}" if retailer.last_error and not error_shown else line

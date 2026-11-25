@@ -4239,16 +4239,25 @@ of each product's cheapest delivered price (`DailyLowestPrice`):
 - the fall is under 70%: a larger one is a wrong product link, as on the
   Deals page.
 
-Each deal is a card: today's cheapest delivered price and shop, its price
-history (how far under its 30-day average, the change on 7 and 30 days, in
-green when it fell and red when it rose, and its lowest recorded price and
-day), the difference from the next shop today (labelled Between shops and
-never called a reduction), how many shops have it in stock, when the price
-was checked, and Buy now (through `/go/`, sponsored and not followed).
-Filters are plain links: the games (on the hub, each to its own page), the
-kinds of product (`?type=`) and the order (`?sort=percent`, `pounds`, or
-`lowest` for the lowest recorded prices only). A filtered address keeps the
-page's own canonical. The hub shows the top 60, a game's page the top 120.
+The pages are list pages like a game's, built from the same shared parts and
+none of their own (see Layout rules): the look the site is in, the status
+line, the heading with one short line under it, the product types as tiles
+(chips in the classic look), two switches, then each product as the look's
+own compact row or card, with one green line saying how far under its 30-day
+average it is ("16% under 30-day average", or "Lowest recorded price" for one
+listed for that alone). The switches are plain forms: Biggest £ saving first
+(`?sort=pounds`; the list is biggest % first without it) and Lowest recorded
+only (`?lowest=on`). A type is `?type=`. A filtered address keeps the page's
+own canonical. The hub shows the top 60, a game's page the top 120, and the
+hub links each published game's page under its heading.
+
+Under the questions, the figures behind each drop are a table like the UK
+prices pages' (`price-table`, with `price-table--wide` so it stays labelled
+blocks until a wide screen): today's delivered price, the 30-day average,
+the change on 7 and 30 days (green when it fell, red when it rose), the
+lowest recorded price and day, how much dearer the next shop is today (a
+difference between shops, never called a reduction), how many shops have it
+in stock and when the price was checked.
 
 The questions at the foot (cheapest cards this Black Friday, whether booster
 boxes are cheaper, which UK shops have the most deals, how a genuine drop is

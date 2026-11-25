@@ -25,8 +25,17 @@ cheapest against the next shop's, offers.summarise), which is never called a red
 A game's page is published (indexed, in the sitemap, linked from the hub) when it has PUBLISH_LEAST deals now; below
 that it still answers, for a visitor who follows a link, but asks search engines not to index it.
 
+How it is drawn. It is a list page like a game's or a search's, and is built from the same parts, nothing of its own
+(the owner, 25 Nov 2026, of its first design: "why is it different than everything else"): the look the site is in
+(web/look.py), with the search box and games at the foot in the feed and compact looks, the status line, the
+breadcrumbs, heading and one short line, the product types as tiles (chips in the classic look), switches, then each
+product as the look's own row or card (compact_row.html, product_card.html) with one line saying how far under its
+30-day average it is. The figures behind each (the 30-day average, the 7 and 30-day changes, the lowest recorded, the
+next shop, shops in stock, when checked) are a table like the UK prices pages' (price-table), under the questions.
+
 Queries: the deals (one, plus one for the shops' offers of those shown, one for the cheapest shop of each, and one for
-the questions' booster box figures). Pages are kept like any list page (web.pagecache).
+the questions' booster box figures) and the look's own (its numbers and games, kept). Pages are kept like any list
+page (web.pagecache).
 """
 
 from dataclasses import dataclass
@@ -64,7 +73,8 @@ PENCE = Decimal("0.01")
 GOOD_BANDS = (fair_price.GOOD_PRICE, fair_price.LOWEST)
 ON_RECORD = (fair_price.RECORD, fair_price.BOTH)
 
-SORTS = ("percent", "pounds", "lowest")    # biggest % saving, biggest £ saving, lowest recorded prices only
+POUNDS = "pounds"                          # ?sort=pounds: biggest saving in pounds first; else biggest % first
+LOWEST = "lowest"                          # ?lowest=on: only the products at the lowest price we have recorded
 
 
 def black_friday(year):
@@ -131,11 +141,17 @@ def short_day(when):
     return date_format(when, "j F")
 
 
-def deal_rows(game=None, kind="", sort="percent", today=None):
+def week_day(when):
+    """A date under a heading that gives the year: "Friday 27 November"."""
+    return date_format(when, "l j F")
+
+
+def deal_rows(game=None, kind="", sort="", lowest=False, today=None):
     """The genuine price drops now (see the module's notes), each with ``month_average``, ``month_days``,
     ``week_price`` and ``month_price`` (the cheapest price recorded about a week and a month ago), ``low`` and
     ``low_date`` (the lowest recorded before today, and the latest day at it), ``saving`` and ``saving_ratio``
-    (today's price under the 30-day average). Narrowed to ``game`` and ``kind``; ``sort`` as SORTS. One query."""
+    (today's price under the 30-day average). Narrowed to ``game`` and ``kind``, and with ``lowest`` to those at the
+    lowest price recorded; biggest % saving first, or with ``sort`` POUNDS the biggest in pounds. One query."""
     today = today or timezone.localdate()
     money = DecimalField(max_digits=12, decimal_places=4)
 
@@ -189,9 +205,9 @@ def deal_rows(game=None, kind="", sort="percent", today=None):
                 | Q(lowest_known__lte=F("low"), price_band=fair_price.LOWEST))
         .filter(saving_ratio__lte=offers.MAX_REAL_PERCENT / 100)
     )
-    if sort == "lowest":
+    if lowest:
         products = products.filter(lowest_known__lte=F("low"))
-    order = ("-saving", "-saving_ratio") if sort == "pounds" else ("-saving_ratio", "-saving")
+    order = ("-saving", "-saving_ratio") if sort == POUNDS else ("-saving_ratio", "-saving")
     return products.order_by(*order, "name")
 
 
@@ -363,7 +379,8 @@ def season_line(words, when):
                      next_friday=day(when.next_friday))
     if when.state == "on":
         return words("blackfriday.season.on", year=when.year, monday=short_day(when.monday))
-    return words("blackfriday.season.before", year=when.year, friday=day(when.friday), monday=day(when.monday))
+    return words("blackfriday.season.before", year=when.year, friday=week_day(when.friday),
+                 monday=week_day(when.monday))
 
 
 def ready(products):
@@ -378,23 +395,53 @@ def ready(products):
     return products
 
 
+def type_tiles(request, path, every, kinds, chosen, all_label):
+    """The product types the deals hold as the look's small tiles (feed.Tile, compact_tiles.html): All first, then
+    each type pictured by its biggest drop, each a link to this page with the type chosen (the chosen one leads back
+    to All), keeping the other choices. No query: the products are the deals'."""
+    from . import feed
+
+    def link(kind):
+        params = request.GET.copy()
+        for name in ("page", "type"):
+            params.pop(name, None)
+        if kind:
+            params["type"] = kind
+        return "?" + params.urlencode() if params else path
+
+    first = {}
+    for product in every:
+        first.setdefault(product.product_type, product)
+    tiles = [feed.Tile(feed.ALL, all_label, None, link(""), not chosen)]
+    for kind, _label in kinds:
+        if kind in feed.TYPE_LABELS:
+            tiles.append(feed.Tile(kind, feed.TYPE_LABELS[kind], first[kind], link("" if kind == chosen else kind),
+                                   kind == chosen))
+    return tiles[:feed.TILES_SHOWN + 1]
+
+
 def page(request, game=None):
     """The hub (``game`` None) or a game's page."""
+    from . import compact, look
     from .answers import faq_json
     from .views import breadcrumbs_json, ld_json, text
 
     words = hubs.Words(text, request)
     when = season()
     kind = request.GET.get("type", "")
-    sort = request.GET.get("sort", "")
-    sort = sort if sort in SORTS else "percent"
+    sort = POUNDS if request.GET.get("sort") == POUNDS else ""
+    lowest = bool(request.GET.get(LOWEST))
     every = list(deal_rows(game=game))              # the page's deals before its own filters, biggest % first
     kinds = kinds_in(every, game.slug if game else "")
     kind = kind if kind in dict(kinds) else ""
-    chosen = every if not kind and sort == "percent" else list(deal_rows(game=game, kind=kind, sort=sort))
+    chosen = every if not (kind or sort or lowest) else list(deal_rows(game=game, kind=kind, sort=sort, lowest=lowest))
     limit = SHOWN["game" if game else None]
-    rows = ready(chosen[:limit])
-    checked = max((row.best.last_checked for row in rows if row.best is not None), default=None)
+    shown = ready(chosen[:limit])
+    for product in shown:
+        # A product here for being at its lowest recorded, not for a clear fall on the month, says that.
+        product.row_note = (words("blackfriday.row.note", percent=product.saving_percent)
+                            if product.saving_percent >= int(DROP * 100) else words("blackfriday.row.note_low"))
+    checked = max((row.best.last_checked for row in shown if row.best is not None), default=None)
     # The questions: about the page's game, or on the hub about Pokémon, with its biggest drop now.
     asked = game or next((row.game for row in every if row.game.slug == QUESTION_GAME), None) \
         or Game.objects.filter(slug=QUESTION_GAME, is_active=True).first()
@@ -416,35 +463,41 @@ def page(request, game=None):
                        if every else words("meta.blackfriday.description_none", year=when.year))
         crumbs = [(words("blackfriday.crumb_deals"), reverse("web:deals")), (heading, path)]
         indexable = True
+        intro = words("blackfriday.intro", drop=int(DROP * 100), month=MONTH)
     else:
         path = reverse("web:black_friday_game", args=[game.slug])
         name = game.display_short
         heading = words("blackfriday.title_game", year=when.year, game=name)
         short = words("meta.blackfriday.title_game_short", year=when.year, game=name)
         title = hubs.fitted([words("meta.blackfriday.title_game", year=when.year, game=name), short]) or short
-        types = words.join(spelled(plural_words(game.slug, [code for code, _label in kinds][:3])))
+        named = spelled(plural_words(game.slug, [code for code, _label in kinds][:3]))
+        types = words.join(named)
         description = (words("meta.blackfriday.description_game", count=f"{len(every):,}", year=when.year,
                              game=name, types=types, price=hubs.money(least))
                        if every else words("meta.blackfriday.description_game_none", year=when.year, game=name))
         crumbs = [(words("blackfriday.crumb_deals"), reverse("web:deals")),
                   (words("blackfriday.title", year=when.year), reverse("web:black_friday")), (heading, path)]
         indexable = len(every) >= PUBLISH_LEAST
-    if game is None:
-        intro = words("blackfriday.intro", drop=int(DROP * 100), month=MONTH)
-    else:
-        named = spelled(plural_words(game.slug, [code for code, _label in kinds][:3]))
-        intro = words("blackfriday.intro_game", game=game.display_short, drop=int(DROP * 100), month=MONTH,
-                      types=words.join(named) if named else words("blackfriday.sealed"))
+        intro = words("blackfriday.intro_game", game=name, drop=int(DROP * 100), month=MONTH,
+                      types=types if named else words("blackfriday.sealed"))
     url = request.build_absolute_uri(path)
     structured = [breadcrumbs_json(request, crumbs, page_url=url)]
     if questions:
         structured.append(faq_json(url, questions))
+    mode = look.mode(request)
+    drawn = mode != look.CLASSIC      # the feed and compact looks: the search box and games at the foot, tiles
+    keep = [(name, value) for name, value in (("type", kind), ("sort", sort), (LOWEST, "on" if lowest else "")) if value]
     return render(request, "web/black_friday.html", {
-        "game": game, "when": when, "rows": rows, "count": len(chosen), "every": len(every), "shown_limit": limit,
-        "kinds": kinds, "kind": kind, "sort": sort, "sorts": SORTS, "checked": checked,
-        "games": by_game(every) if game is None else {},
+        "look": mode, "compact": mode == look.COMPACT,
+        "dock": compact.dock(request, game) if drawn else None,
+        "numbers": compact.numbers() if mode == look.COMPACT else None,
+        "tiles": type_tiles(request, path, every, kinds, kind, words("compact.types.all")) if drawn else [],
+        "game": game, "when": when, "rows": [(product, product.summary) for product in shown],
+        "count": len(chosen), "every": len(every), "shown_limit": limit,
+        "kinds": kinds, "kind": kind, "pounds_on": sort == POUNDS, "lowest_on": lowest, "keep": keep,
+        "checked": checked, "games": by_game(every) if game is None else {},
         "questions": questions, "season_line": season_line(words, when), "heading": heading, "intro": intro,
-        "drop": int(DROP * 100), "month": MONTH, "path": path, "crumbs": crumbs,
+        "path": path, "crumbs": crumbs,
         "meta_title": title, "meta_description": hubs.fit_description(description),
         "canonical_url": url, "robots": "" if indexable else "noindex, follow",
         "structured_json": ld_json(structured),

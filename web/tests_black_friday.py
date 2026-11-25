@@ -166,7 +166,7 @@ class DealRuleTests(DealCase):
         self.bands()
         self.assertEqual(self.deals(), [etb, box])
         self.assertEqual(self.deals(sort="pounds"), [box, etb])
-        self.assertEqual(self.deals(sort="lowest"), [box])
+        self.assertEqual(self.deals(lowest=True), [box])
         self.assertEqual(self.deals(kind="booster_box"), [box])
 
 
@@ -234,7 +234,7 @@ class HubTests(PageCase):
     def test_title_heading_description_and_canonical(self):
         html = self.html("/black-friday/")
         self.assertIn("<title>Black Friday 2026 TCG deals UK: real price drops | RipRaptor</title>", html)
-        self.assertIn('<h1 class="page-title">Black Friday 2026 TCG deals in the UK</h1>', html)
+        self.assertIn('<h1 class="browse-head__title">Black Friday 2026 TCG deals in the UK</h1>', html)
         self.assertIn("Real Black Friday deals. Not inflated discounts.", html)
         self.assertIn('<link rel="canonical" href="http://testserver/black-friday/">', html)
         self.assertNotIn('name="robots"', html)
@@ -250,14 +250,23 @@ class HubTests(PageCase):
             self.assertIn(f'href="{product.get_absolute_url()}"', html)
         for tag in re.findall(r'<a[^>]+href="/go/[^>]+>', html):
             self.assertIn('rel="sponsored nofollow noopener"', tag)
-        self.assertIn("£10.00 (10%) under its 30-day average of £100.00", html)
-        self.assertIn("Between shops", html)
-        self.assertIn("£20.00 less than the next shop", html)
+        self.assertIn("10% under 30-day average", html)
 
-    def test_the_two_kinds_of_saving_are_told_apart(self):
+    def test_the_figures_are_a_table_and_the_two_kinds_of_saving_are_told_apart(self):
         html = self.html("/black-friday/")
+        self.assertIn("The figures behind each price drop", html)
         self.assertIn("a difference, not a reduction", html)
-        self.assertIn("Price history", html)
+        table = html[html.index('<table class="price-table price-table--wide">'):html.index("</table>")]
+        row = table[table.index(self.box.get_absolute_url()):]
+        row = row[:row.index("</tr>")]
+        self.assertIn('<td class="price-table__today" data-label="Today, delivered">£90.00</td>', row)
+        self.assertIn('<td class="price-table__usual" data-label="30-day average">£100.00</td>', row)
+        self.assertIn('data-label="30 days"><span class="price-table__down">', row)
+        self.assertIn("Down £10.00 (10%)", row)
+        self.assertIn('data-label="Lowest recorded"><span class="price-table__down">Today', row)
+        self.assertIn('<td data-label="Next shop">£20.00 dearer</td>', row)
+        self.assertIn('<td data-label="In stock at">2 shops</td>', row)
+        self.assertRegex(row, r'<td data-label="Checked"><time datetime="[^"]+">\d+ \w+, \d\d:\d\d</time></td>')
 
     def test_games_with_enough_deals_are_linked(self):
         html = self.html("/black-friday/")
@@ -289,7 +298,21 @@ class HubTests(PageCase):
         self.assertIn('<link rel="canonical" href="http://testserver/black-friday/">', html)
         self.assertIn(self.box.get_absolute_url(), html)
         self.assertNotIn(f'href="{self.etb.get_absolute_url()}"', html)
-        self.assertIn("?type=booster_box&amp;sort=lowest", html)
+        # Each switch keeps the other choices, and the line under them says the order.
+        self.assertIn('<input type="checkbox" name="sort" value="pounds" checked>', html)
+        self.assertIn('<input type="hidden" name="type" value="booster_box">', html)
+        self.assertIn("Biggest £ saving first.", html)
+        self.assertIn('href="/black-friday/?type=elite_trainer_box&amp;sort=pounds"', html)
+
+    def test_the_lowest_recorded_switch(self):
+        # The ETB has been cheaper before; the box and the bundle are at the lowest we have recorded.
+        DailyLowestPrice.objects.create(product=self.etb, date=timezone.localdate() - timedelta(days=50), price="43.00")
+        cache.clear()
+        html = self.html("/black-friday/", lowest="on")
+        self.assertIn('<input type="checkbox" name="lowest" value="on" checked>', html)
+        self.assertIn(f'href="{self.box.get_absolute_url()}"', html)
+        self.assertNotIn(f'href="{self.etb.get_absolute_url()}"', html)
+        self.assertIn("2 genuine price drops", html)
 
     def test_nothing_made_up_when_there_are_no_deals(self):
         DailyLowestPrice.objects.all().delete()
@@ -304,11 +327,11 @@ class GamePageTests(PageCase):
     def test_a_game_with_enough_deals_is_published(self):
         html = self.html("/black-friday/pokemon/")
         self.assertIn("<title>Pokémon Black Friday 2026 deals UK: real price drops | RipRaptor</title>", html)
-        self.assertIn('<h1 class="page-title">Black Friday 2026 Pokémon deals in the UK</h1>', html)
+        self.assertIn('<h1 class="browse-head__title">Black Friday 2026 Pokémon deals in the UK</h1>', html)
         self.assertIn('<link rel="canonical" href="http://testserver/black-friday/pokemon/">', html)
         self.assertNotIn('name="robots"', html)
-        self.assertIn("Pokémon booster boxes, Elite Trainer Boxes and booster bundles whose cheapest delivered price",
-                      html)
+        self.assertIn("Real Black Friday deals. Not inflated discounts. Pokémon booster boxes, Elite Trainer Boxes and "
+                      "booster bundles at least 5% under their own 30-day average at a UK shop today.", html)
 
     def test_a_game_with_too_few_is_not_indexed(self):
         Listing.objects.filter(product=self.bundle).delete()
@@ -367,7 +390,7 @@ class SitemapAndLinkTests(PageCase):
             self.assertIn('href="/black-friday/"', deals)
             # The page stays, for next year.
             html = self.html("/black-friday/")
-            self.assertIn("Black Friday 2026 is on Friday 27 November 2026", html)
+            self.assertIn("Black Friday 2026 is on Friday 27 November and Cyber Monday on Monday 30 November.", html)
 
     def test_during_the_weekend_it_says_so(self):
         with mock.patch("web.black_friday.local_today", return_value=date(2026, 11, 28)):
@@ -380,3 +403,69 @@ class SitemapAndLinkTests(PageCase):
             self.assertIn("Black Friday 2026 is over. The next is on Friday 26 November 2027", html)
             self.assertIn("Cyber Monday 2026 was on Monday 30 November 2026. Cyber Monday 2027 is on Monday 29 "
                           "November 2027.", html)
+
+
+class LookTests(PageCase):
+    """The page is a list page like a game's: the look the site is in, and its products as that look's own rows or
+    cards, never a design of its own (web/design.py)."""
+
+    def wear(self, compact=False, feed=False):
+        from catalogue.models import SiteLook
+        from web import look
+
+        SiteLook.objects.update_or_create(pk=1, defaults={"compact": compact, "feed_home": feed})
+        cache.clear()
+        look.remember()
+
+    def test_the_compact_look(self):
+        self.wear(compact=True)
+        for url in ("/black-friday/", "/black-friday/pokemon/"):
+            html = self.html(url)
+            with self.subTest(url=url):
+                self.assertIn('<body class="feed-look compact-look"', html)
+                self.assertIn('class="feed-dock"', html)           # the search box and games at the foot
+                self.assertIn('class="cx-status"', html)           # the status line
+                self.assertEqual(html.count('<li class="crow">'), 3)   # each product a compact row
+                self.assertNotIn('class="card"', html)
+                self.assertIn('<span class="crow__note">10% under 30-day average</span>', html)
+                # The types as the look's tiles, each keeping the page.
+                self.assertIn('class="feed-tile__link" href="?type=booster_box"', html)
+                self.assertNotIn('class="chips quick"', html)
+
+    def test_the_classic_look(self):
+        self.wear()
+        html = self.html("/black-friday/")
+        self.assertNotIn("feed-look", html[html.index("<body"):html.index(">", html.index("<body"))])
+        self.assertNotIn('class="feed-dock"', html)
+        self.assertEqual(html.count('<li class="card">'), 3)       # each product the usual card
+        self.assertNotIn('class="crow"', html)
+        self.assertIn('<p class="card__deal card__deal--saving">10% under 30-day average</p>', html)
+        self.assertIn('class="chips quick"', html)
+        self.assertIn("Delivered prices checked ", html)            # the compact look's status line says it there
+
+    def test_the_feed_look_has_the_dock_and_cards(self):
+        self.wear(feed=True)
+        html = self.html("/black-friday/")
+        self.assertIn('<body class="feed-look"', html)
+        self.assertIn('class="feed-dock"', html)
+        self.assertEqual(html.count('<li class="card">'), 3)
+
+    def test_a_product_here_for_its_lowest_recorded_price_says_that(self):
+        # The same price for a year but for last month's rise, and now back at its lowest: no clear fall on the month.
+        tin = self.product("Surging Sparks Tin", "54.00", others=("58.00",), kind="tin",
+                           history={**steady("55.00", days=30), **steady("62.00", days=60, start=31), 45: "54.00"})
+        self.bands()
+        cache.clear()
+        self.wear(compact=True)
+        html = self.html("/black-friday/", type="tin")
+        self.assertIn(f'href="{tin.get_absolute_url()}"', html)
+        self.assertIn('<span class="crow__note">Lowest recorded price</span>', html)
+
+    def test_no_styles_of_its_own(self):
+        from pathlib import Path
+
+        css = (Path(__file__).resolve().parent / "static/css/site.css").read_text()
+        self.assertNotIn(".bf-deal", css)
+        self.assertNotIn(".bf__", css)
+        template = (Path(__file__).resolve().parent / "templates/web/black_friday.html").read_text()
+        self.assertEqual(re.findall(r'class="bf[-_ "]', template), [])

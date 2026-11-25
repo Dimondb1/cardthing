@@ -2817,7 +2817,9 @@ text rather than running it. Both services also run with `ProtectSystem=strict`,
 itself: it made `.git` and `.venv` again as root (the new packages are built beside the old ones and moved into
 place, so the site keeps running), set the ownership above and dropped root's old git exception
 (`safe.directory`). Python's compiled files are made by root on each update, as `ripraptor` cannot write them
-beside the code. The site starts gunicorn as `python -m gunicorn`, which a moved package folder still runs. The
+beside the code. The site starts gunicorn as `python -m gunicorn`, which a moved package folder still runs, and
+with `--no-control-socket`: gunicorn 25.1 and later otherwise try to make a socket in `ripraptor`'s home folder,
+which the site may not write, and log "Control server error: Permission denied" at every start. The
 site refuses to start with debug off and the secret key from `.env.example`, or one under 50 characters, and the
 update replaces such a key with a long random one (staff then sign in again).
 

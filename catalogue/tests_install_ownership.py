@@ -119,6 +119,15 @@ class RootRunsNothingTheSiteCanChangeTests(SimpleTestCase):
                 self.assertIn("\nReadWritePaths=-/var/lib/ripraptor -/srv/ripraptor/media -/tmp -/var/tmp\n", unit)
                 self.assertIn("\nUser=ripraptor\n", unit)
 
+    def test_the_site_makes_no_control_socket(self):
+        # gunicorn 25.1 and later make a control socket in the account's home folder unless told not to. The site may
+        # not write there (ProtectSystem=strict), so each start logged an error; the flag needs 25.1 at least.
+        unit = (DEPLOY / "ripraptor.service").read_text()
+        [start] = [line for line in unit.splitlines() if line.startswith("ExecStart=")]
+        self.assertIn(" --no-control-socket", start)
+        requirements = (Path(settings.BASE_DIR) / "requirements.txt").read_text().splitlines()
+        self.assertIn("gunicorn>=25.1", requirements)
+
     def test_it_still_parses(self):
         for name in ("install.sh", "setup.sh", "why_down.sh"):
             subprocess.run(["bash", "-n", str(DEPLOY / name)], check=True)

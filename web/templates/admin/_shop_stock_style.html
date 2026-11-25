@@ -1,0 +1,36 @@
+<style>
+  /* Shop stock (web/shop_stock.py): a table on a wide screen, a card of lines per row on a phone. */
+  .shop-stock { --stock-good: #2e7d32; display: grid; gap: 20px; max-width: 72rem; }
+  .shop-stock h2 { margin: 0 0 4px; }
+  .shop-stock p { margin: 0 0 8px; }
+  .shop-stock .note { color: var(--body-quiet-color); }
+  .shop-stock .big { font-size: 1.6rem; font-weight: 600; margin: 0; }
+  .shop-stock .warn { color: var(--error-fg); font-weight: 600; }
+  .shop-stock table { width: 100%; }
+  .shop-stock td, .shop-stock th { vertical-align: top; }
+  .shop-stock .money { white-space: nowrap; }
+  .shop-stock .find { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .shop-stock .find input[type="search"] { flex: 1 1 14rem; min-width: 0; }
+  .shop-stock .chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
+  .shop-stock .chips li { list-style: none; margin: 0; padding: 0; }
+  .shop-stock .chips a { display: inline-block; padding: 6px 12px; border: 1px solid var(--hairline-color); border-radius: 999px; }
+  .shop-stock .chips a[aria-current="page"] { background: var(--primary); border-color: var(--primary); color: var(--primary-fg); font-weight: 600; }
+  .shop-stock .state { font-weight: 600; }
+  .shop-stock .state.good { color: var(--stock-good); }
+  .shop-stock .state.ahead { color: var(--link-fg); }
+  .shop-stock .state.off, .shop-stock .state.quiet { color: var(--body-quiet-color); }
+  .shop-stock .lead { display: block; font-size: 0.85em; }
+  .shop-stock .lead.mine { font-weight: 600; }
+  .shop-stock .small { display: block; font-size: 0.85em; color: var(--body-quiet-color); }
+  .shop-stock .pages { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+  @media (max-width: 63.99rem) {
+    .shop-stock table thead { display: none; }
+    .shop-stock table, .shop-stock tbody, .shop-stock tr, .shop-stock td { display: block; width: auto; }
+    .shop-stock tr { padding: 10px 0; border-bottom: 1px solid var(--hairline-color); }
+    .shop-stock td { padding: 3px 0; border: 0; }
+    .shop-stock td.first { font-weight: 600; }
+    .shop-stock td.first .small { font-weight: 400; }
+    .shop-stock td .lead { display: inline; font-size: 1em; }
+    .shop-stock td[data-label]::before { content: attr(data-label); display: inline-block; min-width: 7.5rem; margin-right: 6px; color: var(--body-quiet-color); font-weight: 400; }
+  }
+</style>

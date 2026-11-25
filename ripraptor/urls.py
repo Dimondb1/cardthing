@@ -17,6 +17,7 @@ from web import online as web_online
 from web import people_ask as web_people_ask
 from web import rip_wants as web_rip_wants
 from web import shop_report as web_shop_report
+from web import shop_stock as web_shop_stock
 from web import story_deals as web_story_deals
 from web import visibility as web_visibility
 from web import views as web_views
@@ -45,6 +46,8 @@ urlpatterns = [
     path("admin/quality/", web_quality.quality_page, name="catalogue_quality"),
     path("admin/add-shops/", web_add_shops.add_shops_page, name="add_shops"),
     path("admin/shop-delivery/", web_delivery.delivery_page, name="shop_delivery"),
+    path("admin/shop-stock/", web_shop_stock.shops_page, name="shop_stock"),
+    path("admin/shop-stock/<slug:slug>/", web_shop_stock.shop_page, name="shop_stock_shop"),
     path("admin/amazon/", web_amazon.amazon_page, name="amazon_keys"),
     path("admin/email/", web_email.email_page, name="email_sending"),
     path("admin/visibility/", web_visibility.visibility_page, name="visibility"),

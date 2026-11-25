@@ -1,0 +1,34 @@
+{% extends "admin/base_site.html" %}
+{# Shop stock (web/shop_stock.py): every shop with how many products it lists and has in stock; each opens its own stock page. #}
+{% block title %}Shop stock | {{ site_title }}{% endblock %}
+{% block extrahead %}{{ block.super }}<meta name="robots" content="noindex, nofollow">{% endblock %}
+{% block extrastyle %}{{ block.super }}{% include "admin/_shop_stock_style.html" %}{% endblock %}
+{% block breadcrumbs %}<div class="breadcrumbs"><a href="{% url 'admin:index' %}">Home</a> &rsaquo; Shop stock</div>{% endblock %}
+{% block content %}
+<div class="shop-stock">
+  <section>
+    <p>Pick a shop to see every product it lists, its price and whether it is in stock. Shops say whether a product can be bought, not how many they hold, so stock is in stock, pre-order or out of stock.</p>
+    <form method="get" class="find" role="search">
+      <label for="find-shop">Find a shop</label>
+      <input type="search" id="find-shop" name="q" value="{{ search }}" placeholder="Shop name or address" autocomplete="off">
+      <input type="submit" value="Find shop">
+      {% if search %}<a href="{% url 'shop_stock' %}">Show every shop</a>{% endif %}
+    </form>
+  </section>
+
+  {% if shops %}
+  <table>
+    <thead><tr><th>Shop</th><th>Listed</th><th>In stock</th><th>Pre-order</th><th>Reading</th></tr></thead>
+    <tbody>{% for shop in shops %}<tr>
+      <td class="first"><a href="{% url 'shop_stock_shop' shop.slug %}">{{ shop.name }}</a></td>
+      <td data-label="Listed:">{{ shop.listed }}</td>
+      <td data-label="In stock:">{{ shop.in_stock }}</td>
+      <td data-label="Pre-order:">{{ shop.preorder }}</td>
+      <td data-label="Reading:" class="note">{% if not shop.is_active %}Switched off{% elif shop.reading_paused %}Paused{% elif shop.last_ok_at %}Last read {{ shop.last_ok_at|timesince }} ago{% else %}Not read yet{% endif %}</td>
+    </tr>{% endfor %}</tbody>
+  </table>
+  {% else %}
+  <p class="note">{% if search %}No shop matches “{{ search }}”.{% else %}No shops yet.{% endif %}</p>
+  {% endif %}
+</div>
+{% endblock %}

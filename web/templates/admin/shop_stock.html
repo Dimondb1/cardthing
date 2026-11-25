@@ -1,0 +1,53 @@
+{% extends "admin/base_site.html" %}
+{# One shop's stock (web/shop_stock.py): its counts, filters, and every product it lists with price, stock and last checked. #}
+{% block title %}{{ shop.name }} stock | {{ site_title }}{% endblock %}
+{% block extrahead %}{{ block.super }}<meta name="robots" content="noindex, nofollow">{% endblock %}
+{% block extrastyle %}{{ block.super }}{% include "admin/_shop_stock_style.html" %}{% endblock %}
+{% block breadcrumbs %}<div class="breadcrumbs"><a href="{% url 'admin:index' %}">Home</a> &rsaquo; <a href="{% url 'shop_stock' %}">Shop stock</a> &rsaquo; {{ shop.name }}</div>{% endblock %}
+{% block content %}
+<div class="shop-stock">
+  <section>
+    <p class="big">{{ counts.in_stock }} in stock of {{ counts.listed }} listed</p>
+    <p>{{ counts.preorder }} on pre-order, {{ counts.out_of_stock }} out of stock{% if counts.lottery %}, {{ counts.lottery }} sold by draw{% endif %}.{% if counts.stale %} {{ counts.stale }} not checked in the last {{ stale_hours }} hours: the site does not count those prices until they are read again.{% endif %}</p>
+    {% if not shop.is_active %}<p class="warn">This shop is switched off, so none of these show on the site.</p>{% elif shop.reading_paused %}<p class="warn">Reading is paused, so these stay as they were last read.</p>{% endif %}
+    <p class="note">Shops say whether a product can be bought, not how many they hold.{% if shop.last_ok_at %} Last read {{ shop.last_ok_at|timesince }} ago.{% endif %} <a href="{% url 'crawl' %}#shop-{{ shop.slug }}">Crawl health</a> &middot; <a href="{% url 'admin:catalogue_retailer_change' shop.pk %}">Shop's settings</a>{% if shop.website %} &middot; <a href="{{ shop.website }}" target="_blank" rel="noopener noreferrer">Shop's website</a>{% endif %}</p>
+  </section>
+
+  <nav aria-label="Show">
+    <ul class="chips">{% for item in filters %}
+      <li><a href="?show={{ item.code }}{% if search %}&amp;q={{ search|urlencode }}{% endif %}"{% if item.on %} aria-current="page"{% endif %}>{{ item.label }} ({{ item.count }})</a></li>{% endfor %}
+    </ul>
+  </nav>
+
+  <form method="get" class="find" role="search">
+    <input type="hidden" name="show" value="{{ code }}">
+    <label for="find-product">Find a product</label>
+    <input type="search" id="find-product" name="q" value="{{ search }}" placeholder="Product name" autocomplete="off">
+    <input type="submit" value="Find product">
+    {% if search %}<a href="?show={{ code }}">Clear</a>{% endif %}
+  </form>
+
+  {% if rows %}
+  <table>
+    <thead><tr><th>Product</th><th>Stock</th><th>Price</th><th>Last checked</th><th>Cheapest</th></tr></thead>
+    <tbody>{% for row in rows %}{% with listing=row.listing %}<tr>
+      <td class="first">{% if listing.product.is_active %}<a href="{{ listing.product.get_absolute_url }}" target="_blank" rel="noopener">{{ listing.product.name }}</a>{% else %}{{ listing.product.name }}{% endif %}
+        <span class="small">{% if listing.title and listing.title != listing.product.name %}Shop calls it: {{ listing.title }} &middot; {% endif %}<a href="{{ listing.url }}" target="_blank" rel="noopener noreferrer">Shop's page</a> &middot; <a href="{% url 'admin:catalogue_listing_change' listing.pk %}">Edit</a></span></td>
+      <td data-label="Stock:"><span class="state {{ row.tone }}">{{ row.state }}</span>{% if row.kept %}<span class="small">{{ row.kept }}</span>{% endif %}</td>
+      <td data-label="Price:" class="money"><b>£{{ listing.shown_price }}</b><span class="small">£{{ listing.price }} + {{ row.delivery }}</span></td>
+      <td data-label="Last checked:">{{ listing.last_checked|timesince }} ago{% if listing.changed_at %}<span class="small">Changed {{ listing.changed_at|timesince }} ago</span>{% endif %}</td>
+      <td data-label="Cheapest:">{% if row.cheapest %}<span class="lead{% if row.mine %} mine{% endif %}">{{ row.cheapest }}</span>{% endif %}</td>
+    </tr>{% endwith %}{% endfor %}</tbody>
+  </table>
+  {% if page.has_other_pages %}
+  <nav class="pages" aria-label="Pages">
+    {% if page.has_previous %}<a href="?show={{ code }}{% if search %}&amp;q={{ search|urlencode }}{% endif %}&amp;page={{ page.previous_page_number }}">Previous page</a>{% endif %}
+    <span>Page {{ page.number }} of {{ page.paginator.num_pages }}</span>
+    {% if page.has_next %}<a href="?show={{ code }}{% if search %}&amp;q={{ search|urlencode }}{% endif %}&amp;page={{ page.next_page_number }}">Next page</a>{% endif %}
+  </nav>
+  {% endif %}
+  {% else %}
+  <p class="note">{% if search %}Nothing under {{ label }} matches “{{ search }}”.{% else %}Nothing under {{ label }}.{% endif %}</p>
+  {% endif %}
+</div>
+{% endblock %}

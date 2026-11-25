@@ -69,20 +69,29 @@ def empty_counts():
             "search": 0, "sales": 0, "commission": Decimal("0"), "pending": Decimal("0"), "order_value": Decimal("0")}
 
 
-def lead_now():
-    """{product id: the retailer id its page leads with now}, in the product page's order (views.buy_order): in stock
-    first, then the cheapest delivered. One query over every buyable listing, whatever the shop."""
-    rows = (Listing.objects.buyable().filter(product__is_active=True).order_by()
-            .values_list("product_id", "retailer_id", "availability", "delivery_known", "delivered_price",
-                         "retailer__name"))
+def lead_rows(products=None):
+    """{product id: (retailer id, retailer name, price shown, whether delivery is known)} for the shop each product's
+    page leads with now, in the product page's order (views.buy_order): in stock first, then the cheapest delivered.
+    The price shown is the delivered price, or the item price when the delivery is unknown. One query over every
+    buyable listing, whatever the shop; ``products`` narrows it to those product ids."""
+    rows = Listing.objects.buyable().filter(product__is_active=True).order_by()
+    if products is not None:
+        rows = rows.filter(product_id__in=list(products))
     from .views import IN_STOCK_FIRST
 
     best = {}
-    for product, shop, availability, known, delivered, name in rows:
+    for product, shop, availability, known, delivered, price, name in rows.values_list(
+            "product_id", "retailer_id", "availability", "delivery_known", "delivered_price", "price",
+            "retailer__name"):
         key = (IN_STOCK_FIRST.get(availability, 2), not known, delivered, name)
         if product not in best or key < best[product][0]:
-            best[product] = (key, shop)
-    return {product: shop for product, (_key, shop) in best.items()}
+            best[product] = (key, (shop, name, delivered if known else price, known))
+    return {product: row for product, (_key, row) in best.items()}
+
+
+def lead_now():
+    """{product id: the retailer id its page leads with now} (lead_rows)."""
+    return {product: row[0] for product, row in lead_rows().items()}
 
 
 def build(days=DEFAULT_DAYS, now=None):
@@ -128,11 +137,11 @@ def build(days=DEFAULT_DAYS, now=None):
             pairs[(shop, product)]["views"] += seen
 
     # Views of a product page that led with the shop, its Buy now, counted since 11 Nov 2026.
-    lead_rows = (DailyPageView.objects.filter(kind=DailyPageView.Kind.LEAD, date__gte=first, date__lte=today)
+    lead_days = (DailyPageView.objects.filter(kind=DailyPageView.Kind.LEAD, date__gte=first, date__lte=today)
                  .order_by().values_list("date", "key", "hits"))
     unknown_slugs = set()
     lead_counts = []
-    for day, key, hits in lead_rows:
+    for day, key, hits in lead_days:
         shop_text, _, slug = key.partition(":")
         if not shop_text.isdigit() or int(shop_text) not in shops:
             continue

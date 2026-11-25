@@ -5,6 +5,7 @@ from django import forms
 from django.contrib import admin, messages
 from django.db import models
 from django.db.models import Count
+from django.urls import reverse
 from django.utils import timezone
 from django.utils.html import format_html
 
@@ -276,13 +277,13 @@ class RetailerAdmin(admin.ModelAdmin):
     # How often each shop is read can be changed straight from the list. The rest of the reading record is
     # written by the reads themselves.
     list_editable = ("read_every_minutes",)
-    readonly_fields = ("auto_collection_at", "next_read_at", "last_read_seconds", "last_ok_at", "last_error", "error_streak",
-                       "backoff_until", "reading_paused", "collections_polled_at", "collections_ok")
+    readonly_fields = ("stock_page", "auto_collection_at", "next_read_at", "last_read_seconds", "last_ok_at", "last_error",
+                       "error_streak", "backoff_until", "reading_paused", "collections_polled_at", "collections_ok")
     list_filter = ("is_active", "source_type")
     search_fields = ("name", "website")
     prepopulated_fields = {"slug": ("name",)}
     fieldsets = (
-        (None, {"fields": ("name", "slug", "website", "is_active")}),
+        (None, {"fields": ("name", "slug", "website", "is_active", "stock_page")}),
         ("Delivery", {"fields": ("delivery_cost", "delivery_cost_up_to", "free_delivery_over", "delivery_note")}),
         ("Prices", {"fields": ("source_type", "source_url", "collection", "auto_collection", "auto_collection_at",
                                "default_game", "extra_products", "session_url"),
@@ -300,6 +301,14 @@ class RetailerAdmin(admin.ModelAdmin):
                                           "shopping list and the Shops page, with a Copy button. The prices "
                                           "compared stay without it: the shop decides who it applies to."}),
     )
+
+    @admin.display(description="Stock")
+    def stock_page(self, obj):
+        """A link to the shop's own Shop stock page (web/shop_stock.py): every product it lists and its stock."""
+        if obj is None or not obj.pk:
+            return "Shown once the shop is saved."
+        return format_html('<a href="{}">See every product it lists and whether it is in stock</a>',
+                           reverse("shop_stock_shop", args=[obj.slug]))
 
     @admin.display(description="Affiliate link", boolean=True)
     def has_affiliate_link(self, obj):

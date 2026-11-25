@@ -570,6 +570,35 @@ emptied code from the list comes back at the next update. The owner,
 one fee per order) with RIPRAPTOR5, 5% off a first order: "include
 compatability for discount codes".
 
+## Shop stock
+
+**Shop stock** (Admin home, See its stock on each Crawl health row, or the
+Stock line on a shop's own settings page; `web/shop_stock.py`,
+`/admin/shop-stock/`) lists every shop with how many products it lists, has
+in stock and has on pre-order, switched-off shops last, with a box to find
+one by name or address. Each shop's page (`/admin/shop-stock/<shop>/`) leads
+with "N in stock of M listed", then filters for All listed, In stock,
+Pre-order, Out of stock, and, when there are any, Sold by draw, Not checked
+lately and Hidden. Every row has the product (linked to its page), the
+shop's own name for it, its link and the listing's Admin page, its stock,
+the delivered price with the item price and delivery under it, when it was
+last checked and last changed, and which shop is cheapest for it now ("This
+shop", or the price and shop that is). In stock comes first, then
+pre-order, out of stock, by draw, and not checked lately; 100 rows a page,
+with a box to find a product by our name or the shop's.
+
+Shops say whether a product can be bought, not how many they hold, so stock
+is a state, not a number. A listing not checked within its window
+(`RIPRAPTOR_STALE_AFTER_HOURS`, `RIPRAPTOR_EBAY_STALE_AFTER_HOURS` for eBay)
+shows the stock it was last read with under Not checked lately, and is not
+counted as in stock; a listing switched off, or whose product is hidden or
+merged away, shows only under Hidden. A price kept out of the comparison or
+doubted says so. The queries are fixed whatever the shop's size: the counts,
+the page and the cheapest shops of its rows (`shop_report.lead_rows`). Staff
+only, never for Guide editors. The owner, 25 Nov 2026: "Is there a place in
+admin to view a shops inventory and current stock levels? If not can you
+create it?".
+
 ## Delivery charges
 
 **Shop delivery** (Admin home, or Set their delivery on the dashboard's Shops
@@ -6174,7 +6203,7 @@ categorisation") is laid out in three parts:
   online, Shop performance, What people ask, What Rip couldn't find, Search visibility,
   Download a report. **Catalogue**: Things to check, Catalogue quality,
   Merge two products, Products, Sets, Your data in Excel (owner only).
-  **Shops**: Crawl health, Shops, Add shops, Shop delivery, Shops asking to
+  **Shops**: Crawl health, Shops, Shop stock, Add shops, Shop delivery, Shops asking to
   be listed, Shop outreach, eBay health, Amazon. **Site**: Site look, Drop
   spotlight, Partners, Seasonal themes, Story deals, Site text, Refer a friend (while it
   runs). **Settings**: Claude, Email sending, Sending shop emails, Visitor

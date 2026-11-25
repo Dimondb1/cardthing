@@ -9,5 +9,6 @@
     {% else %}
     <form method="post">{% csrf_token %}<input type="hidden" name="action" value="pause"><input type="hidden" name="shop" value="{{ shop.pk }}"><input type="submit" value="Pause"></form>
     {% endif %}
+    <a href="{% url 'shop_stock_shop' shop.slug %}">See its stock</a>
   </div>
 </li>{% endwith %}

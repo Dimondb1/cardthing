@@ -28,11 +28,13 @@ class PageCacheHostTests(PageTestCase):
         self.assertEqual(odd.status_code, 200)
         self.assertNotIn(pagecache.HEADER, odd)
         later = self.get("ripraptor.com")
-        self.assertNotIn(":1", later.content.decode())
+        # The odd address itself, not any ":1": a clock time on the page ("checked 22:14") holds one for ten minutes
+        # of every hour, which failed this test whenever it ran in them.
+        self.assertNotIn("ripraptor.com:1", later.content.decode())
         self.assertIn('href="https://ripraptor.com/', later.content.decode())
         # Asked again at the site's address, the copy kept for it is served.
         self.assertEqual(self.get("ripraptor.com")[pagecache.HEADER], "cached")
-        self.assertNotIn(":1", self.get("ripraptor.com").content.decode())
+        self.assertNotIn("ripraptor.com:1", self.get("ripraptor.com").content.decode())
 
     def test_each_of_the_sites_hosts_has_its_own_copy(self):
         self.get("www.ripraptor.com")

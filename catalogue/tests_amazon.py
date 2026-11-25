@@ -294,7 +294,8 @@ class ImportTests(TestCase):
             run_import(self.retailer)
         called.assert_called()
 
-    def test_a_read_amazon_refuses_for_want_of_sales_waits_six_hours_and_is_not_a_failure(self):
+    def test_a_read_amazon_refuses_for_want_of_sales_waits_three_hours_and_is_not_a_failure(self):
+        """The owner, 25 Nov 2026: "can change to 3 hours checks please". It was six."""
         from . import crawl
 
         Retailer.objects.filter(pk=self.retailer.pk).update(error_streak=2, failing_since=timezone.now())
@@ -308,13 +309,45 @@ class ImportTests(TestCase):
         self.retailer.refresh_from_db()
         self.assertTrue(self.retailer.awaiting_access)
         self.assertEqual((self.retailer.error_streak, self.retailer.failing_since), (0, None))
-        self.assertGreater(self.retailer.backoff_until, timezone.now() + datetime.timedelta(hours=5, minutes=59))
+        self.assertGreater(self.retailer.backoff_until, timezone.now() + datetime.timedelta(hours=2, minutes=59))
+        self.assertLess(self.retailer.backoff_until, timezone.now() + datetime.timedelta(hours=3, minutes=1))
         self.assertFalse(Retailer.due(timezone.now()).filter(pk=self.retailer.pk).exists())
         light, why = crawl.light_for(self.retailer, timezone.now(), False)
         self.assertEqual(light, crawl.WAITING)
         # A read that works ends the wait.
         self.retailer.read_ok(timezone.now(), 30)
         self.assertFalse(self.retailer.awaiting_access)
+
+    @override_settings(RIPRAPTOR_INBOX_NOTIFY_EMAIL="owner@example.com", RIPRAPTOR_SITE_URL="https://ripraptor.com")
+    def test_the_owner_is_emailed_once_when_amazon_starts_sharing_its_prices(self):
+        """The owner, 25 Nov 2026: "Can I be emailed when the amazon api finally accepts"."""
+        from . import crawl, mail, notify
+
+        sent = []
+        refusal = "Amazon API 403 AccessDeniedException AssociateNotEligible: Your account does not currently meet."
+        answer = {"searchResult": {"items": [api_item("B0ETB", "Prismatic Evolutions Elite Trainer Box")]}}
+        with mock.patch.object(mail, "enabled", return_value=True), \
+                mock.patch.object(mail, "send", lambda to, subject, text, html, **kw: sent.append((to, subject, text))), \
+                mock.patch.object(amazon, "PAUSE", 0):
+            # Still refused: no email.
+            with mock.patch.object(amazon, "call", side_effect=amazon.AmazonError(refusal)):
+                began = timezone.now()
+                crawl.finish_read(self.retailer, run_import(self.retailer), began, 1)
+            self.assertTrue(self.retailer.awaiting_access)
+            self.assertEqual(sent, [])
+            # Amazon says yes: one email to the owner, with a link to the Amazon page.
+            with mock.patch.object(amazon, "call", return_value=answer):
+                began = timezone.now()
+                self.assertTrue(crawl.finish_read(self.retailer, run_import(self.retailer), began, 1))
+            self.assertEqual([(to, subject) for to, subject, _text in sent],
+                             [("owner@example.com", notify.AMAZON_OPEN)])
+            self.assertIn("Amazon prices show on the product pages from now on", sent[0][2])
+            self.assertIn("https://ripraptor.com/admin/amazon/", sent[0][2])
+            # The next good read sends nothing: the wait was already over.
+            with mock.patch.object(amazon, "call", return_value=answer):
+                began = timezone.now()
+                crawl.finish_read(self.retailer, run_import(self.retailer), began, 1)
+            self.assertEqual(len(sent), 1)
 
     def test_missing_keys_are_reported_not_raised(self):
         with override_settings(**NO_KEYS):
@@ -516,12 +549,13 @@ class KeysPageTests(TestCase):
             response = self.client.post(self.url, {"credential_id": "x", "secret": "y", "tag": "ripraptor-21"},
                                         follow=True)
         self.assertContains(response, "The keys work, but Amazon will not share its prices with this account yet: it "
-                                      "needs 10 sales in the last 30 days. The site asks Amazon again every 6 hours")
+                                      "needs 10 sales in the last 30 days. The site asks Amazon again every 3 hours")
         shop = Retailer.objects.get(source_type=Retailer.Source.AMAZON)
         self.assertTrue(shop.is_active)
         self.assertTrue(shop.awaiting_access)
         self.assertEqual((shop.error_streak, shop.failing_since), (0, None))
-        self.assertGreater(shop.backoff_until, timezone.now() + datetime.timedelta(hours=5))
+        self.assertGreater(shop.backoff_until, timezone.now() + datetime.timedelta(hours=2, minutes=59))
+        self.assertLess(shop.backoff_until, timezone.now() + datetime.timedelta(hours=3, minutes=1))
         self.assertContains(response, '<p id="waiting"><strong>Waiting for Amazon.</strong> The keys work')
         self.assertContains(response, "Your Amazon links earn as before.")
         # Amazon says yes: the wait is over and it is read at the next turn.

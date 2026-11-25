@@ -655,8 +655,9 @@ class Retailer(models.Model):
     # A shop closed behind its password page is looked at again a day later (closed_for_now).
     # Amazon refuses its price data to an Associates account below its sales bar, "AssociateNotEligible" (10 qualified
     # sales in the last 30 days, Amazon's Creators API documents say): asked again this much later, and not counted as
-    # failing (waiting_for_access). The owner, 25 Nov 2026, of the red line it made: "Amazon still failing".
-    ACCESS_WAIT = timedelta(hours=6)
+    # failing (waiting_for_access). The owner, 25 Nov 2026, of the red line it made: "Amazon still failing"; then "can
+    # change to 3 hours checks please" (it was 6). The owner is emailed when the wait ends (notify.amazon_open).
+    ACCESS_WAIT = timedelta(hours=3)
     NOT_ELIGIBLE = "AssociateNotEligible"
     CLOSED_WAIT = timedelta(hours=24)
 

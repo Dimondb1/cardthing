@@ -128,6 +128,23 @@ def owner(subject, title, click_path, detail="", now=None, once_a_day=True, link
     return True
 
 
+AMAZON_OPEN = "Amazon now shares its prices with RipRaptor"
+
+
+def amazon_open(now=None):
+    """Email the owner that Amazon has started sharing its prices with the account, after a wait while it would not
+    (Retailer.awaiting_access). The owner, 25 Nov 2026: "Can I be emailed when the amazon api finally accepts". At
+    most once a day, so access that stops and starts again within a day sends one email. Returns whether it was
+    sent."""
+    if not can_email() or not claim(AMAZON_OPEN, now or timezone.now()):
+        return False
+    return email(AMAZON_OPEN, "Amazon has started sharing its prices with RipRaptor's account. Amazon prices show on "
+                              "the product pages from now on, checked every hour.\n\nIf sales drop below 10 in 30 "
+                              "days, Amazon stops sharing them again. The site then waits, asks Amazon every few "
+                              "hours, and emails you again when it starts.",
+                 link_for("/admin/amazon/"), "Open the Amazon page")
+
+
 def crawl_problem(subject, click_path, detail="", now=None, opener=None):
     """A crawl problem, once a day at most, unless RIPRAPTOR_CRAWL_PUSHES is off."""
     if not settings.RIPRAPTOR_CRAWL_PUSHES:

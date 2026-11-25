@@ -736,13 +736,16 @@ on?"). Amazon shares its prices through the Creators API only with an Associates
 account that has 10 qualified sales in the last 30 days (Amazon's Creators API
 error codes page); below that every call is refused with `AssociateNotEligible`,
 though the keys work. That answer is a wait, not a failure
-(`Retailer.waiting_for_access`, `awaiting_access`): Amazon is asked again every 6
-hours (`Retailer.ACCESS_WAIT`), its failed tries are not counted, so it never
+(`Retailer.waiting_for_access`, `awaiting_access`): Amazon is asked again every 3
+hours (`Retailer.ACCESS_WAIT`; 6 until the owner asked for 3), its failed tries are not counted, so it never
 turns red on Crawl health or reaches the owner's phone, and Crawl health shows it
 grey under **Waiting**, not counted as behind. The Amazon page says so in plain
 words, and **Save and test** with working keys switches Amazon on and starts the
 wait. A read that works ends it, and Amazon prices show by themselves; if sales
-drop below the bar again, the wait comes back the same way.
+drop below the bar again, the wait comes back the same way. When a wait ends the
+owner is emailed at `RIPRAPTOR_INBOX_NOTIFY_EMAIL` ("Amazon now shares its prices
+with RipRaptor", `notify.amazon_open`, at most once a day; the owner, 25 Nov 2026:
+"Can I be emailed when the amazon api finally accepts").
 
 The Amazon page ends with a **Log to copy** (`amazon_admin.log_text`; the owner,
 24 Nov 2026: "Need to ensure Amazon health area has a log"): whether the keys are

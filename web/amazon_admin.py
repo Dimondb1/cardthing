@@ -21,7 +21,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 
-from catalogue import amazon, worklog
+from catalogue import amazon, notify, worklog
 from catalogue.importers import AMAZON_EVERY_HOURS
 from catalogue.models import ImportRun, Listing, Product, Retailer
 from guides.access import not_for_editors
@@ -116,6 +116,7 @@ def amazon_page(request):
             # A wait for Amazon to share its prices is over: read at the next turn, not hours later.
             if shop.awaiting_access:
                 Retailer.objects.filter(pk=shop.pk).update(last_error="", backoff_until=None, next_read_at=timezone.now())
+                notify.amazon_open()
             messages.success(request, f"Saved. Amazon accepted the keys and answered a test search with {said} "
                                       "items. Amazon is read at the next hourly read, then every hour.")
         elif Retailer.NOT_ELIGIBLE in str(said):
@@ -141,6 +142,7 @@ def amazon_page(request):
         "from_settings": from_settings,
         "show_hours": settings.RIPRAPTOR_AMAZON_SHOW_HOURS,
         "access_hours": Retailer.ACCESS_WAIT.seconds // 3600,
+        "will_email": notify.can_email(),
         **found,
     })
     response["Cache-Control"] = "private, no-store"

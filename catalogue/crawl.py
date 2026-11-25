@@ -159,10 +159,17 @@ def finish_read(item, run, began, seconds, since=None, now=None):
         else:
             item.read_failed(now, http_status(run.error), run.error)
         return False
+    # Amazon's wait for enough sales is over (Retailer.awaiting_access): the owner is emailed. Only for a read that
+    # asked Amazon just now, never for an earlier run handed back.
+    opened = item.awaiting_access and run.started_at >= began
     if run.started_at < began:
         item.read_ok(now, 0, ok_at=run.finished_at, since=since)
     else:
         item.read_ok(now, seconds, since=since)
+    if opened:
+        from . import notify
+
+        notify.amazon_open(now)
     return True
 
 

@@ -64,6 +64,32 @@ last checked, buy link. Everything else supports that.
 - The swipe page (`/swipe/`) must feel instant: cards are prefetched, only
   transforms change during a drag, no layout work on pointermove.
 
+## Layout
+
+These are strict. `web/design.py` holds them as data and
+`web/tests_design_rules.py` fails the build when a page breaks one, so they
+cannot be broken quietly. The owner, 25 Nov 2026, of a page built with its own
+design: "why is it different than everything else".
+
+- Every page has a kind, set in `web/design.py`. A page that lists products
+  to choose from is a list page. Every other page is a standard page.
+- A list page has no design of its own. It wears the look the site is in
+  (`web/look.py`) and is built from the shared parts: in the compact look the
+  status line, the heading with one short line under it, the type tiles, the
+  switches, each product as a compact row, and the search box and games at
+  the foot of a phone. Copy how a game's list page does it.
+- A product is only shown through a shared part listed in `web/design.py`
+  (a row, a card, a table row and so on). Need something a part does not
+  show? Add one line or one modifier to the part, for every page to share.
+- Ask the owner before adding a new part, a new page kind, a new breakpoint
+  or a new kind of heading. Then add it to `web/design.py` in the same change.
+- One main heading a page. Headings, sections and notes use the classes the
+  look already has; a page does not size its own text.
+- No style attributes or style blocks in templates, and no class named after
+  one page for something a shared part already does.
+- The numbers in `web/design.py` (bare lengths in `site.css`, templates with
+  a style of their own) only go down. Never raise one to make a test pass.
+
 ## Copy
 
 - Short, direct British English. Every sentence has a job.
@@ -77,8 +103,10 @@ last checked, buy link. Everything else supports that.
 
 ## Definition of done
 
-1. Tests pass and pyflakes is clean.
-2. Screenshots checked at three widths.
+1. Tests pass and pyflakes is clean. That includes the layout rules
+   (`web/tests_design_rules.py`).
+2. Screenshots checked at three widths, in the look the live site is in, and
+   beside a page of the same kind: it should look like its sibling.
 3. Every new public sentence is in the registry.
 4. README updated if setup, settings or commands changed.
 5. Committed and pushed to the working branch. Pull requests only when asked.

@@ -4214,6 +4214,38 @@ sends a confirmation again: only its link turns restocks on. The reminder
 is deleted when its restock days are up. The wording is in Site wording
 under the home page ("Drop spotlight") and the drop reminder emails.
 
+## Layout rules
+
+The site's layout and design rules are strict and enforced. `CLAUDE.md`
+states them, `web/design.py` holds them as data, and
+`web/tests_design_rules.py` fails when a page breaks one. The owner, 25 Nov
+2026, of the Black Friday page's first design: "why is it different than
+everything else. we need this site to stick to strict layout and design
+rules and should be implemented and enforced".
+
+- **Every page has a kind.** A new address in `web/urls.py` fails the tests
+  until `web/design.py` says it is a list page, a standard page or not a page.
+- **A list page wears the look.** Home, search, a game, a set, a game's kind,
+  Cheapest per card and the Black Friday pages: in the compact look each must
+  have the compact body, the search box and games at the foot, the status
+  line (the home page: its numbers) and compact rows, never cards or a
+  standard page's big heading. In the classic look, none of those.
+- **A standard page keeps the usual shell** in every look. Deals, Drops, UK
+  prices, the watchlist and the shopping list list products but are standard
+  pages for now (`LIST_LATER`): moving one over is the owner's call.
+- **Products only through shared parts.** On every page, in every look, a
+  link to a product's page must sit inside one of the parts in
+  `PRODUCT_PARTS` (a compact row, a card, a table row and so on), or in a
+  sentence. A new way of showing a product fails until it is added there.
+- **One main heading a page.**
+- **The stylesheet holds no values of its own.** Every text size, weight,
+  corner and font is a token (colours already were: `web/tests_dark_mode.py`),
+  `site.css` may hold no more bare lengths and timings than on 25 Nov 2026
+  (`RAW_MOST`, numbers that only go down), and only the listed breakpoints.
+- **Templates style nothing.** No style attributes or blocks beyond the few
+  listed, each a figure only the page knows (a chart bar's height) or a
+  browser feature switched on.
+
 ## Black Friday pages
 
 **Black Friday** (`/black-friday/` and `/black-friday/<game>/`, such as

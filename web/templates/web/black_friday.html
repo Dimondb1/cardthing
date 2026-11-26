@@ -60,7 +60,7 @@
 {% if questions %}
 <section class="hub-faq" aria-labelledby="bf-faq-title">
   <h2 id="bf-faq-title" class="{% if compact %}cx-section__title{% else %}section-title{% endif %} hub-faq__title">{% copy "blackfriday.faq.title" %}</h2>
-  {% for question, answer in questions %}<div class="hub-faq__item"><h3 class="hub-faq__q">{{ question }}</h3><p class="hub-faq__a">{{ answer }}</p></div>{% endfor %}
+  {% for question, answer in questions %}<details class="hub-faq__item" open data-fold><summary class="hub-faq__summary"><h3 class="hub-faq__q">{{ question }}</h3></summary><p class="hub-faq__a">{{ answer }}</p></details>{% endfor %}
   <p class="hub-faq__more">{% if game %}<a href="{% url 'web:black_friday' %}">{% copy "blackfriday.hub_link" year=when.year %}</a><span aria-hidden="true"> · </span><span class="visually-hidden">, </span>{% endif %}<a href="{% url 'web:deals' %}">{% copy "blackfriday.deals_link" %}</a></p>
 </section>
 {% endif %}

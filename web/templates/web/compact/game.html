@@ -32,7 +32,7 @@
 {% if faq %}
 <section class="hub-faq" aria-labelledby="hub-faq-title">
   <h2 id="hub-faq-title" class="cx-section__title hub-faq__title">{% copy "browse.hub.faq.title" game=game.display_short %}</h2>
-  {% for question, answer in faq %}<div class="hub-faq__item"><h3 class="hub-faq__q">{{ question }}</h3><p class="hub-faq__a">{{ answer }}</p></div>{% endfor %}
+  {% for question, answer in faq %}<details class="hub-faq__item" open data-fold><summary class="hub-faq__summary"><h3 class="hub-faq__q">{{ question }}</h3></summary><p class="hub-faq__a">{{ answer }}</p></details>{% endfor %}
   {% if guides_live %}<p class="hub-faq__more"><a href="{% url 'web:guide_compare' %}">{% copy "browse.hub.answer.guide" %}</a></p>{% endif %}
 </section>
 {% endif %}

@@ -1,5 +1,7 @@
 {% extends "web/base.html" %}
 {% load sitecopy ripraptor %}
+{# A page of products: on a wide screen it takes the wider page, as a list does (site.css, Deals on a desktop screen). #}
+{% block page_class %}page--wide{% endblock %}
 {% block content %}
 {# The owner, 15 Nov 2026: "Talk about waffle central ... only the necessary really needed" and, of the headings, "Kill them": the heading is for search engines and screen readers only; one short line says when the prices were checked, which every price must. #}
 <div class="page-head">

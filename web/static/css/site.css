@@ -3579,6 +3579,10 @@ li + li > .checker__option { border-top: var(--border-width) solid var(--color-l
 .hub-faq__title { margin-bottom: var(--space-2); }
 .hub-faq__item { padding: var(--space-3) 0; border-top: var(--border-width) solid var(--color-line); }
 .hub-faq__q { margin: 0 0 var(--space-1); font-size: var(--text-base); line-height: var(--leading-snug); }
+/* Each question is a fold (details), sent open: a phone reads it as a heading over its answer, with no marker, as
+   before; a desktop screen folds them (site.js) and shows the marker that says it opens. */
+.hub-faq__summary { display: block; list-style: none; }
+.hub-faq__summary::-webkit-details-marker { display: none; }
 .hub-faq__a { margin: 0; font-size: var(--text-sm); line-height: var(--leading-body); color: var(--color-ink-muted); }
 .hub-faq__more { margin: 0; padding-top: var(--space-3); border-top: var(--border-width) solid var(--color-line); font-size: var(--text-sm); font-weight: var(--weight-strong); }
 .hub-faq__more a { color: var(--color-brand-text); }
@@ -3727,10 +3731,26 @@ li + li > .checker__option { border-top: var(--border-width) solid var(--color-l
   .compact-look .cx-view:not([hidden]) { display: inline-flex; margin-left: auto; overflow: hidden; border: var(--border-width) solid var(--color-line); border-radius: var(--radius); }
   .cx-view__button { padding: var(--space-2) var(--space-3); border: 0; background: var(--color-paper); font: inherit; font-size: var(--text-sm); font-weight: var(--weight-strong); color: var(--color-ink-muted); cursor: pointer; }
   .cx-view__button[aria-pressed="true"] { background: var(--color-shelf); color: var(--color-ink); }
+  /* The questions fold (site.js), each with the browser's own marker: closed points right, open points down. */
+  .hub-faq__summary { display: list-item; list-style: disclosure-closed inside; cursor: pointer; }
+  .hub-faq__item[open] > .hub-faq__summary { list-style-type: disclosure-open; margin-bottom: var(--space-1); }
+  .hub-faq__summary::marker { color: var(--color-brand-text); }
+  .hub-faq__summary .hub-faq__q { display: inline; margin: 0; }
+  .hub-faq__summary:hover .hub-faq__q { color: var(--color-brand-text); }
 }
 @media (min-width: 64rem) and (prefers-reduced-motion: reduce) { .crow__arrow { transition: none; } .crow__link:hover .crow__arrow { transform: none; } }
+/* Deals on a desktop screen (the owner's brief: "Bring these pages into the same desktop layout"): a page of products,
+   so it takes the wider page as a list does (page--wide), and its own parts follow the space as the cards do. The
+   savings are rounded cards in as many columns as fit; the lowest prices, drops and restocks are slim rows in columns.
+   A phone sees the page as before. */
+@media (min-width: 64rem) {
+  .page--wide .savings { display: grid; grid-template-columns: repeat(auto-fill, minmax(var(--desk-row), 1fr)); gap: var(--space-3); border: 0; border-radius: 0; background: none; overflow: visible; }
+  .page--wide .savings > .saving { border: var(--border-width) solid var(--color-line); border-radius: var(--radius-card); background: var(--color-paper); overflow: hidden; }
+  .page--wide .drops { display: grid; grid-template-columns: repeat(auto-fill, minmax(var(--desk-list), 1fr)); column-gap: var(--space-6); }
+  .page--wide .drops > .drop { border-top: var(--border-width) solid var(--color-line); }
+}
 @media (min-width: 80rem) {
-  .frame > .page:not(.page--compact) { max-width: calc(var(--page-standard) + 2 * var(--gutter-wide)); }
+  .frame > .page:not(.page--compact):not(.page--wide) { max-width: calc(var(--page-standard) + 2 * var(--gutter-wide)); }
   /* On the wider page the deals and the sets take as many columns as fit, as the products do, every deal shown. */
   .cx-strip__row, .cx-sets, .dt-sets .cx-sets { grid-template-columns: repeat(auto-fill, minmax(var(--desk-card), 1fr)); }
   .cx-strip__row > li:nth-child(n + 7), .cx-strip__row > li:nth-child(n + 9) { display: block; }
@@ -3744,7 +3764,7 @@ li + li > .checker__option { border-top: var(--border-width) solid var(--color-l
 @media (min-width: 80rem) {
   html.rip-side .frame--rip { display: grid; grid-template-columns: minmax(0, 1fr) var(--rip-side); align-items: start; gap: 0 var(--space-6); box-sizing: border-box; max-width: calc(var(--page-width) + 2 * var(--gutter-wide)); margin-inline: auto; padding-inline: var(--gutter-wide); }
   html.rip-side .frame--rip > .page { min-width: 0; max-width: none; margin: 0; padding-inline: 0; }
-  html.rip-side .frame--rip > .page:not(.page--compact) { max-width: var(--page-standard); margin-inline: auto; }
+  html.rip-side .frame--rip > .page:not(.page--compact):not(.page--wide) { max-width: var(--page-standard); margin-inline: auto; }
   html.rip-side .ask-sheet { position: sticky; top: var(--space-4); inset: auto; z-index: 1; margin-top: var(--space-4); padding: 0; overflow: visible; }
   html.rip-side .ask-sheet__backdrop { display: none; }
   html.rip-side .ask-sheet__panel { max-width: none; max-height: calc(100vh - 2 * var(--space-4)); margin: 0; overflow-y: auto; overscroll-behavior: contain; box-shadow: none; animation: none; }

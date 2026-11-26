@@ -38,7 +38,7 @@ CRAWLERS = {
 VERIFIED = ("Googlebot", "Bingbot")
 GUIDE = "/guides/compare-sealed-tcg-prices-uk/"
 LD = re.compile(r'<script type="application/ld\+json"[^>]*>(.*?)</script>', re.S)
-FAQ = re.compile(r'<h3 class="hub-faq__q">(.*?)</h3><p class="hub-faq__a">(.*?)</p>', re.S)
+FAQ = re.compile(r'<h3 class="hub-faq__q">(.*?)</h3>(?:</summary>)?<p class="hub-faq__a">(.*?)</p>', re.S)
 STOCK = re.compile(r"([\d,]+) sealed .*?products? in stock at ([\d,]+) UK shops?")
 
 

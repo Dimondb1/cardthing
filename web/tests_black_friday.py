@@ -5,6 +5,7 @@ inflated discounts."""
 import json
 import re
 from datetime import date, timedelta
+from pathlib import Path
 from decimal import Decimal
 from unittest import mock
 
@@ -469,3 +470,33 @@ class LookTests(PageCase):
         self.assertNotIn(".bf__", css)
         template = (Path(__file__).resolve().parent / "templates/web/black_friday.html").read_text()
         self.assertEqual(re.findall(r'class="bf[-_ "]', template), [])
+
+
+class DesktopTests(PageCase):
+    """On a desktop screen (the owner's brief of 26 Nov 2026): the same steps as a game's list, numbered for the steps it
+    has, and the questions as folds, sent open so a phone, a search engine and a page without script read every answer."""
+
+    wear = LookTests.wear
+
+    def test_the_types_are_the_second_step_with_no_sets_above_them(self):
+        self.wear(compact=True)
+        html = self.html("/black-friday/")
+        self.assertIn("1. Choose a game", html)
+        self.assertIn("2. Choose a product type", html)
+        self.assertNotIn("Pick a set or collection", html)
+        self.assertNotIn("3. Choose a product type", html)
+
+    def test_the_questions_fold_and_are_sent_open(self):
+        for compact in (True, False):
+            self.wear(compact=compact)
+            html = self.html("/black-friday/")
+            faq = html[html.index('<section class="hub-faq"'):]
+            faq = faq[:faq.index("</section>")]
+            with self.subTest(compact=compact):
+                self.assertEqual(faq.count('<details class="hub-faq__item" open data-fold>'), 5)
+                self.assertIn('<summary class="hub-faq__summary"><h3 class="hub-faq__q">When is Cyber Monday 2026?</h3>'
+                              '</summary><p class="hub-faq__a">', faq)
+        script = (Path(__file__).resolve().parent / "static/js/site.js").read_text()
+        fold = script[script.index("details[data-fold]") - 300:script.index("details[data-fold]") + 80]
+        self.assertIn('window.matchMedia("(min-width: 64rem)").matches) return;', fold)
+        self.assertIn("item.open = false;", fold)

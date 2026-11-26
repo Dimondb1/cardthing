@@ -121,7 +121,7 @@ class WidthTests(DesktopCase):
         self.assertIn('<div class="frame frame--rip">', html)
         self.assertLess(html.index('<div class="frame frame--rip">'), html.index('<main id="main"'))
         css = (WEB / "static/css/site.css").read_text()
-        self.assertIn(".frame > .page:not(.page--compact) { max-width: calc(var(--page-standard)", css)
+        self.assertIn(".frame > .page:not(.page--compact):not(.page--wide) { max-width: calc(var(--page-standard)", css)
         tokens = (WEB / "static/css/tokens.css").read_text()
         self.assertIn("@media (min-width: 80rem) {\n  :root { --page-width: var(--page-wide); }", tokens)
 
@@ -195,3 +195,27 @@ class AskRipBesideTests(DesktopCase):
         beside = script[script.index("var openBeside"):script.index("var closeBeside")]
         self.assertNotIn("startEarly", beside)
         self.assertIn("window.ripNote({ q: asked, go: data.go })", (WEB / "static/js/ask-reply.js").read_text())
+
+
+class DealsTests(DesktopCase):
+    """Deals on a desktop screen: a page of products, so it takes the wider page as a list does, and its own parts follow
+    the space; a phone sees it as before (every rule sits under 64rem's media query)."""
+
+    def test_deals_takes_the_wider_page_and_its_parts_follow_the_space(self):
+        html = self.html("/deals/")
+        self.assertIn('<main id="main" class="page page--wide">', html)
+        css = (WEB / "static/css/site.css").read_text()
+        self.assertIn(".frame > .page:not(.page--compact):not(.page--wide) { max-width:", css)
+        block = css[css.index("/* Deals on a desktop screen"):]
+        block = block[:block.index("\n}\n") + 2]
+        self.assertIn("@media (min-width: 64rem) {", block)
+        self.assertIn(".page--wide .savings { display: grid; grid-template-columns: repeat(auto-fill, "
+                      "minmax(var(--desk-row), 1fr));", block)
+        self.assertIn(".page--wide .drops { display: grid; grid-template-columns: repeat(auto-fill, "
+                      "minmax(var(--desk-list), 1fr));", block)
+        # Every rule is the desktop screen's: before the media query there is only the note.
+        self.assertNotIn("{", block[:block.index("@media")])
+
+    def test_the_swipe_pages_saved_list_is_left_as_it_was(self):
+        html = self.html("/swipe/")
+        self.assertNotIn("page--wide", html[html.index('<main id="main"'):html.index(">", html.index('<main id="main"'))])

@@ -556,3 +556,11 @@ document.addEventListener("ripraptor:content", (event) => {
     box.hidden = false;
   });
 })();
+
+// Questions that fold on a desktop screen (hub-faq, data-fold; the owner's brief of 26 Nov 2026: "expandable FAQ
+// sections"). The page is sent with every answer open, so a phone, a search engine and a page without this file read
+// them all as before; a desktop screen folds them to their questions, each opened with a click.
+(() => {
+  if (!window.matchMedia || !window.matchMedia("(min-width: 64rem)").matches) return;
+  document.querySelectorAll("details[data-fold]").forEach((item) => { item.open = false; });
+})();

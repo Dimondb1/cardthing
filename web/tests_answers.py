@@ -146,7 +146,7 @@ class GameAnswerTests(AnswersCase):
         html = self.page(self.pokemon.get_absolute_url())
         faq = section(html, '<section class="hub-faq"', "</section>")
         self.assertIn("Pokémon prices: questions and answers", faq)
-        shown = dict(re.findall(r'<h3 class="hub-faq__q">(.*?)</h3><p class="hub-faq__a">(.*?)</p>', faq, re.S))
+        shown = dict(re.findall(r'<h3 class="hub-faq__q">(.*?)</h3></summary><p class="hub-faq__a">(.*?)</p>', faq, re.S))
         shown = {shown_text(question): shown_text(answer) for question, answer in shown.items()}
         self.assertTrue(5 <= len(shown) <= 7, shown.keys())
         when = answers.stamp(self.box_best.last_checked)
@@ -178,7 +178,7 @@ class GameAnswerTests(AnswersCase):
         html = self.page(self.pokemon.get_absolute_url())
         faq = section(html, '<section class="hub-faq"', "</section>")
         shown = [(shown_text(question), shown_text(answer)) for question, answer in
-                 re.findall(r'<h3 class="hub-faq__q">(.*?)</h3><p class="hub-faq__a">(.*?)</p>', faq, re.S)]
+                 re.findall(r'<h3 class="hub-faq__q">(.*?)</h3></summary><p class="hub-faq__a">(.*?)</p>', faq, re.S)]
         (block,) = of_type(html, "FAQPage")
         marked = [(entry["name"], entry["acceptedAnswer"]["text"]) for entry in block["mainEntity"]]
         self.assertEqual(marked, shown)

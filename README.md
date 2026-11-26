@@ -4340,6 +4340,24 @@ unchanged, pixel for pixel.
   background reader already fills (`feed.insights`, `compact.peek`), so
   showing them runs no database query; when a cache is empty the line is left
   out.
+- **Steps on pages with no sets**: where a list has no row of sets (Black
+  Friday, a search across every game), the types are step 2, not 3
+  (`compact.step.type_next`), so the numbers never skip.
+- **Questions that fold**: the questions under a game's list and the Black
+  Friday pages (`hub-faq`) are folds (`<details data-fold>`), sent open. A
+  phone, a search engine and a browser without script read every answer as
+  before; on a desktop screen `site.js` folds them to their questions. The
+  FAQPage structured data is unchanged and still matches them word for word
+  (`web/proof.py`).
+- **Deals on a desktop screen**: a page of products, so it takes the wider page
+  (`page--wide`) and its own parts follow the space: the biggest savings as
+  rounded cards in as many columns as fit (`--desk-row`, 32rem at least), the
+  lowest prices, drops and restocks as slim rows in columns (`--desk-list`).
+  Every section and its order are kept, and a phone sees the page as before.
+  Deals is still a standard page under the layout rules (`LIST_LATER`), as
+  moving it to the compact rows would change it on a phone.
+- **The Black Friday banner** shows only in the season, as before (two weeks
+  before Black Friday to Cyber Monday); there is no permanent banner.
 
 ## Layout rules
 

@@ -973,6 +973,9 @@ ENTRIES = [
           "On a desktop screen, over the row of a game's sets: the second step."),
     Entry("compact.step.type", T, "Desktop steps: over the product types", "3. Choose a product type",
           "On a desktop screen, over the product type tiles: the third step."),
+    Entry("compact.step.type_next", T, "Desktop steps: over the product types, with no sets", "2. Choose a product type",
+          "On a desktop screen, over the product type tiles of a list with no row of sets (Black Friday, search across "
+          "every game): the second step."),
     Entry("compact.setrow.all", B, "Desktop steps: every set", "All sets",
           "First in the row of sets on a desktop screen: back to every set of the game."),
     Entry("compact.view.label", T, "Desktop grid or list: name of the switch", "Show products as",

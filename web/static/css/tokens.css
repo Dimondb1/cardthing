@@ -494,6 +494,8 @@
   --page-standard: 80rem;          /* a page that is not a list keeps this measure inside the wider page */
   --desk-card: 15rem;              /* the least a product card in a desktop grid is wide: the columns follow the space */
   --desk-set-chip: 11rem;          /* a set in a desktop screen's row of sets */
+  --desk-row: 32rem;               /* the least a wide row card is wide in a desktop grid (Deals' savings) */
+  --desk-list: 22rem;              /* the least a column of slim rows is wide on a desktop screen (Deals' lists) */
   --rip-side: 22rem;               /* Ask Rip beside the page on a wide screen */
 }
 @media (min-width: 64rem) {

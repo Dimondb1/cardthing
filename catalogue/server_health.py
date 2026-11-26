@@ -15,13 +15,17 @@ Everything is read from Linux's own files, so no package is added:
 Busy: the processors at or over BUSY_PERCENT in every sample of the last BUSY_FOR. The owner is told then
 (notify.owner, at most once a day), and Admin home says so under Needs you until it calms down.
 
-Easing off: from a sample at or over EASE_AT, the reader starts one shop read at a time (Worker.max_reads), and goes
-back to its usual number once a sample is under EASE_UNTIL, so the website keeps processor time for visitors. The
-reader also runs with a low CPUWeight (deploy/ripraptor-worker.service): when both want the processors, the website
-gets them first.
+Holding back: the reader looks at the processors every few seconds (CpuMeter) and, from the hold figure in Crawler
+settings (CrawlerSettings, 75% over 60 seconds unless changed), starts no new job until they are under the start-again
+figure (55%), so the website keeps processor time for visitors (Worker.watch_processors). Each sample says whether it
+was holding, how many jobs ran, how many requests went to shops, and how quickly the website served its pages
+(catalogue/response_times.py), so the Server health page can show the three side by side. The reader also runs with
+a low CPUWeight (deploy/ripraptor-worker.service): when both want the processors, the website gets them first.
 """
 
 import os
+import time
+from collections import deque
 from dataclasses import dataclass, field
 from datetime import timedelta
 
@@ -32,8 +36,6 @@ KEEP_DAYS = 7
 PRUNE_EVERY = timedelta(hours=1)
 BUSY_PERCENT = 90
 BUSY_FOR = timedelta(minutes=15)
-EASE_AT = 85
-EASE_UNTIL = 60
 SERVER_BUSY = "Server processors busy"
 SERVER_PATH = "/admin/server/"
 
@@ -185,6 +187,43 @@ class Sampler:
         )
 
 
+class CpuMeter:
+    """How busy the processors have been over a moving window, from /proc/stat looked at every few seconds: one small
+    file, so it can be read each turn of the reader. ``read`` and ``clock`` stand in for /proc and the time in tests."""
+
+    # Fewer seconds than this of looks (or than the window, when it is shorter) gives no average: a reader that has just
+    # started is never held on its first few seconds.
+    LEAST = 15
+
+    def __init__(self, read=None, clock=None):
+        self.read = read or read_text
+        self.clock = clock or time.monotonic
+        self.looks = deque()
+
+    def look(self, window):
+        """Look now, keeping the looks that span the last ``window`` seconds."""
+        times = cpu_times(self.read("/proc/stat"))
+        if times is None:
+            return
+        now = self.clock()
+        self.looks.append((now, *times))
+        # Keep one look at or before the window's start, so the average spans all of it.
+        while len(self.looks) > 2 and self.looks[1][0] <= now - window:
+            self.looks.popleft()
+
+    def average(self, window):
+        """The busy percent over the last ``window`` seconds, or None until the looks span enough of it."""
+        if len(self.looks) < 2:
+            return None
+        first, last = self.looks[0], self.looks[-1]
+        if last[0] - first[0] < min(window, self.LEAST):
+            return None
+        busy, total = last[1] - first[1], last[2] - first[2]
+        if total <= 0:
+            return None
+        return max(0.0, min(100.0, busy * 100 / total))
+
+
 def default_disk():
     from django.conf import settings
 
@@ -197,23 +236,17 @@ def default_disk():
         return 0
 
 
-def easing(cpu, now_easing):
-    """Whether the reader should run one shop read at a time after a sample at ``cpu``: from EASE_AT until under
-    EASE_UNTIL."""
-    if cpu >= EASE_AT:
-        return True
-    if cpu < EASE_UNTIL:
-        return False
-    return now_easing
-
-
-def save(reading, now, eased):
+def save(reading, now, held=False, jobs=0, shop_requests=0, pages=None):
+    """Save a sample, with what the reader was doing and ``pages`` (response_times.collect)."""
     from .models import ServerSample
 
+    pages = pages or {}
     return ServerSample.objects.create(
         at=now, cpu=reading.cpu, cpus=reading.cpus, load=reading.load, memory_used_mb=reading.memory_used_mb,
         memory_total_mb=reading.memory_total_mb, disk_used_percent=reading.disk_used_percent,
-        programs=reading.programs, easing=eased,
+        programs=reading.programs, held=held, jobs=jobs, shop_requests=shop_requests,
+        pages=pages.get("pages", 0), page_ms=pages.get("average"), page_ms_slowest=pages.get("slowest"),
+        pages_slow=pages.get("slow", 0),
     )
 
 
@@ -267,8 +300,8 @@ def notice_busy(now=None):
     using = ", ".join(f"{words.split(' (')[0].lower()} {share:.0f}%" for words, share in top_programs(busy.programs)[:3])
     detail = (
         f"The server's processors have been at least {BUSY_PERCENT}% busy for {busy.minutes} minutes "
-        f"({busy.cpu:.0f}% now). Most of it: {using or 'nothing named'}. While it lasts the background reader reads "
-        "one shop at a time, so the website keeps time for visitors. The Server health page in Admin shows what is "
-        "using them, and the last 24 hours."
+        f"({busy.cpu:.0f}% now). Most of it: {using or 'nothing named'}. While they are over the hold figure in Crawler "
+        "settings the background reader starts no new job, so the website keeps time for visitors. The Server health "
+        "page in Admin shows what is using them, and the last 24 hours."
     )
     return notify.owner(SERVER_BUSY, SERVER_BUSY, SERVER_PATH, detail, now=now, tags="warning")

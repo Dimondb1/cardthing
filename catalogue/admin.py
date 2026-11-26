@@ -11,8 +11,8 @@ from django.utils.html import format_html
 
 from . import pricing, sanity
 from .models import (
-    AffiliateSale, CardmarketMatch, CardmarketProduct, ClaudeAsk, DiscordChannel, DiscordPost, DropAlert, DropSpotlight, KeyringClaim, Partner, SearchAlert, SearchAlertSent, ProductAlias, Referral, ReferralSettings, Referrer, FeaturedSettings, DailyLowestPrice, Game, ImportRun, Listing, OutboundClick, Product, ProductSet, Release,
-    RemovedProduct, RemovedShop, Restock, Retailer, SeasonalThemes, ShopProduct, SiteLook, StockAlert, TypeBand, VisitorCheck,
+    AffiliateSale, CardmarketMatch, CardmarketProduct, ClaudeAsk, CrawlerSettings, DiscordChannel, DiscordPost, DropAlert, DropSpotlight, KeyringClaim, Partner, SearchAlert, SearchAlertSent, ProductAlias, Referral, ReferralSettings, Referrer, FeaturedSettings, DailyLowestPrice, Game, ImportRun, Listing, OutboundClick, Product, ProductSet, Release,
+    ReadPriority, RemovedProduct, RemovedShop, Restock, Retailer, SeasonalThemes, ShopProduct, SiteLook, StockAlert, TypeBand, VisitorCheck,
 )
 
 # A listing field the product page shows. Changing one here stamps the listing's changed_at, the sitemap's
@@ -163,21 +163,42 @@ class ProductForm(forms.ModelForm):
 class ProductAdmin(admin.ModelAdmin):
     form = ProductForm
     list_display = ("name", "game", "product_set", "product_type", "ean", "has_image", "cheapest", "listing_count", "is_active")
-    list_filter = ("game", "product_type", "is_active", BarcodeFilter, ImageFilter)
+    list_filter = ("game", "product_type", "is_active", "check_priority", BarcodeFilter, ImageFilter)
     list_editable = ("ean",)
+    actions = ["check_high", "check_normal", "check_low"]
     search_fields = ("name", "ean", "product_set__name", "product_set__code")
     autocomplete_fields = ("product_set",)
     prepopulated_fields = {"slug": ("name",)}
     readonly_fields = ("image_preview", "created_at", "updated_at", "shops_rrp", "claudes_rrp", "shops_contents",
                        "address_now")
     fieldsets = (
-        (None, {"fields": ("name", "slug", "game", "product_set", "product_type", "is_active", "address_now", "send_to")}),
+        (None, {"fields": ("name", "slug", "game", "product_set", "product_type", "is_active", "address_now", "send_to",
+                           "check_priority")}),
         ("Details", {"fields": ("image", "image_url", "image_preview", "ean", "amazon_asin", "release_date")}),
         ("RRP", {"fields": ("rrp", "shops_rrp", "claudes_rrp")}),
         ("What is inside", {"fields": ("packs", "cards_per_pack", "shops_contents")}),
         ("Record", {"fields": ("created_at", "updated_at"), "classes": ("collapse",)}),
     )
     inlines = [ListingInline]
+
+    def set_check_priority(self, request, queryset, priority):
+        """The stock check priority (Crawler settings, catalogue/worker.py) for the products ticked. The reader uses it
+        at its next plan, within a minute."""
+        changed = queryset.update(check_priority=priority)
+        self.message_user(request, f"{changed} product{'s' if changed != 1 else ''} now {ReadPriority(priority).label.lower()} "
+                                   "priority for stock checks.", messages.SUCCESS)
+
+    @admin.action(description="Stock checks: high priority (every 10 minutes)")
+    def check_high(self, request, queryset):
+        self.set_check_priority(request, queryset, ReadPriority.HIGH)
+
+    @admin.action(description="Stock checks: normal priority (by popularity)")
+    def check_normal(self, request, queryset):
+        self.set_check_priority(request, queryset, ReadPriority.NORMAL)
+
+    @admin.action(description="Stock checks: low priority (only with whole-shop reads)")
+    def check_low(self, request, queryset):
+        self.set_check_priority(request, queryset, ReadPriority.LOW)
 
     def get_queryset(self, request):
         return super().get_queryset(request).select_related("game", "product_set").with_prices()
@@ -273,13 +294,13 @@ class ProductAdmin(admin.ModelAdmin):
 @admin.register(Retailer)
 class RetailerAdmin(admin.ModelAdmin):
     list_display = ("name", "website", "source_type", "delivery_cost", "free_delivery_over", "has_affiliate_link",
-                    "is_active", "read_every_minutes")
-    # How often each shop is read can be changed straight from the list. The rest of the reading record is
-    # written by the reads themselves.
-    list_editable = ("read_every_minutes",)
+                    "is_active", "read_every_minutes", "read_priority")
+    # How often each shop is read, and which goes first, can be changed straight from the list. The rest of the reading
+    # record is written by the reads themselves.
+    list_editable = ("read_every_minutes", "read_priority")
     readonly_fields = ("stock_page", "auto_collection_at", "next_read_at", "last_read_seconds", "last_ok_at", "last_error",
                        "error_streak", "backoff_until", "reading_paused", "collections_polled_at", "collections_ok")
-    list_filter = ("is_active", "source_type")
+    list_filter = ("is_active", "source_type", "read_priority")
     search_fields = ("name", "website")
     prepopulated_fields = {"slug": ("name",)}
     fieldsets = (
@@ -292,7 +313,7 @@ class RetailerAdmin(admin.ModelAdmin):
                                    "the link of a listing you add by hand under the product (any price; "
                                    "the import corrects it). Unmatched shop products are listed on each "
                                    "price import with their links."}),
-        ("Reading", {"fields": ("read_every_minutes", "next_read_at", "last_read_seconds", "last_ok_at",
+        ("Reading", {"fields": ("read_every_minutes", "read_priority", "next_read_at", "last_read_seconds", "last_ok_at",
                                 "error_streak", "backoff_until", "last_error", "reading_paused", "paused_note",
                                 "collections_polled_at", "collections_ok")}),
         ("Links", {"fields": ("affiliate_url_template",)}),
@@ -829,6 +850,122 @@ class VisitorCheckAdmin(admin.ModelAdmin):
         from django.urls import reverse
 
         return HttpResponseRedirect(reverse("admin:catalogue_visitorcheck_change", args=[VisitorCheck.load().pk]))
+
+
+@admin.register(CrawlerSettings)
+class CrawlerSettingsAdmin(admin.ModelAdmin):
+    """The one row of crawler settings (catalogue/worker.py reads them every few seconds). The list goes straight to it;
+    what the reader is doing now is at the top, with Pause all or Resume all beside the title (crawl.pause_all, the same
+    switch as on Crawl health)."""
+
+    readonly_fields = ("now",)
+    fieldsets = (
+        ("Now", {"fields": ("now",)}),
+        ("How much runs at once", {"fields": ("max_jobs", "job_gap_seconds")}),
+        ("When the server is busy", {
+            "fields": ("cpu_pause_percent", "cpu_resume_percent", "cpu_window_seconds", "cpu_max_percent", "slow_seconds"),
+            "description": "The website always comes first. While the processors are busy, the reader starts no new "
+                           "shop reads or checks; the ones running finish safely.",
+        }),
+        ("How often shops are read", {
+            "fields": ("read_at_least_every_minutes",),
+            "description": "Each shop's own Read every and Reading priority are in the Retailers list, where both can be "
+                           "changed for many shops at once. Products checked more or less often are set on each product, "
+                           "or with the Stock checks actions in the Products list.",
+        }),
+    )
+
+    def has_add_permission(self, request):
+        return False   # the list opens the one row, made on first use
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def changelist_view(self, request, extra_context=None):
+        from django.http import HttpResponseRedirect
+
+        return HttpResponseRedirect(reverse("admin:catalogue_crawlersettings_change", args=[CrawlerSettings.load().pk]))
+
+    def get_urls(self):
+        from django.urls import path
+
+        return [path("pause/", self.admin_site.admin_view(self.pause_view), name="catalogue_crawlersettings_pause"),
+                *super().get_urls()]
+
+    def pause_view(self, request):
+        """Pause all or Resume all (crawl.pause_all), from the button beside the title. Posted only."""
+        from django.core.exceptions import PermissionDenied
+        from django.db import DatabaseError
+        from django.http import HttpResponseNotAllowed, HttpResponseRedirect
+
+        from . import crawl
+
+        if request.method != "POST":
+            return HttpResponseNotAllowed(["POST"])
+        if not self.has_change_permission(request):
+            raise PermissionDenied
+        try:
+            if request.POST.get("action") == "pause_all":
+                crawl.pause_all()
+                self.message_user(request, "Reading is paused for every shop. Jobs running now finish first; no new one "
+                                           "starts until you tap Resume all.", messages.SUCCESS)
+            else:
+                crawl.resume_all()
+                self.message_user(request, "Reading has resumed. Each shop is read on its own schedule, within these "
+                                           "settings.", messages.SUCCESS)
+        except (DatabaseError, OSError):
+            self.message_user(request, "The database was busy, so nothing changed. Tap the button again.", messages.ERROR)
+        return HttpResponseRedirect(reverse("admin:catalogue_crawlersettings_change", args=[CrawlerSettings.load().pk]))
+
+    def change_view(self, request, object_id, form_url="", extra_context=None):
+        from . import crawl
+
+        CrawlerSettings.load()   # the one row, made on first use, whichever way the page is opened
+        return super().change_view(request, object_id, form_url, {**(extra_context or {}), "paused": crawl.all_paused()})
+
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        if form.changed_data:
+            self.message_user(request, "The background reader uses the new settings within 15 seconds, with no restart.",
+                              messages.INFO)
+
+    @admin.display(description="The background reader")
+    def now(self, obj):
+        """What the reader is doing, from its last heartbeat (every 30 seconds)."""
+        from django.conf import settings
+        from django.utils.html import format_html_join
+
+        from . import crawl
+        from .insights import clock
+        from .models import WorkerState
+
+        now = timezone.now()
+        state = WorkerState.current()
+        if state is None or not state.alive(now):
+            return format_html('Not running, so nothing is read and these settings wait for it. <a href="{}">Crawl health</a> '
+                               "says why.", reverse("crawl"))
+        lines = []
+        if crawl.all_paused(state):
+            lines.append("Pause all is on: no shop is read or checked until you tap Resume all.")
+        window = obj.cpu_window_seconds
+        busy = "" if state.cpu_now is None else f"{state.cpu_now:.0f}% busy over the last {window} seconds"
+        if state.held_since:
+            lines.append(f"New jobs held since {clock(state.held_since, now)}: the processors are {busy or 'busy'}. Jobs "
+                         f"start again under {obj.cpu_resume_percent}%.")
+        elif busy:
+            lines.append(f"Processors {busy}: jobs start as usual. New jobs are held from {obj.cpu_pause_percent}%.")
+        if state.slowed:
+            lines.append(f"Running jobs are slowed by {obj.slow_seconds} seconds a request.")
+        threads = getattr(settings, "RIPRAPTOR_WORKER_THREADS", 4)
+        if obj.max_jobs > threads:
+            lines.append(f"The reader has {threads} threads, so at most {threads} jobs run at once.")
+        running = [f"{job.get('label', '')} ({job.get('minutes', 0)} min)" for job in state.running or []]
+        lines.append(f"Running now: {', '.join(running)}." if running else "Running now: nothing.")
+        return format_html(
+            '{}<p>As of {}. <a href="{}">Server health</a> shows the last 24 hours of the processors, the website\'s '
+            'speed and the reading; <a href="{}">Crawl health</a> shows each shop.</p>',
+            format_html_join("", "<p>{}</p>", ((line,) for line in lines)),
+            clock(state.heartbeat_at, now), reverse("server_health"), reverse("crawl"))
 
 
 @admin.register(SiteLook)

@@ -20,7 +20,7 @@ from django.db.models import BooleanField, ExpressionWrapper, Max, OuterRef, Q, 
 from django.utils import timezone
 
 from .insights import clock
-from .models import ImportRun, Retailer, WorkerState
+from .models import CrawlerSettings, ImportRun, Retailer, WorkerState
 
 FLAG_NAME = "crawl-paused"
 # "HTTP Error 429: Too Many Requests" from a shop, "eBay API 429: ..." or "Amazon API 503: ..." from a marketplace.
@@ -345,10 +345,12 @@ def verdict(rows, worker, everything_paused):
                            "back, and the server starts it again within five minutes.")
     counts = lights(rows)
     behind = counts[LATE] + counts[STOPPED]
+    held = (f" New jobs have been held since {worker['held']} because the server is busy (Crawler settings), so shops "
+            "wait their turn.") if worker.get("held") else ""
     if not behind:
-        return "ok", "Every shop was read in the last hour."
+        return "ok", "Every shop was read in the last hour." + held
     return "behind", (f"{behind} shop{'s were' if behind != 1 else ' was'} not read in the last hour. They are at the "
-                      "top of the list below.")
+                      "top of the list below." + held)
 
 
 def worker_status(state, now):
@@ -367,6 +369,8 @@ def worker_status(state, now):
         "requests": state.requests_last_hour,
         "errors": state.errors_last_hour,
         "note": state.note,
+        # Since when new jobs have been held for busy processors (Crawler settings), while they are.
+        "held": clock(state.held_since, now) if state.held_since else None,
         "memory": state.memory_mb, "memory_limit": state.memory_limit_mb,
         # Where it restarts itself to free memory (worker.MEMORY_SHARE).
         "memory_restart": round(state.memory_limit_mb * MEMORY_SHARE) if state.memory_limit_mb else None,
@@ -461,9 +465,13 @@ def log_text(now, state, rows, worker, everything_paused):
             need += total
             if kind == Retailer.Source.WEBSITE:
                 website_need += total
+    controls = CrawlerSettings.current()
+    jobs = max(1, min(controls.max_jobs, settings.RIPRAPTOR_WORKER_THREADS))
+    reads = max(1, min(reader.MAX_READS, jobs - 1))
     out.append(f"reading every shop once takes about {need // 60:,} minutes of reading; the reader has "
-               f"{reader.MAX_READS * 60} an hour ({website_need // 60:,} of {reader.MAX_WEBSITE_READS * 60} for "
-               "website shops)")
+               f"{reads * 60} an hour ({website_need // 60:,} of {min(reads, reader.MAX_WEBSITE_READS) * 60} for "
+               f"website shops), with at most {jobs} job{'s' if jobs != 1 else ''} at once (Crawler settings: "
+               f"{controls.summary()})")
 
     runs = ImportRun.objects.filter(note="", started_at__gte=now - timedelta(hours=1)).aggregate(
         started=Count("pk"), finished=Count("pk", filter=Q(finished_at__isnull=False)),
@@ -477,7 +485,8 @@ def log_text(now, state, rows, worker, everything_paused):
         out.append(" | ".join([
             shop.name, row["word"], shop.source_type, row["why"], row["doing"] or "-",
             at(shop.last_ok_at), f"{shop.last_read_seconds} s" if shop.last_read_seconds is not None else "-",
-            f"{shop.every_minutes} min", str(shop.error_streak), (shop.last_error or "-")[:120],
+            f"{shop.read_every(controls.read_at_least_every_minutes)} min", str(shop.error_streak),
+            (shop.last_error or "-")[:120],
         ]))
 
     kept = worklog.entries()

@@ -48,7 +48,7 @@ from urllib.parse import urlsplit
 from django.core.cache import cache
 from django.utils import timezone
 
-from . import autopilot, crawl, importers, languages
+from . import autopilot, crawl, crawl_gate, importers, languages
 from .classify import PACK_COUNT
 from .importers import JSON_LD, META, TITLE, ImportError_, clean_ean, listing_page, money, page_offer
 from .models import ImportRun, Retailer
@@ -294,8 +294,11 @@ class Reader:
             return "pages are not read in a dry run"
         if retailer.source_type not in READ:
             return NOT_READ.get(retailer.source_type, "this kind of shop is not read")
-        if crawl.all_paused():
+        gate = crawl_gate.why_not()
+        if gate == crawl_gate.PAUSED:
             return "Pause all is on"
+        if gate == crawl_gate.HELD:
+            return "the server is busy, so new reads are held (Crawler settings)"
         if not retailer.is_active:
             return "the shop is switched off"
         if retailer.reading_paused:

@@ -556,6 +556,7 @@ class AdminAddProductTests(TestCase):
         data = {
             "name": "Browser Test Booster Box", "slug": "browser-test-booster-box", "game": game.pk, "product_set": "",
             "product_type": "booster_box", "is_active": "on", "ean": "0820650859999", "image_url": "", "release_date": "",
+            "check_priority": "2",
             "listings-TOTAL_FORMS": "1", "listings-INITIAL_FORMS": "0", "listings-MIN_NUM_FORMS": "0", "listings-MAX_NUM_FORMS": "1000",
             "listings-0-retailer": retailer.pk, "listings-0-url": "https://testshop.example/products/x",
             "listings-0-price": "99.99", "listings-0-delivery_cost": "0", "listings-0-availability": "in_stock",

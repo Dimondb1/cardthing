@@ -85,6 +85,8 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    # How long each page took, for Server health (catalogue/response_times.py): first after security, so it times the rest.
+    "web.middleware.ResponseTimeMiddleware",
     "ripraptor.csp.ContentSecurityPolicyMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",

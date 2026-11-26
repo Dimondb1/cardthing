@@ -24,7 +24,7 @@ from django.utils import timezone
 
 from . import heat, importers, insights, mail, notify, probe, worker
 from .importers import STOPPED, ImportError_
-from .models import DailyPageView, ImportRun, Listing, Product, Retailer, StockAlert, WorkerState
+from .models import CrawlerSettings, DailyPageView, ImportRun, Listing, Product, Retailer, StockAlert, WorkerState
 from .testing import make_game, make_listing, make_product, make_retailer, make_set
 from .tests_db import file_database, open_in_thread
 
@@ -100,6 +100,11 @@ class WorkerTestCase(TestCase):
     def setUp(self):
         self.clock = FakeClock()
         self.set = make_set(make_game())
+        # The limits the reader had before Crawler settings (four jobs at once, the next starting at once), which the
+        # tests here were written for: the rules they check (three reads at most, two of website shops, a slot left for
+        # checks) still hold whenever the owner allows that many. The settings' own defaults are tested in
+        # tests_crawler_settings.
+        CrawlerSettings.objects.create(pk=1, max_jobs=4, job_gap_seconds=0)
         folder = tempfile.TemporaryDirectory()
         self.addCleanup(folder.cleanup)
         self.folder = Path(folder.name)
@@ -235,9 +240,9 @@ class PlanTests(WorkerTestCase):
             for m in range(3):
                 self.listing(self.product(f"box-{n}-{m}", views=m), shop, 20 + 30 * m)
         self.assertEqual(count(), few)
-        # Pause all, the shops due, four for how hot each product is, the listings to check and the shops
-        # due a pre-order pulse.
-        self.assertEqual(few, 8)
+        # Pause all, the crawler settings, the shops due, four for how hot each product is, the listings to check and
+        # the shops due a pre-order pulse.
+        self.assertEqual(few, 9)
 
 
 class PolitenessTests(WorkerTestCase):

@@ -226,7 +226,7 @@ class SwitchedOffTests(TestCase):
         data = {
             "name": product.name, "slug": product.slug, "game": product.game_id, "product_set": product.product_set_id,
             "product_type": product.product_type, "image_url": "", "ean": "", "amazon_asin": "", "release_date": "",
-            "rrp": "", "packs": "", "cards_per_pack": "", "send_to": "",
+            "rrp": "", "packs": "", "cards_per_pack": "", "send_to": "", "check_priority": product.check_priority,
             "listings-TOTAL_FORMS": "0", "listings-INITIAL_FORMS": "0", "listings-MIN_NUM_FORMS": "0",
             "listings-MAX_NUM_FORMS": "1000",
         }

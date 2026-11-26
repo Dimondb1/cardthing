@@ -1,0 +1,6 @@
+{% extends "admin/change_form.html" %}
+{# Crawler settings (catalogue.admin.CrawlerSettingsAdmin): Pause all or Resume all beside the title, the same switch as on Crawl health, in a form of its own above the settings' form. #}
+{% block object-tools-items %}
+<li><form method="post" action="{% url 'admin:catalogue_crawlersettings_pause' %}" class="crawler-pause">{% csrf_token %}{% if paused %}<button type="submit" name="action" value="resume_all" class="button default">Resume all</button>{% else %}<button type="submit" name="action" value="pause_all" class="button">Pause all</button>{% endif %}</form></li>
+<li><a href="{% url 'server_health' %}">Server health</a></li>
+{% endblock %}

@@ -111,3 +111,22 @@ class OwnerEditsMiddleware:
             return self.get_response(request)
         finally:
             listcache.owner_editing.reset(editing)
+
+
+class ResponseTimeMiddleware:
+    """Time each page the website serves, Admin and files left out, for the Server health page
+    (catalogue/response_times.py). Near the top of the list, so the steps after it are in the time. Never makes a page
+    wait: the time is added up in memory and written once a minute, as one line in a file."""
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        from time import perf_counter
+
+        from catalogue import response_times
+
+        started = perf_counter()
+        response = self.get_response(request)
+        response_times.record(request.path, (perf_counter() - started) * 1000)
+        return response

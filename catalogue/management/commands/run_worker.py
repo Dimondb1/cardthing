@@ -37,8 +37,9 @@ class Command(BaseCommand):
         keeper = worklog.install()
         try:
             # Held to the service's MemoryMax: past three quarters of it the reader restarts itself between reads.
+            # The processors measured every turn, for Crawler settings' hold (CrawlerSettings).
             reader = worker.Worker(threads=max_threads, warm=True, limit=worker.memory_limit(),
-                                   sampler=server_health.Sampler())
+                                   sampler=server_health.Sampler(), meter=server_health.CpuMeter())
             closed = reader.begin()
             if closed:
                 self.stdout.write(f"Closed {closed} earlier runs that stopped before they finished.")

@@ -101,12 +101,33 @@ class SamplerTests(TestCase):
         sampler.take()
         self.assertIsNone(sampler.take())
 
-    def test_easing_off_and_back(self):
-        easing = server_health.easing
-        self.assertTrue(easing(85, False))
-        self.assertTrue(easing(70, True))     # stays until under 60
-        self.assertFalse(easing(70, False))
-        self.assertFalse(easing(59, True))
+    def test_the_meter_averages_over_its_window(self):
+        """The reader's look every few seconds (Crawler settings' window): the busy share between the first look in the
+        window and the last."""
+        seconds, stat = [0.0], ["cpu  0 0 0 0 0 0 0 0 0 0\n"]
+        meter = server_health.CpuMeter(read=lambda path: stat[0], clock=lambda: seconds[0])
+
+        def look(after, busy, idle, window=60):
+            seconds[0] += after
+            user, rest = [int(part) for part in stat[0].split()[1:3]], [int(part) for part in stat[0].split()[4:5]]
+            stat[0] = f"cpu  {user[0] + busy} 0 0 {rest[0] + idle} 0 0 0 0 0 0\n"
+            meter.look(window)
+            return meter.average(window)
+
+        self.assertIsNone(look(0, 0, 0))
+        self.assertIsNone(look(5, 50, 50))          # five seconds is too few to go on
+        self.assertIsNone(look(5, 50, 50))
+        self.assertAlmostEqual(look(5, 50, 50), 50)  # fifteen seconds: half busy
+        for _ in range(12):
+            look(5, 90, 10)                          # a minute at 90%
+        self.assertAlmostEqual(meter.average(60), 90)
+        self.assertLessEqual(len(meter.looks), 14)   # only the looks in the window are kept
+        self.assertAlmostEqual(look(5, 10, 90, window=10), 50)   # a shorter window sees the last ten seconds only
+
+    def test_the_meter_gives_nothing_without_proc(self):
+        meter = server_health.CpuMeter(read=lambda path: None, clock=lambda: 0)
+        meter.look(60)
+        self.assertIsNone(meter.average(60))
 
 
 def sample(at, cpu, **programs):
@@ -176,21 +197,19 @@ class WorkerTests(TestCase):
     def reader(self, sampler):
         return worker.Worker(clock=lambda: self.now, sleep=lambda seconds: None, sampler=sampler)
 
-    def test_the_reader_samples_once_a_minute_and_eases_off_when_busy(self):
-        reader = self.reader(FakeSampler([50, 92, 70, 55]))
-        usual = reader.max_reads()
-        self.assertGreater(usual, 1)
+    def test_the_reader_samples_once_a_minute_with_what_it_was_doing(self):
+        reader = self.reader(FakeSampler([50, 92]))
         reader.keep_server_sampled(self.now)
         reader.keep_server_sampled(self.now + timedelta(seconds=30))   # not a minute yet
         self.assertEqual(ServerSample.objects.count(), 1)
+        first = ServerSample.objects.get()
+        self.assertEqual((first.held, first.jobs, first.shop_requests, first.pages), (False, 0, 0, 0))
+        reader.held_since = self.now
+        reader.running[1] = worker.Job(worker.Task(worker.SHOP_READ, 1, "shopify", 1, "Read"), self.now, self.now)
         reader.keep_server_sampled(self.now + timedelta(minutes=1))
-        self.assertEqual(reader.max_reads(), 1)
-        self.assertTrue(ServerSample.objects.order_by("-at").first().easing)
-        reader.keep_server_sampled(self.now + timedelta(minutes=2))   # 70: still easing
-        self.assertEqual(reader.max_reads(), 1)
-        reader.keep_server_sampled(self.now + timedelta(minutes=3))   # 55: back
-        self.assertEqual(reader.max_reads(), usual)
-        self.assertEqual(list(ServerSample.objects.order_by("at").values_list("cpu", flat=True)), [50, 92, 70, 55])
+        latest = ServerSample.objects.order_by("-at").first()
+        self.assertEqual((latest.cpu, latest.held, latest.jobs), (92, True, 1))
+        self.assertEqual(list(ServerSample.objects.order_by("at").values_list("cpu", flat=True)), [50, 92])
 
     def test_a_failing_sample_never_stops_the_reader(self):
         broken = mock.Mock()
@@ -247,10 +266,11 @@ class PageTests(TestCase):
     def test_busy_says_so_here_and_on_admin_home(self):
         for i in range(20):
             sample(self.now - timedelta(minutes=i), 96)
-        ServerSample.objects.update(easing=True)
+        ServerSample.objects.update(held=True)
         response = self.client.get(self.url)
         self.assertContains(response, "Busy: processors at least 90% for")
-        self.assertContains(response, "reading one shop at a time")
+        self.assertContains(response, "starts no new job while they are over 75%")
+        self.assertContains(response, '<rect class="held"')
         home = self.client.get(reverse("admin:index"))
         self.assertContains(home, "Server busy: processors 96% for")
         self.assertContains(home, f'href="{self.url}"')

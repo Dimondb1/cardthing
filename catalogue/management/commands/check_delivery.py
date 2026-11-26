@@ -10,6 +10,9 @@ The server checks every shop weekly and the shops whose charge is still unknown 
 unknown charge go first, one shop's fault is reported and never stops the rest, and no shop is started once
 BUDGET_SECONDS have gone, so the cron's time limit never cuts a run off part way.
 
+It keeps to Crawler settings (catalogue/crawl_gate.py): while it runs the background reader counts it as a job, no shop
+is started while Pause all is on, and while the reader holds new jobs for busy processors it waits, within its time.
+
 Two sources, both the shop's own: its delivery page (for the free-delivery
 threshold and, when written out, the standard charge) and, for Shopify shops,
 a basket with one cheap product in it, which gives the real standard charge
@@ -24,7 +27,7 @@ from django.core.management.base import BaseCommand
 from django.db.models import F
 from django.utils import timezone
 
-from catalogue import pricing
+from catalogue import crawl_gate, pricing
 from catalogue.delivery import check_delivery, shopify_delivery
 from catalogue.importers import ImportError_
 from catalogue.models import Retailer
@@ -47,6 +50,7 @@ def describe(cost, cost_source, free_over, free_source):
 
 class Command(BaseCommand):
     help = "Read UK delivery charges from each shop's delivery page and, for Shopify shops, a test basket."
+    sleep = staticmethod(time.sleep)   # while new reads are held; the tests stand in for it
 
     def add_arguments(self, parser):
         parser.add_argument("slugs", nargs="*", help="Retailer slugs. Default: every shop shown on the site.")
@@ -64,15 +68,24 @@ class Command(BaseCommand):
             retailers = retailers.filter(delivery_cost__isnull=True)
         today = timezone.now().strftime("%d %b %Y")
         began = time.monotonic()
-        for retailer in retailers:
-            if time.monotonic() - began > BUDGET_SECONDS:
-                self.stdout.write("Out of time: the other shops are checked at the next run.")
-                break
-            try:
-                self.check_shop(retailer, apply, today)
-            except Exception as exc:  # one shop's fault never stops the rest
-                logger.exception("Delivery check for %s failed", retailer.name)
-                self.stdout.write(f"{retailer.name}: check failed: {exc}")
+        with crawl_gate.reading("delivery check"):
+            for retailer in retailers:
+                if time.monotonic() - began > BUDGET_SECONDS:
+                    self.stdout.write("Out of time: the other shops are checked at the next run.")
+                    break
+                why = crawl_gate.wait_for_turn(began + BUDGET_SECONDS, sleep=self.sleep)
+                if why == crawl_gate.PAUSED:
+                    self.stdout.write("Pause all is on: the other shops are checked at the next run.")
+                    break
+                if why == crawl_gate.HELD:
+                    self.stdout.write("The server stayed busy, so new reads were held: the other shops are checked at "
+                                      "the next run.")
+                    break
+                try:
+                    self.check_shop(retailer, apply, today)
+                except Exception as exc:  # one shop's fault never stops the rest
+                    logger.exception("Delivery check for %s failed", retailer.name)
+                    self.stdout.write(f"{retailer.name}: check failed: {exc}")
         if apply:
             from django.core.cache import cache
 

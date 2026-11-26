@@ -1,6 +1,6 @@
 {% extends "admin/base_site.html" %}
 {% load static %}
-{# Server health (web/server_health.py): how busy the processors are now, what is using them, the last 24 hours, memory and disk, from the background reader's sample each minute (catalogue/server_health.py). #}
+{# Server health (web/server_health.py): how busy the processors are now, what is using them, memory and disk, and the last 24 hours of the processors, the website's speed and the shop reading side by side, from the background reader's sample each minute (catalogue/server_health.py) and its heartbeat. #}
 {% block title %}Server health | {{ site_title }}{% endblock %}
 {% block extrahead %}{{ block.super }}<meta name="robots" content="noindex, nofollow"><script nonce="{{ csp_nonce }}" src="{% static 'js/copy-log.js' %}" defer></script>{% endblock %}
 {% block extrastyle %}{{ block.super }}<style>
@@ -32,10 +32,14 @@
   .server .chart .grid { stroke: var(--hairline-color); stroke-width: 1; }
   .server .chart .busy-line { stroke: var(--light-stopped); stroke-width: 1; stroke-dasharray: 4 3; }
   .server .chart .line { fill: none; stroke: var(--primary); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+  .server .chart .held { fill: var(--light-late); opacity: 0.2; }
   .server .chart .hit { fill: transparent; }
   .server .chart .hit:hover { fill: var(--hairline-color); opacity: 0.5; }
   .server table { width: 100%; }
   .server td.num, .server th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .server .table-scroll { overflow-x: auto; }
+  .server .reader { padding: 10px 12px; border: 1px solid var(--hairline-color); border-radius: 6px; }
+  .server .reader.held { border-color: var(--light-late); }
   .server textarea.log { display: block; width: 100%; height: 18rem; box-sizing: border-box; margin: 0; padding: 8px; font: 12px/1.45 ui-monospace, Menlo, Consolas, monospace; white-space: pre; overflow: auto; }
 </style>{% endblock %}
 {% block breadcrumbs %}<div class="breadcrumbs"><a href="{% url 'admin:index' %}">Home</a> &rsaquo; Server health</div>{% endblock %}
@@ -43,9 +47,9 @@
 <div class="server">
   <section class="verdict {{ state }}" role="status">
     {% if state == "busy" %}<b>Busy: processors at least {{ busy_percent }}% for {{ busy.minutes }} minutes</b>
-      {{ busy.cpu|floatformat:0 }}% now, since {{ busy_since }}. You were emailed, once a day at most. The background reader is reading one shop at a time until it calms down.
+      {{ busy.cpu|floatformat:0 }}% now, since {{ busy_since }}. You were emailed, once a day at most. The background reader starts no new job while they are over {{ controls.cpu_pause_percent }}%.
     {% elif state == "high" %}<b>Busy now: {{ latest.cpu|floatformat:0 }}%</b>
-      Not for {{ busy_minutes }} minutes yet. The background reader eases off from {{ ease_at }}%.
+      Not for {{ busy_minutes }} minutes yet. The background reader holds new jobs from {{ controls.cpu_pause_percent }}%.
     {% elif state == "ok" %}<b>Fine: processors {{ latest.cpu|floatformat:0 }}% busy</b>
       Checked {{ latest_ago }}.
     {% elif state == "stale" %}<b>No sample since {{ latest_ago }}</b>
@@ -64,7 +68,12 @@
       <li><b>{{ latest.memory_used_mb }} MB</b><span>memory used of {{ latest.memory_total_mb }} MB</span></li>
       <li><b>{{ latest.disk_used_percent }}%</b><span>disk used</span></li>
     </ul>
-    <p class="note">{% if latest.easing %}The background reader is reading one shop at a time{% if easing_since %}, since {{ easing_since }}{% endif %}, because the processors are busy. It goes back to its usual pace under {{ ease_until }}%.{% else %}The background reader is at its usual pace. From {{ ease_at }}% it reads one shop at a time, and the website always comes first for the processors.{% endif %}</p>
+  </section>
+
+  <section aria-labelledby="reader-title">
+    <h2 id="reader-title">Background reader</h2>
+    <p class="reader{% if reader.held %} held{% endif %}" role="status">{% if reader %}{{ reader.words }}{% else %}Not running. <a href="{% url 'crawl' %}">Crawl health</a> says why.{% endif %}</p>
+    <p class="note">The website always comes first. <a href="{% url 'admin:catalogue_crawlersettings_changelist' %}">Crawler settings</a> has the limits, and Pause all and Resume all.</p>
   </section>
 
   <section aria-labelledby="using-title">
@@ -79,26 +88,29 @@
 
   <section aria-labelledby="day-title" class="chart">
     <h2 id="day-title">Processors busy, last 24 hours</h2>
-    <p class="note">Ten minutes a point{% if peak is not None %}, highest {{ peak|floatformat:0 }}%{% endif %}. The dashed line is {{ busy_percent }}%: held there for {{ busy_minutes }} minutes, you get an email. Touch or point at the chart for each ten minutes.</p>
-    <div class="plot">
-      <div class="y-axis" aria-hidden="true"><span>100%</span><span>50%</span><span>0%</span></div>
-      <svg viewBox="0 0 {{ chart.width }} 100" preserveAspectRatio="none" role="img" aria-labelledby="day-title">
-        <line class="grid" x1="0" x2="{{ chart.width }}" y1="0" y2="0" vector-effect="non-scaling-stroke"/>
-        <line class="grid" x1="0" x2="{{ chart.width }}" y1="50" y2="50" vector-effect="non-scaling-stroke"/>
-        <line class="grid" x1="0" x2="{{ chart.width }}" y1="100" y2="100" vector-effect="non-scaling-stroke"/>
-        <line class="busy-line" x1="0" x2="{{ chart.width }}" y1="{{ chart.busy_y }}" y2="{{ chart.busy_y }}" vector-effect="non-scaling-stroke"/>
-        {% for points in chart.lines %}<polyline class="line" points="{{ points }}" vector-effect="non-scaling-stroke"/>{% endfor %}
-        {% for target in chart.targets %}<rect class="hit" x="{{ target.x }}" y="0" width="1" height="100"><title>{{ target.label }}</title></rect>{% endfor %}
-      </svg>
-      <div class="x-axis" aria-hidden="true"><span>24 hours ago</span><span>12 hours ago</span><span>Now</span></div>
-    </div>
+    <p class="note">Ten minutes a point{% if peak is not None %}, highest {{ peak|floatformat:0 }}%{% endif %}. The dashed line is {{ controls.cpu_pause_percent }}%, where new jobs are held; shaded, the times they were. Over {{ busy_percent }}% for {{ busy_minutes }} minutes, you get an email. Touch or point at a chart for each ten minutes.</p>
+    {% include "admin/_server_chart.html" with chart=charts.cpu title_id="day-title" %}
+  </section>
+
+  <section aria-labelledby="pages-title" class="chart">
+    <h2 id="pages-title">Website speed, last 24 hours</h2>
+    <p class="note">How long the website took to make a page, on average, ten minutes a point. Lower is better. Admin is left out.</p>
+    {% include "admin/_server_chart.html" with chart=charts.pages title_id="pages-title" %}
+  </section>
+
+  <section aria-labelledby="reading-title" class="chart">
+    <h2 id="reading-title">Shop reading, last 24 hours</h2>
+    <p class="note">Requests to shops a minute, ten minutes a point; shaded, the times new jobs were held.</p>
+    {% include "admin/_server_chart.html" with chart=charts.reading title_id="reading-title" %}
     {% if hours %}
     <details>
       <summary>Each hour as a table</summary>
+      <div class="table-scroll">
       <table>
-        <thead><tr><th>Hour</th><th class="num">Average</th><th class="num">Highest</th></tr></thead>
-        <tbody>{% for hour, average, highest in hours %}<tr><td>{{ hour|date:"j M H:00" }}</td><td class="num">{{ average|floatformat:0 }}%</td><td class="num">{{ highest|floatformat:0 }}%</td></tr>{% endfor %}</tbody>
+        <thead><tr><th>Hour</th><th class="num">Processors</th><th class="num">Highest</th><th class="num">Page time</th><th class="num">Slowest page</th><th class="num">Shop requests a minute</th><th class="num">Minutes held</th></tr></thead>
+        <tbody>{% for row in hours %}<tr><td>{{ row.hour|date:"j M H:00" }}</td><td class="num">{{ row.average|floatformat:0 }}%</td><td class="num">{{ row.peak|floatformat:0 }}%</td><td class="num">{% if row.page_ms is not None %}{{ row.page_ms }} ms{% endif %}</td><td class="num">{% if row.slowest is not None %}{{ row.slowest }} ms{% endif %}</td><td class="num">{{ row.requests|floatformat:0 }}</td><td class="num">{{ row.held }}</td></tr>{% endfor %}</tbody>
       </table>
+      </div>
     </details>
     {% else %}<p class="note">No samples in the last 24 hours.</p>{% endif %}
   </section>

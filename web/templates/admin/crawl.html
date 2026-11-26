@@ -59,7 +59,7 @@
       <li class="stopped"><b><i class="dot" aria-hidden="true"></i>{{ lights.stopped }}</b><span>not going</span></li>
     </ul>
     {% if lights.waiting %}<p class="note" id="waiting-line">Not counted above: Amazon, waiting for Amazon to share its prices with this account. It needs more sales first; see the Amazon page.</p>{% endif %}
-    <p class="note">Up to date: read in the last hour. Late: read in the last three hours. Not going: paused, failing, never read or not read for three hours. Every shop is read at least every hour.</p>
+    <p class="note">Up to date: read in the last hour. Late: read in the last three hours. Not going: paused, failing, never read or not read for three hours. Every shop is read at least as often as Crawler settings says.</p>
     <div class="row controls">
       <form method="post">{% csrf_token %}<input type="hidden" name="action" value="read_all"><input type="submit" value="Read all"></form>
       {% if all_paused %}
@@ -68,7 +68,7 @@
       <form method="post">{% csrf_token %}<input type="hidden" name="action" value="pause_all"><input type="submit" value="Pause all"></form>
       {% endif %}
     </div>
-    <p class="note">Read all puts every shop in line now. Read now on a shop puts it first in line. Pause all stops every read until you tap Resume all; reads already running finish first.</p>
+    <p class="note">Read all puts every shop in line now. Read now on a shop puts it first in line. Pause all stops every read until you tap Resume all; reads already running finish first. <a href="{% url 'admin:catalogue_crawlersettings_changelist' %}">Crawler settings</a> says how many run at once and when they are held for a busy server.</p>
   </section>
 
   <section id="shops">

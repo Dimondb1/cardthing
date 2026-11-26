@@ -575,28 +575,90 @@ compatability for discount codes".
 **Server health** (Admin home, under Shops; `web/server_health.py`,
 `/admin/server/`) shows how busy the server's processors are, which program
 is using them (the website, the background reader, the scheduled jobs, the
-web server, everything else), memory, disk, the load, and the last 24 hours
-as a line with the 90% mark, with each hour as a table and a log to copy.
-The owner, 25 Nov 2026: "the server is running at 99% cpu how do we ensure
-that we monitor this from the ripraptor admin".
+web server, everything else), memory, disk, the load, what the background
+reader is doing about them, and the last 24 hours as three charts side by
+side: the processors (with the hold figure as a dashed line and the times
+new jobs were held shaded), how long the website took to make a page, and
+how many requests a minute went to shops. Each hour is in a table and the
+lot in a log to copy. The owner, 25 Nov 2026: "the server is running at 99%
+cpu how do we ensure that we monitor this from the ripraptor admin"; 26 Nov
+2026: "historical CPU usage, scraping activity and website response times".
 
 The background reader takes the samples, once a minute
 (`catalogue/server_health.py`, the `ServerSample` table, kept 7 days). It
 reads Linux's own files (`/proc/stat`, each process's `/proc/<pid>/stat`,
-`/proc/meminfo`, `/proc/loadavg`), so nothing is installed. A sample that
+`/proc/meminfo`, `/proc/loadavg`), so nothing is installed. Each sample also
+holds whether new jobs were held, how many jobs ran, the requests to shops
+in the minute and the website's pages from the minute before. A sample that
 fails never stops the reader. With no sample for 5 minutes the page says
 the reader is not running.
 
 - **Busy**: the processors at 90% or more in every sample for 15 minutes.
   The owner gets the push and email every crawl warning uses (at most once a
   day), and Admin home says so under Needs you until it calms down.
-- **Easing off**: from a sample at 85% the reader starts one shop read at a
-  time, and goes back to its usual number under 60%, so the website keeps
-  time for visitors. The page says when it is easing off.
+- **Website speed** (`catalogue/response_times.py`,
+  `web.middleware.ResponseTimeMiddleware`): each website process times every
+  page it makes (Admin, static files and pictures left out), adds them up a
+  minute at a time in its own memory and, when the minute is over, appends
+  one line to `response-times.log` in `RIPRAPTOR_CACHE_DIR`. No page waits on
+  the database for it. The reader collects the lines each minute. The time is
+  the website's own work on a page; time spent waiting for a free website
+  process is not in it.
 - The reader runs with `CPUWeight=20` as well as `Nice=10`
   (`deploy/ripraptor-worker.service`): when both want the processors, the
   website gets about five times the reader's share. With them free, the
   reader still uses them all.
+
+## Crawler settings
+
+**Crawler settings** (Admin home, under Shops;
+`catalogue.admin.CrawlerSettingsAdmin`, the `CrawlerSettings` row) holds the
+owner's controls for the background reader. The reader reads them again
+every 15 seconds, so a change works without a restart or a code change. The
+owner, 26 Nov 2026: the server ran at about 90% while the shops were read
+and 38% with reading paused, and "website responsiveness must take priority
+over background scraping activity".
+
+| Setting | Default | What it does |
+| --- | --- | --- |
+| Most jobs at once | 1 | Shop reads, stock checks, pre-order looks, the stockist finder and release scans running together. Never more than the reader's threads (`RIPRAPTOR_WORKER_THREADS`, 4). |
+| Wait between jobs | 5 s | After a job starts or ends, the next waits this long. |
+| Hold new jobs at | 75% | At this average or over, no new job starts and nothing is planned. Jobs already running finish as usual. |
+| Start again under | 55% | Held jobs start again below this. Must be lower than the hold figure. |
+| Measured over | 60 s | The window the processors are averaged over. They are looked at every 5 seconds (`server_health.CpuMeter`, one small read of `/proc/stat`). |
+| Slow running jobs at | 90% | At this or over, every request a running job makes waits the next setting longer. |
+| Slow down by | 2 s | 0 never slows them. |
+| Read every shop at least every | 60 min | A shop set to be read less often is read this often anyway. 0 lets each shop's own Read every decide. |
+
+- **Priorities**: each shop has a Reading priority (High, Normal, Low;
+  editable in the Retailers list beside Read every). Due reads go eBay
+  first, then High, Normal and Low, the most overdue first in each; a
+  shop's checks and pre-order looks are weighted the same way. Each product
+  has a Stock check priority (on its page, or the Stock checks actions in
+  the Products list): High checks each of its listings every 10 minutes, as
+  the most popular products are; Low leaves it to its shops' whole reads.
+- **Taking turns**: with one job at a time, a whole-shop read is followed
+  by a short job (a check or a pre-order look) when one is waiting, so
+  neither kind waits for hours behind the other. With more, three reads at
+  most run at once, two of website shops, and one slot is kept for checks.
+- **No overlaps**: one job per shop, one reader (`/tmp/ripraptor-worker.lock`),
+  and the import lock between the reader's reads and the cron commands, as
+  before. A command reading shops outside the reader (the delivery check)
+  leaves a note beside the import lock while it runs
+  (`catalogue/crawl_gate.py`, `ripraptor-reading.<name>` with its process
+  id): the reader counts it as a job, and the command waits while new jobs
+  are held and stops at Pause all. Claude's page reads for Things to check
+  wait the same way. A note left by a command that died is removed.
+- **Pause all and Resume all** are beside the page's title, the same switch
+  as on Crawl health; each shop's own Pause and Resume stay on Crawl health.
+  The page's Now panel says what the reader is doing from its last heartbeat
+  (every 30 seconds): the processors over the window, since when new jobs
+  have been held, whether running jobs are slowed and every job running.
+  Crawl health and Server health say so too.
+
+With one job at a time the shops may take longer than an hour to go round
+on a busy day: Crawl health shows any that are late. Raising Most jobs at
+once to 2 reads them sooner and takes more of the processor.
 
 ## Shop stock
 
@@ -2816,6 +2878,15 @@ it, then as root:
 ```sh
 curl -fsSL https://raw.githubusercontent.com/Dimondb1/cardthing/claude/compassionate-edison-aot3li/deploy/install.sh | sudo bash -s ripraptor.com
 ```
+
+The address is checked before anything changes: letters, numbers, dots and
+hyphens only. On 26 Nov 2026 an update typed with a stray `~` after the
+address wrote Caddy's settings for `ripraptor.com~`, and every visitor got a
+blank page until `/etc/caddy/Caddyfile` was mended by hand; a mistyped
+address now stops the update with a plain message. The website starts
+gunicorn with `--no-control-socket`: gunicorn 25.1 added a control socket,
+made in a folder the site may not write, which logged "Control server error:
+Permission denied" at every start.
 
 `deploy/install.sh` installs Python and Caddy, clones the code to
 `/srv/ripraptor`, writes `.env` with a generated secret key, migrates,

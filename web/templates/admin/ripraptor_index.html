@@ -85,7 +85,8 @@
       <h2 id="rr-shops">Shops</h2>
       <ul>
         <li><a href="{% url 'crawl' %}" class="section">Crawl health</a><span class="rr-note">Whether each shop is being read, with buttons to read one now or pause reading</span></li>
-        <li><a href="{% url 'server_health' %}" class="section">Server health</a><span class="rr-note">How busy the server's processors are, what is using them, the last 24 hours, memory and disk</span></li>
+        <li><a href="{% url 'server_health' %}" class="section">Server health</a><span class="rr-note">How busy the server's processors are, what is using them, and the last 24 hours of the processors, the website's speed and the shop reading</span></li>
+        <li><a href="{% url 'admin:catalogue_crawlersettings_changelist' %}" class="section">Crawler settings</a><span class="rr-note">How many shop reads run at once, when they are held for a busy server, and Pause all</span></li>
         <li><a href="{% url 'admin:catalogue_retailer_changelist' %}" class="section">Shops</a><span class="rr-note">Every shop's address, delivery charges and settings</span></li>
         <li><a href="{% url 'shop_stock' %}" class="section">Shop stock</a><span class="rr-note">Every product a shop lists, with its price, whether it is in stock and when it was last checked</span></li>
         <li><a href="{% url 'add_shops' %}" class="section">Add shops</a><span class="rr-note">Paste shop addresses: each is checked and added if it passes</span></li>

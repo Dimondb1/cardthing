@@ -12,14 +12,28 @@ at a time. There is no job table. Every minute plan() works out
 what is due from the shops and listings themselves, so a crash or a deploy loses only the jobs that
 were running.
 
+The crawler controls (CrawlerSettings, edited in Admin and read again every SETTINGS_EVERY, so a change needs no
+restart). The owner, 26 Nov 2026: the server ran at about 90% while the shops were read, 38% with reading paused, and
+"website responsiveness must take priority over background scraping activity":
+- at most "Most jobs at once" jobs of any kind run together (1 unless changed), a command reading shops outside the
+  reader counting as one (crawl_gate.reading); the limits below then share those out;
+- the processors are looked at every turn (server_health.CpuMeter) and averaged over the settings' window. At the hold
+  figure or over, no new job starts and nothing is planned; the jobs running finish as usual. Under the start-again
+  figure, the reader plans afresh and goes on;
+- at the slow-down figure or over, every request of a running job waits a little longer (Politeness.extra);
+- after a job starts or ends, the next waits the settings' gap;
+- shops of High reading priority are read first and Low ones last; a product of High stock check priority is checked
+  as the most popular are, and one of Low only by its shops' whole reads;
+- with one job at a time, reads and the short jobs (checks, pre-order looks) take turns, so neither waits for hours.
+
 Politeness, so a small shop never notices it:
 - one job at a time per shop;
 - each shop has a token bucket (Shopify 1 request a second with a burst of 3, website shops one every
   2 seconds, feeds one every 10 seconds) and every request also takes a token from a bucket of 2 a
   second for the whole process;
-- at most 3 whole-shop reads run at once, and at most 2 of website shops, so one thread is always
-  free for probes (until 24 Nov 2026 2 and 1, which could not read every shop each hour: the owner, "all
-  stores must update at least every hour");
+- at most 3 whole-shop reads run at once (and never all the jobs allowed, when more than one is), and at most 2 of
+  website shops, so a slot is always free for probes (until 24 Nov 2026 2 and 1, which could not read every shop each
+  hour: the owner, "all stores must update at least every hour");
 - Shopify product pages are read 0.5 seconds apart on top of that.
 
 Safety:
@@ -66,8 +80,8 @@ from django.db import OperationalError, connections
 from django.db.models import Q
 from django.utils import timezone
 
-from . import checks, crawl, finder, heat, importers, notify, probe, releases, server_health, worklog
-from .models import ImportRun, Listing, Retailer, WorkerState
+from . import checks, crawl, crawl_gate, finder, heat, importers, notify, probe, releases, response_times, server_health, worklog
+from .models import CrawlerSettings, ImportRun, Listing, ReadPriority, Retailer, WorkerState
 
 logger = logging.getLogger(__name__)
 
@@ -78,6 +92,9 @@ THREADS = 4
 TICK_SECONDS = 5
 PLAN_EVERY = timedelta(seconds=60)
 BEAT_EVERY = timedelta(seconds=30)
+SETTINGS_EVERY = timedelta(seconds=15)   # the crawler settings are read again this often
+# A shop's or a product's priority as a weight on its jobs' place in the queue.
+PRIORITY_WEIGHTS = {ReadPriority.HIGH: 2.0, ReadPriority.NORMAL: 1.0, ReadPriority.LOW: 0.5}
 
 SHOP_READ = "shop_read"
 PROBE = "probe"
@@ -249,8 +266,10 @@ def last_asked(retailer_id):
 class Politeness:
     """The buckets, and the fetch wrapper every request of the worker goes through."""
 
-    def __init__(self, clock, sleep):
+    def __init__(self, clock, sleep, extra=None):
         self.clock, self.sleep = clock, sleep
+        # Seconds more each request waits now (Worker.slow_down: the processors over the crawler settings' limit).
+        self.extra = extra
         self.everyone = TokenBucket(*GLOBAL_RATE, clock)
         self.shops = {}
         self.noted = {}
@@ -275,6 +294,9 @@ class Politeness:
                 if not wait:
                     break
                 self.sleep(wait)
+        extra = self.extra() if self.extra else 0
+        if extra > 0:
+            self.sleep(extra)
         with self.lock:
             self.requests.append(self.clock())
             now = time.monotonic()
@@ -297,6 +319,12 @@ class Politeness:
             while self.requests and self.requests[0] < since:
                 self.requests.popleft()
             return len(self.requests)
+
+    def requests_since(self, seconds):
+        """Requests made in the last ``seconds``."""
+        with self.lock:
+            since = self.clock() - seconds
+            return sum(1 for at in self.requests if at >= since)
 
 
 class ImportLock:
@@ -446,6 +474,7 @@ class Task:
     last_read_seconds: int | None = None   # how long the shop's last healthy read took
     late: bool = False   # a pulse past PULSE_LATE, which goes before a probe of the same shop
     source: str = ""   # the release source a release scan reads
+    rank: int = ReadPriority.NORMAL   # a read's shop's reading priority: High ones go first
 
 
 @dataclass
@@ -542,7 +571,7 @@ def megabytes(size):
 class Worker:
     def __init__(self, clock=None, fetch=None, sleep=None, threads=THREADS, executor=None, import_lock=None,
                  page_pause=None, release_fetch=None, warm=False, memory=None, limit=None,
-                 free=None, exit=None, sampler=None):
+                 free=None, exit=None, sampler=None, meter=None):
         self.clock = clock or timezone.now
         self.sleep = sleep or time.sleep
         self.fetch = fetch
@@ -550,7 +579,7 @@ class Worker:
         self.threads = max(1, threads)
         self.executor = executor
         self.page_pause = importers.PAGE_PAUSE if page_pause is None else page_pause
-        self.politeness = Politeness(lambda: self.clock().timestamp(), self.sleep)
+        self.politeness = Politeness(lambda: self.clock().timestamp(), self.sleep, extra=self.slow_down)
         self.import_lock = ImportLock(import_lock or IMPORT_LOCK)
         self.lock = threading.Lock()
         self.running = {}   # retailer id -> Job
@@ -588,27 +617,63 @@ class Worker:
         self.freed_after = 0       # jobs done at the last hand back
         self.draining_since = None  # when it stopped starting jobs to restart
         # Server health (catalogue/server_health.py): a sample of the processors, memory and disk a minute, kept for
-        # the Admin page; while the processors are busy, one shop read at a time. run_worker passes a Sampler.
+        # the Admin page. run_worker passes a Sampler.
         self.sampler = sampler
         self.last_sample = None
         self.last_prune = None
-        self.easing = False
+        # The crawler controls (CrawlerSettings, read again every SETTINGS_EVERY): the processors looked at every turn
+        # by ``meter`` (run_worker passes a server_health.CpuMeter; without one they are never measured, so nothing is
+        # held or slowed), their average over the settings' window, since when new jobs are held, whether running jobs
+        # are slowed, and when the last job started and ended, for the gap between jobs.
+        self.meter = meter
+        self.controls = None
+        self.controls_at = None
+        self.cpu = None
+        self.held_since = None
+        self.slowed = False
+        self.last_start = None
+        self.last_end = None
+        self.last_kind = ""
 
     # Planning ---------------------------------------------------------------------------------
+
+    def settings_now(self, now=None):
+        """The crawler settings, read again from the database every SETTINGS_EVERY. A change is logged. A database
+        that cannot be read keeps the settings read last (the defaults before any)."""
+        now = now or self.clock()
+        if self.controls is not None and self.controls_at is not None and timedelta(0) <= now - self.controls_at < SETTINGS_EVERY:
+            return self.controls
+        try:
+            fresh = CrawlerSettings.current()
+        except Exception:  # noqa: BLE001 - the settings read last still hold
+            logger.exception("Could not read the crawler settings")
+            fresh = self.controls or CrawlerSettings()
+        if self.controls is not None and fresh.summary() != self.controls.summary():
+            logger.info("Crawler settings changed: %s", fresh.summary())
+        self.controls, self.controls_at = fresh, now
+        return fresh
+
+    def job_limit(self):
+        """The most jobs running at once: the settings' figure, never more than the reader's threads."""
+        return max(1, min(self.settings_now().max_jobs, self.threads))
 
     def max_reads(self):
         if self.limit and self.memory_now and self.memory_now > self.limit * MEMORY_ONE_READ:
             return 1
-        # The processors busy (server_health.easing): one read at a time, so the website keeps time for visitors.
-        if self.easing:
-            return 1
-        return max(1, min(MAX_READS, self.threads - 1))
+        return max(1, min(MAX_READS, self.job_limit() - 1))
+
+    def slow_down(self):
+        """Seconds more each request waits now: the settings' slow-down while the processors are over its figure."""
+        return self.controls.slow_seconds if self.slowed and self.controls is not None else 0
 
     def plan(self, now):
         """Every job due now: the due reads, then the rest highest priority first. A shop whose read has room
         to start is neither probed nor pulsed. Reads nothing from any shop."""
         if crawl.all_paused():
             worklog.note_plan({"at": now.isoformat(), "paused": True})
+            return []
+        if self.held_since is not None:
+            worklog.note_plan({"at": now.isoformat(), "held": True, "cpu": self.cpu})
             return []
         with self.lock:
             busy = {pk: job.task for pk, job in self.running.items()}
@@ -623,11 +688,13 @@ class Worker:
                 continue
             overdue = minutes(now - shop.next_read_at) if shop.next_read_at else NEVER_READ_MINUTES
             reads.append(Task(SHOP_READ, shop.pk, shop.source_type, WEIGHTS[SHOP_READ] * max(1.0, overdue),
-                              f"Read {shop.name}"[:120], last_read_seconds=shop.last_read_seconds))
+                              f"Read {shop.name}"[:120], last_read_seconds=shop.last_read_seconds,
+                              rank=shop.read_priority))
         # eBay's hourly search goes first: one read of a few minutes an hour, and with eBay refusing its item lookup,
         # the only way an eBay price is kept fresh. Behind shops long overdue it waited about four hours at a time (the
-        # owner's eBay log, 23 Nov 2026: 1,663 of 2,076 eBay items in stock older than a day).
-        reads.sort(key=lambda t: (t.source_type != Retailer.Source.EBAY, -t.priority))
+        # owner's eBay log, 23 Nov 2026: 1,663 of 2,076 eBay items in stock older than a day). Then the shops of High
+        # reading priority, then Normal, then Low (Crawler settings), the most overdue first in each.
+        reads.sort(key=lambda t: (t.source_type != Retailer.Source.EBAY, -t.rank, -t.priority))
         # The reads there is room for now.
         chosen = []
         for task in reads:
@@ -714,15 +781,16 @@ class Worker:
     def plan_pulses(self, now, skip):
         """A look at the collection list of each Shopify shop due one (Retailer.pulse_due), in one query."""
         tasks = []
-        for pk, name, polled, has_list in Retailer.pulse_due(now).values_list(
-            "pk", "name", "collections_polled_at", "collections_ok",
+        for pk, name, polled, has_list, rank in Retailer.pulse_due(now).values_list(
+            "pk", "name", "collections_polled_at", "collections_ok", "read_priority",
         ):
             if pk in skip:
                 continue
             overdue = minutes(now - polled - Retailer.PULSE_EVERY) if polled else NEVER_READ_MINUTES
             # A shop without a collection list is due weekly, so it is never late in this sense.
             late = polled is None or (has_list is not False and now - polled - Retailer.PULSE_EVERY >= PULSE_LATE)
-            tasks.append(Task(PULSE, pk, Retailer.Source.SHOPIFY, WEIGHTS[PULSE] * max(1.0, overdue),
+            tasks.append(Task(PULSE, pk, Retailer.Source.SHOPIFY,
+                              WEIGHTS[PULSE] * max(1.0, overdue) * PRIORITY_WEIGHTS.get(rank, 1.0),
                               f"Pre-order pulse {name}"[:120], late=late))
         return tasks
 
@@ -739,22 +807,26 @@ class Worker:
             .exclude(retailer__source_type__in=probe.NEVER_CHECKED)
             .exclude(retailer_id__in=skip)
             .filter(Q(retailer__backoff_until__isnull=True) | Q(retailer__backoff_until__lte=now))
+            .exclude(product__check_priority=ReadPriority.LOW)
             .values_list("pk", "product_id", "retailer_id", "retailer__source_type", "retailer__name", "last_checked", "url",
-                         "availability")
+                         "availability", "product__check_priority", "retailer__read_priority")
         )
-        hot, warm = [], []
+        hot, warm, ranks = [], [], {}
         for row in rows:
-            points = scores.get(row[1], 0)
+            ranks[row[2]] = row[9]
+            # A product of High stock check priority is checked as the most popular are, whatever its heat.
+            high = row[8] == ReadPriority.HIGH
+            points = max(scores.get(row[1], 0), heat.HOT) if high else scores.get(row[1], 0)
             if points >= heat.HOT:
                 hot.append((points, row))
             elif points >= heat.WARM:
                 warm.append((points, row))
-        hot.sort(key=lambda item: (-item[0], item[1][5]))
+        hot.sort(key=lambda item: (item[1][8] != ReadPriority.HIGH, -item[0], item[1][5]))
         warm += hot[heat.HOT_CAP:]
         hot = hot[:heat.HOT_CAP]
         by_shop = {}
         for tier, every, items in (("hot", heat.HOT_EVERY, hot), ("warm", heat.WARM_EVERY, warm)):
-            for _points, (pk, _product, retailer_id, source_type, name, checked, _url, _availability) in items:
+            for _points, (pk, _product, retailer_id, source_type, name, checked, *_rest) in items:
                 wait = every
                 overdue = now - checked - wait
                 if overdue < timedelta(0):
@@ -770,7 +842,8 @@ class Worker:
             tier = items[0][0]
             worst = max(overdue for t, _c, overdue, _pk in items if t == tier)
             tasks.append(Task(
-                PROBE, retailer_id, source_type, WEIGHTS[tier] * max(1.0, minutes(worst)),
+                PROBE, retailer_id, source_type,
+                WEIGHTS[tier] * max(1.0, minutes(worst)) * PRIORITY_WEIGHTS.get(ranks.get(retailer_id), 1.0),
                 f"Check {len(items)} at {name}"[:120], tier=tier, listings=[pk for *_rest, pk in items],
             ))
         return tasks
@@ -792,23 +865,46 @@ class Worker:
 
     # Dispatch ---------------------------------------------------------------------------------
 
-    def dispatch(self, now):
-        """Start every queued job there is room for. Returns how many started."""
+    def in_turn(self):
+        """The queue in the order to try it. With one job at a time, a read is followed by a short job (a check, a
+        pre-order look) when one is waiting, so neither kind waits for hours behind the other."""
+        if self.job_limit() == 1 and self.last_kind == SHOP_READ:
+            return [t for t in self.queue if t.kind != SHOP_READ] + [t for t in self.queue if t.kind == SHOP_READ]
+        return list(self.queue)
+
+    def too_soon(self, now):
+        """True while the settings' gap since the last job started or ended has not passed."""
+        gap = timedelta(seconds=self.settings_now(now).job_gap_seconds)
+        last = max((at for at in (self.last_start, self.last_end) if at is not None), default=None)
+        return bool(gap) and last is not None and now - last < gap
+
+    def dispatch(self, now, spaced=True):
+        """Start every queued job there is room for: none while new jobs are held for the processors, no more than
+        the settings allow at once, and with ``spaced`` (not in run_once), one at most each gap. Returns how many
+        started."""
         if not self.queue or self.draining_since is not None:
             return 0
         if crawl.all_paused():
             self.queue = []
             return 0
+        if self.held_since is not None:
+            return 0
+        limit = self.job_limit()
+        # A command reading shops outside the reader (the delivery check) is a job running too.
+        elsewhere = len(crawl_gate.running_elsewhere())
         started = 0
-        for task in list(self.queue):
+        for task in self.in_turn():
             with self.lock:
-                if len(self.running) >= self.threads:
+                running = len(self.running) + elsewhere
+                if running >= limit:
                     break
                 if task.retailer_id in self.running:
                     continue
                 reads = [j.task for j in self.running.values() if j.task.kind == SHOP_READ]
-            if task.kind in (FINDER, RELEASE_SCAN) and self.threads > 1 and len(self.running) >= self.threads - 1:
-                # One thread is always left for probes and pulses.
+            if spaced and self.too_soon(now):
+                break
+            if task.kind in (FINDER, RELEASE_SCAN) and limit > 1 and running >= limit - 1:
+                # One slot is always left for probes and pulses.
                 continue
             if task.kind == SHOP_READ:
                 if len(reads) >= self.max_reads():
@@ -877,6 +973,7 @@ class Worker:
         job = Job(task, now, now + deadline_for(task))
         with self.lock:
             self.running[task.retailer_id] = job
+            self.last_start, self.last_kind = now, task.kind
             if task.kind == FINDER:
                 self.last_finder = now
         self.executor.submit(self.run_job, job)
@@ -911,6 +1008,7 @@ class Worker:
                 self.running.pop(task.retailer_id, None)
                 self.jobs_done += 1
                 self.last_job = task.label[:120]
+                self.last_end = self.clock()
             if task.kind == SHOP_READ:
                 self.import_lock.release()
                 if self.limit:
@@ -1084,6 +1182,8 @@ class Worker:
                 {"retailer": pk, "since": job.started.isoformat()}
                 for pk, job in self.running.items() if job.task.kind == SHOP_READ
             ]
+            running = [{"label": job.task.label, "since": job.started.isoformat(),
+                        "minutes": int(minutes(now - job.started))} for job in self.running.values()]
             done, last = self.jobs_done, self.last_job
         try:
             WorkerState.objects.update_or_create(pk=1, defaults={
@@ -1091,6 +1191,8 @@ class Worker:
                 "requests_last_hour": self.politeness.requests_last_hour(),
                 "errors_last_hour": self.errors_last_hour(now),
                 "memory_mb": megabytes(self.memory_now), "memory_limit_mb": megabytes(self.limit),
+                "held_since": self.held_since, "cpu_now": None if self.cpu is None else round(self.cpu, 1),
+                "slowed": self.slowed, "running": running,
             })
         except Exception:  # noqa: BLE001 - a busy database must not stop the watchdog
             logger.exception("Could not write the heartbeat")
@@ -1188,9 +1290,10 @@ class Worker:
             self.beat(now)
         self.check_deadlines(now)
         self.keep_memory_down(now)
+        self.watch_processors(now)
         self.keep_server_sampled(now)
         try:
-            if self.last_plan is None or now - self.last_plan >= PLAN_EVERY:
+            if self.held_since is None and (self.last_plan is None or now - self.last_plan >= PLAN_EVERY):
                 self.last_plan = now
                 self.queue = self.plan(now)
                 planned = True
@@ -1207,10 +1310,43 @@ class Worker:
         self.keep_visits_tidy(now)
         self.keep_shops_checked(now)
 
+    def watch_processors(self, now):
+        """Every turn: how busy the processors are over the settings' window (the meter), whether new jobs are held
+        (from the hold figure until under the start-again figure; the jobs running finish as usual) and whether
+        running jobs are slowed. Never stops the loop."""
+        if self.meter is None:
+            return
+        controls = self.settings_now(now)
+        try:
+            self.meter.look(controls.cpu_window_seconds)
+            cpu = self.meter.average(controls.cpu_window_seconds)
+        except Exception:  # noqa: BLE001 - a look is never worth stopping the reader for
+            logger.exception("Could not look at the processors")
+            return
+        if cpu is None:
+            return
+        self.cpu = cpu
+        if self.held_since is None and cpu >= controls.cpu_pause_percent:
+            self.held_since = now
+            with self.lock:
+                running = len(self.running)
+            logger.warning("Processors %d%% busy over %d seconds: no new jobs until under %d%%; the %d running finish "
+                           "first", round(cpu), controls.cpu_window_seconds, controls.cpu_resume_percent, running)
+        elif self.held_since is not None and cpu < controls.cpu_resume_percent:
+            logger.info("Processors %d%% busy: jobs start again after %d minutes held", round(cpu),
+                        int(minutes(now - self.held_since)))
+            self.held_since = None
+            self.last_plan = None   # what was due may have changed while held: plan afresh at once
+        slowed = cpu >= controls.cpu_max_percent and controls.slow_seconds > 0
+        if slowed != self.slowed:
+            logger.info("Processors %d%% busy: running jobs %s", round(cpu),
+                        f"slowed by {controls.slow_seconds} seconds a request" if slowed else "at their usual pace")
+        self.slowed = slowed
+
     def keep_server_sampled(self, now):
-        """Once a minute, a sample of the server (server_health.Sampler) for the Server health page; whether to ease
-        off; and, when the processors have been busy for long, a notice to the owner. Old samples go hourly. Never
-        stops the loop."""
+        """Once a minute, a sample of the server (server_health.Sampler) for the Server health page, with what the
+        reader was doing and how quickly the website served its pages (response_times); and, when the processors have
+        been busy for long, a notice to the owner. Old samples go hourly. Never stops the loop."""
         if self.sampler is None or (self.last_sample is not None and now - self.last_sample < server_health.SAMPLE_EVERY):
             return
         self.last_sample = now
@@ -1218,12 +1354,11 @@ class Worker:
             reading = self.sampler.take()
             if reading is None:
                 return
-            eased = server_health.easing(reading.cpu, self.easing)
-            if eased != self.easing:
-                logger.warning("Processors %s%% busy: %s", f"{reading.cpu:.0f}",
-                               "one shop read at a time" if eased else "back to the usual number of shop reads")
-            self.easing = eased
-            server_health.save(reading, now, eased)
+            with self.lock:
+                jobs = len(self.running)
+            server_health.save(reading, now, held=self.held_since is not None, jobs=jobs,
+                               shop_requests=self.politeness.requests_since(server_health.SAMPLE_EVERY.total_seconds()),
+                               pages=response_times.collect())
             if self.last_prune is None or now - self.last_prune >= server_health.PRUNE_EVERY:
                 self.last_prune = now
                 server_health.prune(now)
@@ -1347,13 +1482,14 @@ class Worker:
             logger.exception("Could not tell the owner about a problem")
 
     def run_once(self):
-        """One planning pass, every job run to the end in this thread, then a heartbeat. For tests and checks."""
+        """One planning pass, every job run to the end in this thread, one after another without the settings' gap,
+        then a heartbeat. For tests and checks."""
         if self.executor is None:
             self.executor = InlineExecutor()
         now = self.clock()
         self.last_plan = now
         self.queue = self.plan(now)
-        while self.dispatch(self.clock()):
+        while self.dispatch(self.clock(), spaced=False):
             pass
         self.notify_safely(self.clock())
         self.beat(self.clock())

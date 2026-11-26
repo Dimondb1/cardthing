@@ -1,0 +1,14 @@
+{# One chart of the Server health page (web/server_health.py chart): the line stretches to the width, the figures are text beside and under it so they stay readable on a phone, shaded slots are the times new jobs were held, and each ten minutes has a hover target with its figures. #}
+<div class="plot">
+  <div class="y-axis" aria-hidden="true"><span>{{ chart.top }}</span><span>{{ chart.middle }}</span><span>0</span></div>
+  <svg viewBox="0 0 {{ chart.width }} 100" preserveAspectRatio="none" role="img" aria-labelledby="{{ title_id }}">
+    {% for x in chart.shaded %}<rect class="held" x="{{ x }}" y="0" width="1" height="100"/>{% endfor %}
+    <line class="grid" x1="0" x2="{{ chart.width }}" y1="0" y2="0" vector-effect="non-scaling-stroke"/>
+    <line class="grid" x1="0" x2="{{ chart.width }}" y1="50" y2="50" vector-effect="non-scaling-stroke"/>
+    <line class="grid" x1="0" x2="{{ chart.width }}" y1="100" y2="100" vector-effect="non-scaling-stroke"/>
+    {% if chart.line_y is not None %}<line class="busy-line" x1="0" x2="{{ chart.width }}" y1="{{ chart.line_y }}" y2="{{ chart.line_y }}" vector-effect="non-scaling-stroke"/>{% endif %}
+    {% for points in chart.lines %}<polyline class="line" points="{{ points }}" vector-effect="non-scaling-stroke"/>{% endfor %}
+    {% for target in chart.targets %}<rect class="hit" x="{{ target.x }}" y="0" width="1" height="100"><title>{{ target.label }}</title></rect>{% endfor %}
+  </svg>
+  <div class="x-axis" aria-hidden="true"><span>24 hours ago</span><span>12 hours ago</span><span>Now</span></div>
+</div>

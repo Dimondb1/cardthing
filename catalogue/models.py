@@ -248,6 +248,15 @@ class ProductQuerySet(models.QuerySet):
         )
 
 
+class ReadPriority(models.IntegerChoices):
+    """How much the background reader favours a shop or a product (catalogue/worker.py), set in Admin. The owner's
+    brief of 26 Nov 2026: "product and retailer prioritisation"."""
+
+    HIGH = 3, "High"
+    NORMAL = 2, "Normal"
+    LOW = 1, "Low"
+
+
 class Product(models.Model):
     class Type(models.TextChoices):
         BOOSTER_BOX = "booster_box", "Booster box"
@@ -307,6 +316,11 @@ class Product(models.Model):
         null=True, blank=True, help_text="Leave empty to use the set's release date."
     )
     is_active = models.BooleanField("show on site", default=True)
+    check_priority = models.PositiveSmallIntegerField(
+        "stock check priority", choices=ReadPriority.choices, default=ReadPriority.NORMAL,
+        help_text="High: each shop's listing of it is checked every 10 minutes, as the most popular products are. "
+        "Normal: as often as its popularity says. Low: only when its shops are read in full, never on its own.",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     search_text = models.TextField(editable=False, blank=True)
@@ -617,9 +631,14 @@ class Retailer(models.Model):
     read_every_minutes = models.PositiveIntegerField(
         "read every (minutes)",
         default=60,
-        help_text="How often to read this shop's prices, at most 60: every shop is read at least every hour, "
-        "and a longer setting counts as 60. A shop that takes a long time to read is read less often: never more "
-        "than a third of the time.",
+        help_text="How often to read this shop's prices. Crawler settings says how long any shop may go unread (an "
+        "hour unless changed there): a longer setting here counts as that. A shop that takes a long time to read is "
+        "read less often: never more than a third of the time.",
+    )
+    read_priority = models.PositiveSmallIntegerField(
+        "reading priority", choices=ReadPriority.choices, default=ReadPriority.NORMAL,
+        help_text="When several shops are due at once, High ones are read first and Low ones last, and their single "
+        "listings are checked in the same order. eBay's hourly search always goes first.",
     )
     next_read_at = models.DateTimeField("next read", null=True, blank=True, db_index=True)
     last_read_seconds = models.PositiveIntegerField("last read took (seconds)", null=True, blank=True)
@@ -715,14 +734,20 @@ class Retailer(models.Model):
             .order_by(F("collections_polled_at").asc(nulls_first=True), "name")
         )
 
-    # Every shop is read at least this often, whatever its setting says (the owner, 24 Nov 2026: "all stores must
-    # update at least every hour").
+    # Every shop is read at least this often unless Crawler settings says otherwise (the owner, 24 Nov 2026: "all
+    # stores must update at least every hour").
     READ_AT_LEAST_EVERY = 60
+
+    def read_every(self, longest):
+        """How often the shop is read with ``longest`` as Crawler settings' longest gap (none when 0): its setting, never
+        longer. For a list of shops, read the settings once and ask each shop this."""
+        own = self.read_every_minutes or self.READ_AT_LEAST_EVERY
+        return min(own, longest) if longest else own
 
     @property
     def every_minutes(self):
-        """How often the shop is read: its setting, never more than READ_AT_LEAST_EVERY."""
-        return min(self.read_every_minutes or self.READ_AT_LEAST_EVERY, self.READ_AT_LEAST_EVERY)
+        """How often the shop is read (read_every with the settings now). One query."""
+        return self.read_every(CrawlerSettings.current().read_at_least_every_minutes)
 
     def cadence_for(self, finished, seconds, since=None):
         """When to read next after a read that ended at ``finished`` and took ``seconds``.
@@ -2161,8 +2186,16 @@ class ServerSample(models.Model):
     memory_total_mb = models.PositiveIntegerField(default=0)
     disk_used_percent = models.PositiveSmallIntegerField(default=0)
     programs = models.JSONField(default=dict, blank=True, help_text="{program: percent of all the processors}")
-    easing = models.BooleanField("reader easing off", default=False,
-                                 help_text="Whether the background reader was reading one shop at a time.")
+    held = models.BooleanField("new jobs held", default=False,
+                               help_text="Whether the background reader was starting no new jobs, the processors "
+                                         "being over Crawler settings' limit.")
+    jobs = models.PositiveSmallIntegerField("jobs running", default=0)
+    shop_requests = models.PositiveIntegerField("requests to shops in the minute", default=0)
+    pages = models.PositiveIntegerField("pages served", default=0,
+                                        help_text="Pages the website served in the minute before, Admin left out.")
+    page_ms = models.PositiveIntegerField("average time to serve a page (ms)", null=True, blank=True)
+    page_ms_slowest = models.PositiveIntegerField("slowest page (ms)", null=True, blank=True)
+    pages_slow = models.PositiveIntegerField("pages over a second", default=0)
 
     class Meta:
         ordering = ["-at"]
@@ -2203,6 +2236,13 @@ class WorkerState(models.Model):
     # What eBay last said was left of the day's allowances, {"searches", "lookups", "reset", "asked_at"}, written
     # whenever a run or a check asks (ebay.allowances), for the Crawl health page.
     ebay_usage = models.JSONField(default=dict, blank=True)
+    # The crawler controls (CrawlerSettings), written with each heartbeat: since when new jobs have been held for the
+    # processors (empty while they are not), the processors' average over the settings' window, whether running jobs
+    # are slowed, and every job running, as {"label", "since"}.
+    held_since = models.DateTimeField("new jobs held since", null=True, blank=True)
+    cpu_now = models.FloatField("processors busy over the window (%)", null=True, blank=True)
+    slowed = models.BooleanField("running jobs slowed", default=False)
+    running = models.JSONField(default=list, blank=True)
 
     class Meta:
         verbose_name = "background reader"
@@ -2236,6 +2276,94 @@ class WorkerState(models.Model):
         """True when the worker's heartbeat is younger than ``minutes``: the cron fallback then stands aside."""
         now = now or timezone.now()
         return cls.objects.filter(pk=1, heartbeat_at__gt=now - timedelta(minutes=minutes)).exists()
+
+
+
+class CrawlerSettings(models.Model):
+    """The one row of the owner's controls for the background reader (catalogue/worker.py), edited in Admin and read by
+    the reader every few seconds, so a change works within seconds, with no restart. The owner, 26 Nov 2026: the
+    server ran at about 90% while the shops were read and 38% with reading paused, and "website responsiveness must
+    take priority over background scraping activity".
+
+    - At most ``max_jobs`` jobs (shop reads, stock checks, pre-order looks, the stockist finder, release scans) run at
+      once. A scheduled command reading shops (the delivery check) counts as one.
+    - The processors are measured every few seconds and averaged over ``cpu_window_seconds``. At ``cpu_pause_percent``
+      or over, no new job starts; the jobs running finish as usual. Under ``cpu_resume_percent``, jobs start again.
+    - At ``cpu_max_percent`` or over, each request a running job makes waits ``slow_seconds`` more, so they use less.
+    - After a job starts or ends, the next waits ``job_gap_seconds``.
+    - A shop goes unread for at most ``read_at_least_every_minutes`` (0: as long as its own setting says).
+    """
+
+    max_jobs = models.PositiveSmallIntegerField(
+        "Most jobs at once", default=1, validators=[MinValueValidator(1), MaxValueValidator(8)],
+        help_text="Shop reads and stock checks running at the same time. 1 is gentlest on the website; more read the "
+                  "shops sooner but take more of the processor. Never more than the reader's threads (4 unless set).",
+    )
+    cpu_pause_percent = models.PositiveSmallIntegerField(
+        "Hold new jobs at (% busy)", default=75, validators=[MinValueValidator(10), MaxValueValidator(100)],
+        help_text="When the processors are this busy or more, on average over the time below, no new job starts. "
+                  "Jobs already running finish as usual.",
+    )
+    cpu_resume_percent = models.PositiveSmallIntegerField(
+        "Start again under (% busy)", default=55, validators=[MinValueValidator(5), MaxValueValidator(95)],
+        help_text="Held jobs start again once the processors are less busy than this. Keep it well under the figure "
+                  "above, so jobs do not stop and start every few seconds.",
+    )
+    cpu_window_seconds = models.PositiveSmallIntegerField(
+        "Measured over (seconds)", default=60, validators=[MinValueValidator(10), MaxValueValidator(600)],
+        help_text="How long the processors' use is averaged over before it counts. Shorter reacts sooner; longer "
+                  "ignores a moment's spike.",
+    )
+    cpu_max_percent = models.PositiveSmallIntegerField(
+        "Slow running jobs at (% busy)", default=90, validators=[MinValueValidator(10), MaxValueValidator(100)],
+        help_text="When the processors are this busy or more, jobs already running slow down, so the website gets "
+                  "more of them.",
+    )
+    slow_seconds = models.PositiveSmallIntegerField(
+        "Slow down by (seconds a request)", default=2, validators=[MaxValueValidator(30)],
+        help_text="How much longer each request to a shop waits while running jobs are slowed. 0 never slows them.",
+    )
+    job_gap_seconds = models.PositiveSmallIntegerField(
+        "Wait between jobs (seconds)", default=5, validators=[MaxValueValidator(600)],
+        help_text="After one job starts or ends, the next waits at least this long. 0 starts the next at the "
+                  "reader's next look, within 5 seconds.",
+    )
+    read_at_least_every_minutes = models.PositiveIntegerField(
+        "Read every shop at least every (minutes)", default=60, validators=[MaxValueValidator(7 * 24 * 60)],
+        help_text="A shop set to be read less often than this is read this often anyway. 0 lets each shop's own "
+                  "Read every setting decide. With one job at a time the shops may take longer than this to go "
+                  "round: Crawl health shows any that are late.",
+    )
+
+    class Meta:
+        verbose_name = "crawler settings"
+        verbose_name_plural = "crawler settings"
+
+    def __str__(self):
+        return "Crawler settings"
+
+    def clean(self):
+        if self.cpu_resume_percent is not None and self.cpu_pause_percent is not None \
+                and self.cpu_resume_percent >= self.cpu_pause_percent:
+            raise ValidationError({"cpu_resume_percent": "Make this lower than the figure new jobs are held at."})
+
+    @classmethod
+    def current(cls):
+        """The row, or the defaults (unsaved) before it is first saved. One query, never writes."""
+        return cls.objects.filter(pk=1).first() or cls(pk=1)
+
+    @classmethod
+    def load(cls):
+        """The row, created on first use."""
+        return cls.objects.get_or_create(pk=1)[0]
+
+    def summary(self):
+        """The settings in one line, for the reader's log when they change."""
+        return (f"at most {self.max_jobs} job{'s' if self.max_jobs != 1 else ''} at once; new jobs held at "
+                f"{self.cpu_pause_percent}% over {self.cpu_window_seconds}s, again under {self.cpu_resume_percent}%; "
+                f"running jobs slowed {self.slow_seconds}s a request at {self.cpu_max_percent}%; "
+                f"{self.job_gap_seconds}s between jobs; every shop at least every "
+                f"{self.read_at_least_every_minutes or 'its own'} minutes")
 
 
 class CheckAnswer(models.Model):

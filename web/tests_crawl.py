@@ -298,9 +298,9 @@ class CrawlPageTests(TestCase):
             page = self.client.get(self.url)
         self.assertContains(page, "Need a look (49)")
         # Session, user, the last finished read, the background reader's row, four for how hot each product
-        # is, the shops, the last hour's reads for the log, and three to renew the admin sign-in
-        # (SESSION_SAVE_EVERY_REQUEST).
-        self.assertEqual(few, 13)
+        # is, the shops, the last hour's reads for the log, the crawler settings for the log, and three to renew the
+        # admin sign-in (SESSION_SAVE_EVERY_REQUEST).
+        self.assertEqual(few, 14)
 
     def test_copy_has_no_em_dashes_or_exclamation_marks(self):
         self.make_shop("Waiting Shop", backoff_until=self.now + timedelta(minutes=20), error_streak=1, last_error="Timed out")
@@ -579,8 +579,9 @@ class LightTests(TestCase):
         self.assertIn("waiting for the import lock now: ", text)
         self.assertIn("shopify: 1 shops, 1 timed, 40 s in all, slowest Fresh Cards 40 s", text)
         self.assertIn("website: 1 shops, 1 timed, 900 s in all, slowest Web Cards 900 s", text)
-        self.assertIn("reading every shop once takes about 15 minutes of reading; the reader has 180 an hour (15 of "
-                      "120 for website shops)", text)
+        # One job at a time (Crawler settings' default): an hour of reading an hour.
+        self.assertIn("reading every shop once takes about 15 minutes of reading; the reader has 60 an hour (15 of "
+                      "60 for website shops), with at most 1 job at once (Crawler settings: at most 1 job at once;", text)
         self.assertIn("READS IN THE LAST HOUR\nstarted 1, finished 1, failed 0", text)
         self.assertIn("Web Cards | Not going | website | Its last read failed | ", text)
         self.assertIn("| 900 s | 60 min | 1 | HTTP Error 500", text)

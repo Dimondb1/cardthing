@@ -46,11 +46,12 @@
   {% include "web/includes/launch.html" %}
   <a class="skip-link" href="#main">Skip to main content</a>
   {% include "web/includes/header.html" %}
-  {# The page and, on a wide screen, Ask Rip beside it (site.css, Desktop browsing). #}
-  <div class="frame">
+  {# The page and, on a wide screen, Ask Rip beside it (site.css, Desktop browsing; ask_sheet.html is Ask Rip's popup on a phone). #}
+  <div class="frame{% if find_link %} frame--rip{% endif %}">
   <main id="main" class="page {% block page_class %}{% endblock %}">
     {% block content %}{% endblock %}
   </main>
+  {% if find_link %}{% include "web/includes/ask_sheet.html" %}{% endif %}
   </div>
   {% include "web/includes/footer.html" %}
   {% include "web/includes/install.html" %}

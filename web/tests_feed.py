@@ -541,7 +541,7 @@ class TypeTileTests(FeedCase):
         self.assertIn('name="sort"', head)
         self.assertIn(f'<a class="feed-list-head__clear" href="{HOME}" data-browse-link><span aria-hidden="true">× </span>Clear</a>', head)
         self.assertNotIn('class="filter-panel"', html)   # the folded Sort and filter: the Filters pill serves instead
-        self.assertIn(self.box.get_absolute_url(), html[html.index("feed-list-head"):])
+        self.assertIn(self.box.get_absolute_url(), html[html.index("feed-list-head"):html.index("</main>")])
         self.assertEqual(html.count("<h1"), 1)
         # The dock stays, outside the region a tile swaps.
         self.assertLess(html.index('<div class="feed-dock">'), html.index("<div data-browse>"))
@@ -562,7 +562,7 @@ class TypeTileTests(FeedCase):
         self.assertNotIn('class="filter-panel"', html)   # the folded Sort and filter: the Filters pill serves instead
         self.assertNotIn('class="sets', html)
         self.assertIn(self.etb.get_absolute_url(), html)
-        self.assertNotIn(self.box.get_absolute_url(), html[html.index("feed-list-head"):])
+        self.assertNotIn(self.box.get_absolute_url(), html[html.index("feed-list-head"):html.index("</main>")])
         self.assertLess(html.index('<div class="feed-dock">'), html.index("<div data-browse>"))
         # The usual game page, unfiltered, keeps its feed, sets and folded filters.
         plain = self.page(url)
@@ -600,7 +600,7 @@ class TypeTileTests(FeedCase):
                       '<span class="chip__off" aria-hidden="true">×</span>', row)
         self.assertIn("feed-set__panel", row)
         self.assertIn('<p class="browse-head__count" role="status">1 product</p>', html)
-        listed = html[html.index("feed-list-head"):]
+        listed = html[html.index("feed-list-head"):html.index("</main>")]
         self.assertIn(self.box.get_absolute_url(), listed)
         self.assertNotIn(self.drop.get_absolute_url(), listed)
         self.assertEqual(html.count('<input type="hidden" name="set" value="surging-sparks">'), 2)
@@ -672,7 +672,7 @@ class TypeTileTests(FeedCase):
         self.assertIn('<input type="hidden" name="set" value="prismatic-evolutions">', html)
         self.assertIn(f'<a class="feed-tile__link" href="{url}" data-browse-link aria-current="page">', html)   # All types, chosen
         self.assertIn(f'<a class="feed-tile__link" href="{url}?type=elite_trainer_box&amp;set=prismatic-evolutions" data-browse-link>', html)
-        listed = html[html.index("feed-list-head"):]
+        listed = html[html.index("feed-list-head"):html.index("</main>")]
         for product in (self.etb, self.bundle, self.tin):
             self.assertIn(product.get_absolute_url(), listed)
         self.assertNotIn(self.box.get_absolute_url(), listed)
@@ -757,7 +757,7 @@ class TypeTileTests(FeedCase):
         self.assertIn('<a class="chip" href="?type=booster_box&amp;lang=en">English</a>', row)
         self.assertIn('<p class="browse-head__count" role="status">1 product</p>', html)
         self.assertIn(japan.get_absolute_url(), html)
-        self.assertNotIn(self.box.get_absolute_url(), html[html.index("feed-list-head"):])
+        self.assertNotIn(self.box.get_absolute_url(), html[html.index("feed-list-head"):html.index("</main>")])
         self.assertIn('<input type="hidden" name="lang" value="ja">', html)   # the sort keeps the language
         # A price band chosen is named on the pill and kept by the sort.
         html = self.page(url, type="booster_box", price="50-100", compared="on")

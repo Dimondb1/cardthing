@@ -494,6 +494,7 @@
   --page-standard: 80rem;          /* a page that is not a list keeps this measure inside the wider page */
   --desk-card: 15rem;              /* the least a product card in a desktop grid is wide: the columns follow the space */
   --desk-set-chip: 11rem;          /* a set in a desktop screen's row of sets */
+  --rip-side: 22rem;               /* Ask Rip beside the page on a wide screen */
 }
 @media (min-width: 64rem) {
   :root { --page-width: 80rem; }   /* 1280px of content once the screen has room, the header and footer with it */

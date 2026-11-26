@@ -4318,6 +4318,28 @@ unchanged, pixel for pixel.
   (`ripraptor.view`) and put on `<html>` before the first paint
   (`theme_head.html`). Without script the buttons stay hidden and a desktop
   screen shows the grid.
+- **Ask Rip beside the page**: from 80rem (about 1,280px) Ask Rip is a column
+  on the right (`--rip-side`, 22rem), sticky as the page scrolls, instead of the
+  blurred popup. It is the same popup (`ask_sheet.html`, now in the frame after
+  `<main>`) and the same Rip: nothing new is asked of Claude, and nothing is
+  fetched ahead while it sits there. Ask in the header and its cross open and
+  close it; the page takes the space back when it is closed. Open is the
+  default; a closed choice is kept in the browser (`ripraptor.rip` in
+  localStorage) and read before the first paint (`theme_head.html`), so the
+  page never jumps. What was asked in the tab and what Rip did are kept while
+  you browse (`ripraptor.chat` in sessionStorage, the last six). Narrower
+  screens and phones keep the popup exactly as before.
+- **Questions about the list in view** (`web/rip_side.py`, `ask_side.html`):
+  on a game, set, type, search or home list, a few one-tap questions named for
+  what is in view (best value, cheapest per card, lowest in 90 days; a set's
+  page has no sort, so no lowest) and the Deals page. Each is a plain link to the list with that switch on, so it costs no
+  Claude call. A product page keeps its own questions.
+- **Quick insights** under them: the strongest saving after Today's top deal,
+  the lowest price a pack among today's deals, the set most wanted this week,
+  and the shops with the most deals. All of them come from caches the
+  background reader already fills (`feed.insights`, `compact.peek`), so
+  showing them runs no database query; when a cache is empty the line is left
+  out.
 
 ## Layout rules
 

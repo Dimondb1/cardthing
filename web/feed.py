@@ -37,6 +37,9 @@ RAILS_KEY = "web:feed-rails:v2"
 # The first of the home page's rail on its own, for the Ask Rip popup on every page (today()): a small entry set
 # with each build of the rails, so a page reads one card, never the rails.
 TODAY_KEY = "web:ask-today:v1"
+# Ask Rip's Quick insights on a desktop screen (web/rip_side.py): for each rail, its biggest saving after the first card
+# and the shops with most of its deals, set with each build of the rails from the same cards, as Today's top deal is.
+INSIGHTS_KEY = "web:ask-insights:v1"
 TILES_KEY = "web:feed-tiles:v1"
 TILES_SECONDS = 60 * 60
 RAIL_SIZE = 12         # cards shown on a rail
@@ -221,7 +224,44 @@ def build_rails(candidates=None):
     home = built.get(None) or []
     # Kept no longer than the rails may be served (web.listcache), so the popup's card is never older than they are.
     cache.set(TODAY_KEY, home[0] if home else "", listcache.max_stale())
+    cache.set(INSIGHTS_KEY, rail_insights(built), listcache.max_stale())
     return built
+
+
+def rail_insights(built):
+    """{scope: {"saving": the card with the strongest evidence after the rail's first (which Today's top deal shows),
+    "pack": (price a pack, card) for the deal with the lowest price a pack, or None when no deal's packs are known,
+    "shops": [(shop, deals)] the three shops with most of the rail's shown deals}} for each rail with deals. All from
+    the cards in hand: nothing is read."""
+    from .compact import pack_price   # compact imports this module
+
+    found = {}
+    for scope, cards in built.items():
+        shown = cards[:RAIL_SIZE]
+        if not shown:
+            continue
+        rest = shown[1:]
+        shops = {}
+        packs = []
+        for card in shown:
+            name = card.summary.best.retailer.name
+            shops[name] = shops.get(name, 0) + 1
+            each = pack_price(card.summary.best.shown_price, card.product.product_type, card.product.packs_inside)
+            if each is not None:
+                packs.append((each, card))
+        found[scope] = {
+            "saving": max(rest, key=lambda card: card.summary.strength) if rest else None,
+            "pack": min(packs, key=lambda item: item[0]) if packs else None,
+            "shops": sorted(shops.items(), key=lambda item: (-item[1], item[0]))[:3],
+        }
+    return found
+
+
+def insights(game=None):
+    """Quick insights for ``game``'s rail or the home page's, from the cache alone (rail_insights): {} before the rails
+    are built or once they have gone stale."""
+    found = cache.get(INSIGHTS_KEY) or {}
+    return found.get(game.pk if game is not None else None) or {}
 
 
 def rail(game=None):

@@ -517,3 +517,12 @@ def black_friday_banner(game=None):
     from web import black_friday
 
     return black_friday.banner(game or None)
+
+
+@register.simple_tag(takes_context=True)
+def rip_side(context):
+    """Ask Rip beside the page on a wide screen (web/rip_side.py): the questions about the list in view and the Quick
+    insights, from what the page and the caches already hold."""
+    from web import rip_side as side
+
+    return side.panel(context)

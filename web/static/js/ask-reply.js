@@ -20,8 +20,13 @@
         return response.json();
       })
       .then(function (data) {
-        if (data.chat) form.dispatchEvent(new CustomEvent("ripreply", { detail: { chat: data.chat } }));
-        else window.location.href = data.go;
+        var asked = (query.get("q") || "").trim();
+        if (data.chat) form.dispatchEvent(new CustomEvent("ripreply", { detail: { chat: data.chat, q: asked } }));
+        else {
+          // Noted for the next page's Ask Rip, beside the page (ask-input.js, ripNote).
+          if (asked && window.ripNote) window.ripNote({ q: asked, go: data.go });
+          window.location.href = data.go;
+        }
       })
       .catch(function () { window.location.href = address; });
   };

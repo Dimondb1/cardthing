@@ -847,7 +847,7 @@ class PopupReplyTests(ListCase):
         with open(finders.find("js/ask-reply.js"), encoding="utf-8") as handle:
             asks = handle.read()
         self.assertIn('headers: { "X-Rip-Sheet": "1", "Accept": "application/json" }', asks)
-        self.assertIn('form.dispatchEvent(new CustomEvent("ripreply", { detail: { chat: data.chat } }))', asks)
+        self.assertIn('form.dispatchEvent(new CustomEvent("ripreply", { detail: { chat: data.chat, q: asked } }))', asks)
         self.assertIn(".catch(function () { window.location.href = address; });", asks)   # never a dead end
         with open(finders.find("js/ask-input.js"), encoding="utf-8") as handle:
             script = handle.read()
@@ -950,7 +950,8 @@ class AskSheetTests(ListCase):
 
     def sheet(self, url, **params):
         html = self.client.get(url, params).content.decode()
-        return html[html.index('<div class="ask-sheet" id="ask-sheet" hidden data-ask-sheet>'):html.index("</section>\n</div>")]
+        start = html.index('<div class="ask-sheet" id="ask-sheet" hidden data-ask-sheet>')
+        return html[start:html.index("</section>\n</div>", start)]
 
     def test_ask_opens_one_box_suggestions_and_three_ways_in(self):
         self.assertNotIn("ask-sheet", self.client.get(reverse("web:home")).content.decode())   # only with Ask shown
@@ -1081,10 +1082,12 @@ class AskSheetTests(ListCase):
 
     def test_the_script_toggles_it_and_enter_sends(self):
         sheet = self.script()
-        self.assertIn("event.preventDefault();\n      if (sheet.hidden) open();\n      else close();", sheet)
+        # A wide screen opens and closes it beside the page (tests_desktop); a phone opens the popup.
+        self.assertIn("event.preventDefault();\n      if (wide && wide.matches) {\n        if (beside()) closeBeside();\n"
+                      "        else openBeside(true);\n        return;\n      }\n      if (sheet.hidden) open();\n      else close();", sheet)
         self.assertIn('document.documentElement.classList.add("has-ask-sheet");', sheet)
         self.assertIn('opener.setAttribute("aria-expanded", "true");', sheet)
-        self.assertIn('if (event.key === "Escape") close();', sheet)
+        self.assertIn('if (event.key === "Escape" && !beside()) close();', sheet)   # beside the page it stays
         self.assertIn('if (event.key !== "Enter" || event.shiftKey) return;', sheet)
         self.assertIn('send.setAttribute("aria-label", send.getAttribute("data-working"));', sheet)
         self.assertIn('field.form.classList.toggle("has-words", !!field.value.trim());', sheet)

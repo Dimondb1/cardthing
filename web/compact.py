@@ -55,6 +55,14 @@ def kept(key, build, fresh=False):
     return found
 
 
+def peek(key):
+    """What ``kept`` holds under ``key``, or None, never building it: for a part every page carries (Ask Rip's Quick
+    insights), which must not add a query to a page."""
+    if pagecache.seconds() <= 0:
+        return None
+    return cache.get(pagecache.key_for(f"compact/{key}"))
+
+
 def numbers(fresh=False):
     """{"offers": shop prices in stock now, "shops": shops compared (pricing.shops_compared), "checked": the latest
     check}. Marketplaces left out, as the shop count leaves them. One query when due."""

@@ -305,6 +305,52 @@
         });
       }
     };
+    // Beside the page on a wide screen (the owner, 26 Nov 2026: "an integrated desktop shopping assistant ... Remember
+    // the user's open or closed preference"): from 80rem Ask and the cross open and close it there, the page keeps its
+    // place and nothing is blurred; the choice is kept in this browser (ripraptor.rip) and theme_head.html puts it on
+    // <html> before the first paint. Narrower, it is the popup as before. Nothing is fetched ahead beside the page.
+    var root = document.documentElement;
+    var wide = window.matchMedia ? window.matchMedia("(min-width: 80rem)") : null;
+    var beside = function () { return root.classList.contains("rip-side"); };
+    var keep = function (state) { try { localStorage.setItem("ripraptor.rip", state); } catch (e) { /* this page only */ } };
+    var openBeside = function (remember) {
+      root.classList.add("rip-side");
+      panel.setAttribute("role", "complementary");
+      show(productView || allView);
+      mood("idle");
+      startExamples();
+      sheet.hidden = false;
+      grow(box);
+      opener.setAttribute("aria-expanded", "true");
+      if (remember) keep("open");
+    };
+    var closeBeside = function () {
+      stopExamples();
+      sheet.hidden = true;
+      root.classList.remove("rip-side");
+      panel.setAttribute("role", "dialog");
+      opener.setAttribute("aria-expanded", "false");
+      keep("closed");
+      opener.focus({ preventScroll: true });
+    };
+    if (beside()) {
+      opener.setAttribute("aria-expanded", "true");
+      startExamples();
+    }
+    if (wide && wide.addEventListener) {
+      wide.addEventListener("change", function (event) {
+        var closed = false;
+        try { closed = localStorage.getItem("ripraptor.rip") === "closed"; } catch (e) { /* open */ }
+        if (event.matches && !closed && sheet.hidden) openBeside(false);
+        else if (!event.matches && beside()) {
+          stopExamples();
+          sheet.hidden = true;
+          root.classList.remove("rip-side");
+          panel.setAttribute("role", "dialog");
+          opener.setAttribute("aria-expanded", "false");
+        }
+      });
+    }
     var open = function () {
       startEarly();
       var top = head ? Math.max(0, Math.round(head.getBoundingClientRect().bottom)) : 0;
@@ -329,16 +375,24 @@
     };
     opener.addEventListener("click", function (event) {
       event.preventDefault();
+      if (wide && wide.matches) {
+        if (beside()) closeBeside();
+        else openBeside(true);
+        return;
+      }
       if (sheet.hidden) open();
       else close();
     });
     Array.prototype.forEach.call(sheet.querySelectorAll("[data-ask-close]"), function (closer) {
-      closer.addEventListener("click", close);
+      closer.addEventListener("click", function () {
+        if (beside()) closeBeside();
+        else close();
+      });
     });
     document.addEventListener("keydown", function (event) {
-      if (event.key === "Escape") close();
+      if (event.key === "Escape" && !beside()) close();
     });
-    window.addEventListener("pageshow", function () { close(); });
+    window.addEventListener("pageshow", function () { if (!beside()) close(); });
 
     // Feedback the moment anything here is tapped, until the page comes: the heading says what it is opening
     // (Searching for the words of a suggested search), the tapped thing turns a spinner and a screen reader hears it.
@@ -412,7 +466,44 @@
     // asks for it in place and hands it over (ripreply). The box is ready again under his words, the microphone too,
     // and today's deal steps aside so the popup still fits a phone.
     var reply = sheet.querySelector("[data-ask-reply]");
+    // What was asked in this tab and what Rip did (ask-reply.js notes each, ripraptor.chat in sessionStorage): kept
+    // while you browse, so closing and opening Ask Rip, or the page Rip opened, loses nothing. Shown beside the page.
+    var log = sheet.querySelector("[data-ask-log]");
+    var said = function () {
+      try { return JSON.parse(sessionStorage.getItem("ripraptor.chat") || "[]"); } catch (e) { return []; }
+    };
+    var drawLog = function () {
+      if (!log) return;
+      var entries = said();
+      log.textContent = "";
+      entries.forEach(function (entry) {
+        var item = document.createElement("li");
+        var asked = document.createElement("span");
+        asked.className = "ask-sheet__log-q";
+        asked.textContent = log.getAttribute("data-you") + ": " + entry.q;
+        item.appendChild(asked);
+        var answered = document.createElement(entry.go ? "a" : "span");
+        answered.className = "ask-sheet__log-a";
+        if (entry.go) {
+          answered.href = entry.go;
+          answered.textContent = log.getAttribute("data-went");
+        } else {
+          answered.textContent = entry.a || "";
+        }
+        item.appendChild(document.createElement("br"));
+        item.appendChild(answered);
+        log.appendChild(item);
+      });
+      log.hidden = !entries.length;
+    };
+    drawLog();
+    window.ripNote = function (entry) {
+      var entries = said().concat([entry]).slice(-6);
+      try { sessionStorage.setItem("ripraptor.chat", JSON.stringify(entries)); } catch (e) { /* this page only */ }
+      drawLog();
+    };
     sheetForm.addEventListener("ripreply", function (event) {
+      if (event.detail.q) window.ripNote({ q: event.detail.q, a: event.detail.chat });
       sheetForm.classList.remove("is-searching");
       box.readOnly = false;
       send.setAttribute("aria-label", sendWords);

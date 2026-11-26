@@ -42,6 +42,8 @@ Hidden until the script opens it; without script the Ask button opens the Find p
     </div>
     {% endif %}
     <div class="ask-sheet__view" data-ask-view="all"{% if request.resolver_match.url_name == "product" and product and ask.open and ask.left and ask.suggestions %} hidden{% endif %}>
+      {# What was asked in this tab and what Rip did, kept while you browse (ask-input.js, sessionStorage), beside the page on a wide screen only. #}
+      <ol class="ask-sheet__log" hidden data-ask-log aria-label="{% copy 'askrip.side.log' %}" data-you="{% copy 'askrip.side.you' %}" data-went="{% copy 'askrip.side.went' %}"></ol>
       {# Rip's reply to small talk, shown here by ask-input.js; without script it is on the Find page. #}
       <p class="ask-sheet__reply" role="status" hidden data-ask-reply></p>
       <form class="ask-sheet__form" action="{{ voice_url }}" method="get" role="search" data-ask-sheet-form>
@@ -72,7 +74,10 @@ Hidden until the script opens it; without script the Ask button opens the Find p
           <a class="ask-sheet__way" href="{% url 'web:shopping_list' %}" rel="nofollow">{% include "web/includes/icons/list.svg" %}<span class="ask-sheet__way-name">{% copy "askrip.sheet.list" %} <span data-list-count></span></span></a>
           <a class="ask-sheet__way" href="{% url 'web:find' %}?go=find">{% include "web/includes/icons/steps.svg" %}<span class="ask-sheet__way-name">{% copy "askrip.sheet.steps" %}</span></a>
         </nav>
+        {% rip_side as side %}{% include "web/includes/ask_side.html" %}
       </div>
     </div>
   </section>
 </div>
+{# Beside the page on a wide screen, open unless closed in this browser (theme_head.html put rip-side on <html>): shown here, as the page is read, so it never appears late. #}
+<script nonce="{{ csp_nonce }}">(function () { if (document.documentElement.classList.contains("rip-side")) { var s = document.getElementById("ask-sheet"); s.hidden = false; s.querySelector("[data-ask-panel]").setAttribute("role", "complementary"); } })();</script>

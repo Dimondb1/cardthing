@@ -1,12 +1,5 @@
-{% load sitecopy ripraptor %}{# Ask Rip beside the page on a wide screen (web/rip_side.py): questions about the list in view, each a plain link to an answer the site already gives, then the Quick insights from today's best deals (the biggest saving, the lowest price a pack, the shops with most of them) and the sets people want, from the caches alone. Shown only while Ask Rip is beside the page (site.css, html.rip-side); a phone's popup never shows it. Takes side. #}
-<div class="ask-side" data-ask-side>
-  {% if side.suggestions %}<h3 class="eyebrow ask-side__title">{% copy "askrip.side.suggest" %}</h3>
-  <ul class="ask-sheet__chips ask-side__chips">{% for question, url in side.suggestions %}<li><a class="chip ask-sheet__chip" href="{{ url }}">{{ question }}</a></li>{% endfor %}</ul>{% endif %}
-  {% if side.saving or side.pack or side.set or side.shops %}<h3 class="eyebrow ask-side__title">{% copy "askrip.side.insights" %}</h3>
-  {% if side.saving %}{% copy "askrip.side.saving" as saving_label %}{% include "web/includes/ask_pick.html" with product=side.saving.product listing=side.saving.summary.best summary=side.saving.summary label=saving_label %}{% endif %}
-  {% if side.pack %}<a class="ask-side__row" href="{{ side.pack.1.product.get_absolute_url }}"><span class="ask-side__label">{% copy "askrip.side.pack" %}</span><span class="ask-side__name">{{ side.pack.1.product.name }}</span><span class="ask-side__meta">{% copy "browse.card.each" each=side.pack.0|gbp %}</span></a>{% endif %}
-  {% if side.set %}<a class="ask-side__row" href="{{ side.set.set.get_absolute_url }}"><span class="ask-side__label">{% copy "askrip.side.trending" %}</span><span class="ask-side__name">{{ side.set.set.name }}</span>{% if side.set.pack %}<span class="ask-side__meta">{% copy "compact.set.from_pack" each=side.set.pack|gbp %}</span>{% endif %}</a>{% endif %}
-  {% if side.shops %}<p class="ask-side__label">{% copy "askrip.side.shops" %}</p>
-  <ul class="ask-side__shops">{% for name, count in side.shops %}<li><a class="ask-side__shop" href="{% url 'web:deals' %}"><span class="ask-side__name">{{ name }}</span><span class="ask-side__count">{% copy_count "askrip.side.shop_deals" count %}</span></a></li>{% endfor %}</ul>{% endif %}
-  {% endif %}
-</div>
+{% load sitecopy ripraptor %}{# Ask Rip beside the page on a wide screen (web/rip_side.py): questions about the list in view, each a plain link to an answer the site already gives, so a tap costs Rip nothing. They sit over the box that asks him anything, in place of the popup's own suggestions (ask_sheet.html). Shown only while Ask Rip is beside the page (site.css, html.rip-side); a phone's popup never shows them. Takes side. #}
+{% if side.suggestions %}<div class="ask-side ask-side--ask" data-ask-side>
+  <h3 class="eyebrow ask-side__title">{% copy "askrip.side.suggest" %}</h3>
+  <ul class="ask-sheet__chips ask-side__chips">{% for question, url in side.suggestions %}<li><a class="chip ask-sheet__chip" href="{{ url }}">{{ question }}</a></li>{% endfor %}</ul>
+</div>{% endif %}

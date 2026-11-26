@@ -4297,9 +4297,14 @@ unchanged, pixel for pixel.
   outer margins. Every other page (a product, a guide, About) keeps
   `--page-standard` (80rem) inside it, so nothing is stretched. The page sits in
   a frame (`base.html .frame`) that holds Ask Rip beside it on a wide screen.
+  The header's search box takes the room between the logo and the links
+  (`--desk-search`, 60rem at most).
 - **Three steps** at the top of every list, each an existing part with its label
-  from the registry (`compact.step.*`): 1. Choose a game (the dock's game bar,
-  which a desktop screen hid before), 2. Pick a set or collection
+  from the registry (`compact.step.*`): 1. Choose a game (the dock's game bar
+  as a row of bordered buttons the width of the page, each game's icon beside
+  its name; the row shows All and the first five games, `feed.DESK_BAR`, and
+  the less popular ones open under More, a fold that needs no script; a phone's
+  bar scrolls through every game as before), 2. Pick a set or collection
   (`compact_set_row.html`: All sets, then the game's newest 12 sets with their
   pictures, the one in view marked, each keeping the product type in view),
   3. Choose a product type (the type tiles; on a game's own page they link to
@@ -4312,17 +4317,32 @@ unchanged, pixel for pixel.
   gives), the Price check, the delivered price, the shops, the price a pack,
   Compare prices at the foot and Watch in the corner. A phone still sees the
   row, with the Price check only with Best for ripping on. The deals and sets
-  grids take as many columns as fit from 80rem too.
+  grids take as many columns as fit from 80rem too. The picture well is
+  `--desk-deal-well` (10rem), kept short so the words under it have room.
+- **The home page** on a desktop screen leads with the row of games, then the
+  slogan with the live numbers, today's deals and the sets. It has no browse
+  bar: its game and product type choices repeated the steps (the owner, 26 Nov
+  2026), and a list's own filters hold the price bands and In stock.
+- **Spacing**: the lines between the steps and the list sit closer on a desktop
+  screen, so products start about a third higher than they did.
 - **Grid or List**: buttons at the end of the switches (`compact_switch.html`,
   `site.js`) show the rows again; the choice is kept in the browser
   (`ripraptor.view`) and put on `<html>` before the first paint
   (`theme_head.html`). Without script the buttons stay hidden and a desktop
   screen shows the grid.
 - **Ask Rip beside the page**: from 80rem (about 1,280px) Ask Rip is a column
-  on the right (`--rip-side`, 22rem), sticky as the page scrolls, instead of the
-  blurred popup. It is the same popup (`ask_sheet.html`, now in the frame after
-  `<main>`) and the same Rip: nothing new is asked of Claude, and nothing is
-  fetched ahead while it sits there. Ask in the header and its cross open and
+  on the right (`--rip-side`: 352px on a laptop, up to 380px where there is
+  room), sticky as the page scrolls, instead of the blurred popup. It is part
+  of the page, with a rule down its left and no card of its own. Top to bottom:
+  its heading, the questions, what was asked in the tab, the box that asks Rip
+  anything, then Quick insights and the ways in. The questions are quiet rows
+  (neutral ground, a thin border); orange is kept for the button that sends and
+  for what is chosen. Only the part under the box scrolls, and only on a screen
+  too short to show it all, so the box is always in reach. It is the same popup
+  (`ask_sheet.html`, now in the frame after `<main>`) and the same Rip: the
+  page holds its parts in a phone's order and `site.css` orders them beside the
+  page, nothing new is asked of Claude, and nothing is fetched ahead while it
+  sits there. Ask in the header and its cross open and
   close it; the page takes the space back when it is closed. Open is the
   default; a closed choice is kept in the browser (`ripraptor.rip` in
   localStorage) and read before the first paint (`theme_head.html`), so the
@@ -4332,11 +4352,15 @@ unchanged, pixel for pixel.
 - **Questions about the list in view** (`web/rip_side.py`, `ask_side.html`):
   on a game, set, type, search or home list, a few one-tap questions named for
   what is in view (best value, cheapest per card, lowest in 90 days; a set's
-  page has no sort, so no lowest) and the Deals page. Each is a plain link to the list with that switch on, so it costs no
-  Claude call. A product page keeps its own questions.
-- **Quick insights** under them: the strongest saving after Today's top deal,
-  the lowest price a pack among today's deals, the set most wanted this week,
-  and the shops with the most deals. All of them come from caches the
+  page has no sort, so no lowest) and the Deals page. Each is a plain link to
+  the list with that switch on, so it costs no Claude call. Beside the page
+  they take the place of the popup's own suggestions, so nothing is said twice;
+  a page that is not a list shows the popup's. A product page keeps its own
+  questions.
+- **Quick insights** under the box (`ask_insights.html`): Today's top deal,
+  the strongest saving after it, the lowest price a pack among today's deals,
+  the set most wanted this week, and the shops with the most deals. Each says
+  its name and figure in full; nothing is cut with dots. All of them come from caches the
   background reader already fills (`feed.insights`, `compact.peek`), so
   showing them runs no database query; when a cache is empty the line is left
   out.
@@ -4357,7 +4381,14 @@ unchanged, pixel for pixel.
   Deals is still a standard page under the layout rules (`LIST_LATER`), as
   moving it to the compact rows would change it on a phone.
 - **The Black Friday banner** shows only in the season, as before (two weeks
-  before Black Friday to Cyber Monday); there is no permanent banner.
+  before Black Friday to Cyber Monday); there is no permanent banner, and out
+  of season the content simply starts higher. On a desktop screen it is one
+  slim band, its words at the left and its button at the right.
+- **The slogan**: the desktop home page's headline is the owner's, "Ripping
+  Packs, Not Rip-Offs!" (`content.registry.OWNERS_SLOGAN`, the wording
+  `compact.desk.title`). It is the one sentence allowed an exclamation mark:
+  the copy tests take it out, word for word, before they look, so every other
+  sentence is still held to the rule.
 
 ## Layout rules
 

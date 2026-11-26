@@ -233,7 +233,8 @@ def dock(request, game=None, hints="", games=None):
     games = feed.games_with_products() if games is None else games
     if not navigation.games():
         navigation.remember(games)   # the header's Games menu, read from the cache on every page
-    return {"game": game, "games": feed.games_bar(games), "search_hint": hint, "hints": hints}
+    return {"game": game, "games": feed.games_bar(games), "more": len(games) > feed.DESK_BAR, "search_hint": hint,
+            "hints": hints}
 
 
 def strip(game=None):
@@ -364,8 +365,8 @@ def product_rows(products):
 
 def home(request, extra):
     """The home page in the compact layout. ``extra``: the page's meta, partners and structured data. A desktop screen
-    shows the same page laid out for it (desk), with a short intro, a browse bar, the deals as a grid and the sets in
-    a tab for each game."""
+    shows the same page laid out for it (desk), with a short intro, the deals as a grid and the sets in a tab for
+    each game."""
     games = feed.games_with_products()
     by_game = sets_by_game()
     tab_games = [game for game in games if by_game.get(game.pk)][:DESK_GAMES]
@@ -376,20 +377,13 @@ def home(request, extra):
         "strip": strip(),
         "sets": groups[0],
         "dock": dock(request, hints="home", games=games),
-        "desk": desk(games, tab_games, groups[1:]),
+        "desk": desk(tab_games, groups[1:]),
     })
 
 
-def desk(games, tab_games, tab_sets):
-    """What the home page shows only on a desktop screen: the browse bar's choices (every game with products, the
-    product types in stock now, the price bands the lists filter by) and a tab of sets for each of ``tab_games``."""
-    from .views import PRICE_BANDS, type_heading
-
-    types = [kind for kind, _pk, _count in feed.tile_picks()["all"]]
+def desk(tab_games, tab_sets):
+    """What the home page shows only on a desktop screen: a tab of sets for each of ``tab_games``."""
     return {
-        "games": feed.games_bar(games),
-        "types": [(kind, type_heading(kind)) for kind in types],
-        "prices": [band for band in PRICE_BANDS if band[0]],
         "tabs": [{"slug": game.slug, "label": game.display_short, "url": game.get_absolute_url(), "sets": rows}
                  for game, rows in zip(tab_games, tab_sets)],
     }

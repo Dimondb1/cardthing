@@ -54,6 +54,10 @@ ICONS = {"pokemon": "pokemon", "magic": "magic", "one-piece": "one-piece", "lorc
          "sports": "sports", "star-wars": "star-wars", "riftbound": "riftbound", "digimon": "digimon",
          "dragon-ball": "dragon-ball", "flesh": "flesh-and-blood", "union-arena": "union-arena", "vanguard": "vanguard",
          "weiss": "weiss-schwarz"}
+# A desktop screen's row of games shows this many as buttons after All; the less popular ones (the bar's order) wait
+# behind More (feed_dock.html, site.css: the row's seventh child on). Seven buttons fit a laptop's row with Ask Rip
+# beside it, each name whole. A phone's bar scrolls through them all.
+DESK_BAR = 5
 # The tiles' short labels, one a product type (a data label, so in code, as the stock states are).
 TYPE_LABELS = {
     "booster_box": "Booster boxes", "booster_pack": "Booster packs", "elite_trainer_box": "ETBs", "bundle": "Bundles",
@@ -361,6 +365,6 @@ def context(request, game=None, kind="", keep=None, list_title="", product_set=N
         "rail_title": copy.get("feed.rail.deals", store=store), "rail_url": rail_url,
         "deals": deal_rows, "deals_spares": deal_spares,
         "deals_paying_only": FeaturedSettings.current().paying_only if deal_rows else False,
-        "drop": None if filtered else drop(game), "games": games_bar(games),
+        "drop": None if filtered else drop(game), "games": games_bar(games), "more": len(games) > DESK_BAR,
         "interest_games": views.interest_lexicon(games), "search_hint": search_hint, "today": date.today(),
     }

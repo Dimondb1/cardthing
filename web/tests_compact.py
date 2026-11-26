@@ -12,6 +12,7 @@ from django.urls import reverse
 
 from catalogue.models import Listing, Product, SiteLook
 from catalogue.testing import make_game, make_listing, make_product, make_retailer, make_set
+from content.registry import OWNERS_SLOGAN
 from web import compact, look
 
 from .tests import CopyStyleTests
@@ -104,7 +105,7 @@ class HomeTests(CompactCase):
         html = self.page("/")
         self.assertIn('<h1 id="home-title" class="cx-hero__title"><span class="mark section-head__mascot cx-hero__mark" '
                       'aria-hidden="true"></span><span class="cx-hero__phone">4 sealed prices in stock at 2 UK shops.'
-                      '</span> <span class="dt-intro__title">Find your cards. Pay less.</span></h1>', html)
+                      '</span> <span class="dt-intro__title">Ripping Packs, Not Rip-Offs!</span></h1>', html)
         # One heading on the page, whatever the screen (the owner, 9 Nov 2026: the home page had two).
         self.assertEqual(html.count("<h1"), 1)
         self.assertIn('class="hunt-mark"', html)   # the hunting raptor on Today's best deals
@@ -215,7 +216,9 @@ class DeskTests(CompactCase):
 
     def test_the_desktop_intro_says_what_the_site_does_with_the_live_numbers(self):
         html = self.page("/")
-        self.assertIn('<span class="dt-intro__title">Find your cards. Pay less.</span></h1>', html)
+        # The owner's slogan, word for word and with his exclamation mark (content.registry.OWNERS_SLOGAN).
+        self.assertIn(f'<span class="dt-intro__title">{OWNERS_SLOGAN}</span></h1>', html)
+        self.assertEqual(OWNERS_SLOGAN, "Ripping Packs, Not Rip-Offs!")
         self.assertIn('<p class="dt-intro__lead">Compare sealed TCG prices from UK retailers. Delivery included, '
                       'cheapest first.</p>', html)
         self.assertIn('<span class="dt-facts__number">4</span> prices in stock', html)
@@ -224,18 +227,16 @@ class DeskTests(CompactCase):
         # The phone's numbers are still there, for the phone, in the same heading.
         self.assertIn('<span class="cx-hero__phone">4 sealed prices in stock at 2 UK shops.</span>', html)
 
-    def test_the_browse_bar_offers_only_choices_the_lists_filter_by(self):
+    def test_the_home_page_has_no_browse_bar_the_row_of_games_is_the_way_in(self):
+        # The owner, 26 Nov 2026: "Remove unnecessary duplication between the game navigation and the Browse Products
+        # dropdowns. Establish a clear navigation hierarchy of Game, Set, Product Type."
         html = self.page("/")
-        bar = html[html.index('<form class="dt-browse"'):html.index("</form>", html.index('<form class="dt-browse"'))]
-        self.assertIn(f'action="{reverse("web:search")}" method="get"', bar)
-        self.assertIn('<option value="pokemon">Pokémon</option>', bar)
-        self.assertIn('<option value="booster_box">', bar)   # types in stock now, pictured (feed.tile_picks)
-        self.assertIn('<option value="0-10">Under £10</option>', bar)
-        self.assertIn('name="in_stock" value="on" checked', bar)
-        self.assertIn("Show products", bar)
-        for name in ("game", "type", "price"):
-            self.assertIn(f'<select name="{name}">', bar)
-        # What it sends, the search page understands.
+        self.assertNotIn("dt-browse", html)
+        self.assertNotIn("<select", html[html.index('<main id="main"'):html.index("</main>")])
+        self.assertIn("1. Choose a game", html)
+        self.assertIn(f'<a class="feed-game" href="{self.pokemon.get_absolute_url()}">', html)
+        self.assertNotIn("dt-browse", static_text("css/site.css"))
+        # What the bar sent, the search page still understands: a list's own filters do that job.
         found = self.page(reverse("web:search"), game="pokemon", type="booster_box", price="100-", in_stock="on")
         self.assertIn("Delta Reign Booster Box", found)
         self.assertNotIn("Elite Trainer Box", found[found.index("crows"):])
@@ -319,7 +320,7 @@ class DeskTests(CompactCase):
     def test_phone_parts_are_unchanged_and_desktop_parts_hidden_below_64rem(self):
         text = static_text("css/site.css")
         block = text[text.index("/* The home page on a desktop screen"):]
-        self.assertIn(".dt-intro__title, .dt-intro__lead, .dt-facts, .dt-browse, .dt-tabs, .dt-more, .cx-deal__where, "
+        self.assertIn(".dt-intro__title, .dt-intro__lead, .dt-facts, .dt-tabs, .dt-more, .cx-deal__where, "
                       ".cx-deal__delivered, .cx-deal__shop, .cx-deal__cta, .dt-panel--game { display: none; }", block)
         desktop = block[block.index("@media (min-width: 64rem) {"):]
         self.assertIn(".cx-hero--home .cx-hero__mark, .cx-hero--home .cx-hero__phone, .cx-hero--home .cx-hero__lead, "
@@ -526,7 +527,8 @@ class CompactStyleTests(CompactCase):
             for phrase in CopyStyleTests.BANNED:
                 with self.subTest(url=url, phrase=phrase):
                     self.assertNotIn(phrase, visible)
-            self.assertNotIn("!", visible)
+            # But for the owner's slogan on the home page, his to punctuate (content.registry.OWNERS_SLOGAN).
+            self.assertNotIn("!", visible.replace(OWNERS_SLOGAN.lower(), ""))
 
 
 class RipTests(CompactCase):

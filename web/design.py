@@ -14,7 +14,10 @@ The rules, each with its test:
    On a desktop screen (from 64rem; the owner, 26 Nov 2026) the same parts are laid out for the width: the list leads
    with three steps, each a shared part with its label (the dock's games, compact_set_row.html, compact_tiles.html),
    and the compact rows are shown as cards in a grid whose columns follow the space, or as rows with List chosen. The
-   markup is the same row on every screen: only site.css lays it out, so a phone is unchanged.
+   markup is the same row on every screen: only site.css lays it out, so a phone is unchanged. The games are a row
+   of bordered buttons the width of the page, the less popular behind More (web/feed.py DESK_BAR). From 80rem Ask
+   Rip sits beside the page as a column that is part of it (questions, the box, Quick insights), never a card over
+   it, and its questions are neutral rows: orange is for what sends and what is chosen.
 3. A product is only ever shown through one of the shared parts in PRODUCT_PARTS (a row, a card, a table row...), or
    named in a sentence (PROSE). A new way to show a product is a new entry here, which the owner agrees first.
 4. Every page has exactly one main heading.

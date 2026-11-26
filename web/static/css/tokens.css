@@ -478,13 +478,11 @@
 /* The desktop layout, from 64rem (the owner, 9 Nov 2026: the desktop site "looks like a mobile interface stretched across
    a desktop screen"): the header's search box and Games menu, and the home page's intro, browse bar and grids. */
 :root {
-  --desk-search: 48rem;            /* the header's search box at its widest */
+  --desk-search: 60rem;            /* the header's search box at its widest: it takes the room between the logo and the links */
   --desk-search-height: 3rem;
   --desk-menu: 26rem;              /* the Games menu under the header */
-  --desk-intro: 48rem;             /* the home page intro's measure */
-  --desk-field: 12.5rem;           /* a choice in the browse bar */
-  --desk-control: 2.75rem;         /* the browse bar's choices and button, and the set tabs */
-  --desk-deal-well: 12rem;         /* a deal card's picture well */
+  --desk-control: 2.75rem;         /* a desktop control: a game's button in the row of games, and the set tabs */
+  --desk-deal-well: 10rem;         /* a deal card's and a product card's picture well */
   --desk-set-well: 10rem;          /* a set card's picture well */
   --desk-icon: 1.25rem;            /* an icon beside a header link */
   --desk-rule: 2px;                /* the line under the place in view, in the row under the header */
@@ -496,7 +494,8 @@
   --desk-set-chip: 11rem;          /* a set in a desktop screen's row of sets */
   --desk-row: 32rem;               /* the least a wide row card is wide in a desktop grid (Deals' savings) */
   --desk-list: 22rem;              /* the least a column of slim rows is wide on a desktop screen (Deals' lists) */
-  --rip-side: 22rem;               /* Ask Rip beside the page on a wide screen */
+  --rip-side: clamp(22rem, 25vw, 23.75rem);   /* Ask Rip beside the page: 352px on a laptop, up to 380px where there is room */
+  --desk-game: 7rem;               /* the least a game's button is wide in a desktop screen's row of games */
 }
 @media (min-width: 64rem) {
   :root { --page-width: 80rem; }   /* 1280px of content once the screen has room, the header and footer with it */

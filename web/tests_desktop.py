@@ -13,7 +13,7 @@ from django.test.utils import CaptureQueriesContext
 
 from catalogue import images
 from catalogue.models import Product, SiteLook
-from catalogue.testing import make_listing, make_product, make_set
+from catalogue.testing import make_game, make_listing, make_product, make_set
 
 from . import look
 from .tests import PageTestCase
@@ -219,3 +219,111 @@ class DealsTests(DesktopCase):
     def test_the_swipe_pages_saved_list_is_left_as_it_was(self):
         html = self.html("/swipe/")
         self.assertNotIn("page--wide", html[html.index('<main id="main"'):html.index(">", html.index('<main id="main"'))])
+
+
+class RefinementTests(DesktopCase):
+    """The owner's refinement pass of 26 Nov 2026, each point a desktop screen's alone: the games as buttons with More
+    for the rest, the questions and the box in Ask Rip's column in that order, a column that is part of the page, a
+    slim banner, a wider search box and shorter pictures on the cards."""
+
+    def css(self):
+        return (WEB / "static/css/site.css").read_text()
+
+    def tokens(self):
+        return (WEB / "static/css/tokens.css").read_text()
+
+    def test_the_games_are_buttons_and_the_rest_wait_behind_more(self):
+        from web import feed
+
+        html = self.html(self.game.get_absolute_url())
+        self.assertNotIn("feed-games__more", html)                     # few games: every one a button, no More
+        for n in range(feed.DESK_BAR):
+            other = make_game(name=f"Game {n}", slug=f"game-{n}")
+            make_listing(make_product(make_set(other, name=f"Set {n}", slug=f"set-{n}", code=f"S{n}"),
+                                      name=f"Game {n} Booster Box", product_type=Product.Type.BOOSTER_BOX),
+                         self.harbour, price="90.00")
+        cache.clear()
+        look.remember()
+        html = self.html(self.game.get_absolute_url())
+        bar = html[html.index('<nav class="feed-games"'):html.index("</nav>", html.index('<nav class="feed-games"'))]
+        self.assertEqual(bar.count('<a class="feed-game"'), feed.DESK_BAR + 2)   # All and every game, for a phone
+        self.assertIn('<details class="feed-games__more"><summary class="feed-game feed-game--more">', bar)
+        self.assertIn('<span class="feed-game__label">More</span></summary></details>', bar)
+        css = self.css()
+        # The row holds All and the first DESK_BAR games; the fold shows the rest, and never hides the game in view.
+        self.assertIn(f'.compact-look .feed-games:has(.feed-games__more:not([open])) > a:nth-child(n + {feed.DESK_BAR + 2})'
+                      ':not([aria-current="page"]) { display: none; }', css)
+        self.assertIn("@supports selector(:has(*)) {", css)
+        hidden = css[css.index(".cx-step, .cx-setrow"):]
+        self.assertIn(".feed-games__more { display: none; }", hidden[:hidden.index("\n")])    # a phone has no More
+        self.assertIn(".compact-look .feed-games { display: grid; grid-template-columns: repeat(auto-fit, "
+                      "minmax(var(--desk-game), 1fr));", css)
+
+    def test_beside_the_page_the_questions_come_first_then_the_box_then_the_insights(self):
+        html = self.html(self.pre.get_absolute_url())
+        sheet = html[html.index('id="ask-sheet"'):]
+        # In the page the box is first, as a phone's popup shows it; site.css orders them beside the page.
+        self.assertLess(sheet.index("data-ask-sheet-form"), sheet.index("data-ask-side"))
+        self.assertLess(sheet.index("data-ask-side"), sheet.index('class="ask-sheet__lower"'))
+        self.assertLess(sheet.index('class="ask-sheet__lower"'), sheet.index('class="ask-sheet__ways"'))
+        # A list has its own questions, so the popup's suggestions step aside beside the page: nothing is said twice.
+        self.assertIn('<ul class="ask-sheet__chips ask-sheet__chips--also"', sheet)
+        product = self.html(self.etb.get_absolute_url())
+        self.assertIn('<ul class="ask-sheet__chips" aria-label=', product)
+        self.assertNotIn("data-ask-side", product)
+        css = self.css()
+        block = css[css.index("/* Ask Rip beside the page (html.rip-side"):]
+        for rule in ("html.rip-side .ask-side--ask, html.rip-side .ask-sheet__more > .ask-sheet__chips { order: 1; }",
+                     "html.rip-side .ask-sheet__log, html.rip-side .ask-sheet__reply { order: 2; }",
+                     'html.rip-side [data-ask-view="all"] > .ask-sheet__form { order: 3; }',
+                     "html.rip-side .ask-sheet__chips.ask-sheet__chips--also { display: none; }"):
+            self.assertIn(rule, block)
+        # Only the part under the box may scroll, and a phone's popup lays its parts out as it always did.
+        self.assertIn("html.rip-side .ask-sheet__lower { order: 5; flex: 1 1 auto;", block)
+        self.assertIn("overflow-y: auto;", block[block.index("html.rip-side .ask-sheet__lower {"):].split("\n")[0])
+        self.assertIn(".ask-sheet__lower { display: contents; }", block[:block.index("@media")])
+        self.assertNotIn("overflow-y", block[block.index("html.rip-side .ask-sheet__panel {"):].split("\n")[0])
+
+    def test_the_column_is_part_of_the_page_and_its_questions_are_quiet(self):
+        self.assertIn("--rip-side: clamp(22rem, 25vw, 23.75rem);", self.tokens())      # 352px to 380px
+        css = self.css()
+        block = css[css.index("/* Ask Rip beside the page (html.rip-side"):]
+        column = block[block.index("html.rip-side .ask-sheet {"):].split("\n")[0]
+        self.assertIn("border-left: var(--border-width) solid var(--color-line);", column)
+        panel = block[block.index("html.rip-side .ask-sheet__panel {"):].split("\n")[0]
+        for part in ("position: sticky;", "border: 0;", "background: none;", "box-shadow: none;"):
+            self.assertIn(part, panel)
+        chip = block[block.index("html.rip-side .ask-sheet__chip {"):].split("\n")[0]
+        self.assertIn("border-color: var(--color-line);", chip)
+        self.assertIn("background: var(--color-shelf); color: var(--color-ink);", chip)
+        self.assertNotIn("brand", chip)                                 # orange is for what sends and what is chosen
+        # The insights say their names in full: nothing is cut with dots beside the page.
+        self.assertIn("html.rip-side .ask-pick__name { display: block; overflow: visible;", block)
+        self.assertNotIn("text-overflow", block)
+
+    def test_the_banner_is_a_slim_band_in_season_and_gone_out_of_it(self):
+        from datetime import date
+        from unittest import mock
+
+        css = self.css()
+        band = css[css.index("/* On a desktop screen the banner is one slim band"):]
+        band = band[:band.index("\n}\n")]
+        self.assertIn("@media (min-width: 64rem) {", band)
+        self.assertIn(".bf-banner { grid-template-columns: minmax(0, 1fr) auto; align-items: center;", band)
+        self.assertIn("margin: 0 0 var(--space-4); padding: var(--space-3) var(--space-4); }", band)
+        with mock.patch("web.black_friday.local_today", return_value=date(2026, 11, 25)):
+            self.assertIn('class="bf-banner"', self.html("/"))
+        cache.clear()
+        look.remember()
+        with mock.patch("web.black_friday.local_today", return_value=date(2026, 6, 1)):
+            self.assertNotIn("bf-banner", self.html("/"))
+
+    def test_the_search_box_takes_the_room_and_the_cards_pictures_are_shorter(self):
+        tokens = self.tokens()
+        self.assertIn("--desk-search: 60rem;", tokens)
+        self.assertIn("--desk-deal-well: 10rem;", tokens)
+        css = self.css()
+        self.assertIn(".masthead__search { justify-self: center; width: 100%; max-width: var(--desk-search); }", css)
+        self.assertIn("html:not(.view-list) .compact-look .crow__pic { display: block; height: var(--desk-deal-well);", css)
+        self.assertIn("html:not(.view-list) .compact-look .crow__body { gap: var(--space-2); padding: var(--space-4) "
+                      "var(--space-4) 0; }", css)

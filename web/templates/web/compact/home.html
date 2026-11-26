@@ -5,7 +5,7 @@
 {% block page_class %}page--feed page--compact{% endblock %}
 
 {% block content %}
-{# The home page in the compact layout (web/compact.py): the numbers, today's deals in a strip, the sets people want now. The search box and the games at the foot of a phone, as the feed's (feed_dock.html). A desktop screen (from 64rem) shows its own headline, line and a browse bar in place of the numbers, the deals as a grid and the sets in a tab for each game (desk); the dt- parts are hidden below it and the phone's parts of the hero above it. #}
+{# The home page in the compact layout (web/compact.py): the numbers, today's deals in a strip, the sets people want now. The search box and the games at the foot of a phone, as the feed's (feed_dock.html). A desktop screen (from 64rem) shows its own headline and line in place of the numbers, with the live numbers beside them, the deals as a grid and the sets in a tab for each game (desk); the dt- parts are hidden below it and the phone's parts of the hero above it. It has no browse bar: the row of games above it, then a game's sets and types, are the way in (the owner, 26 Nov 2026: "Remove unnecessary duplication between the game navigation and the Browse Products dropdowns"). #}
 {% include "web/includes/feed_sprite.svg" %}
 {% include "web/includes/feed_dock.html" with feed=dock %}
 <section class="cx-hero cx-hero--home" aria-labelledby="home-title">
@@ -19,14 +19,6 @@
     <li class="dt-facts__item"><span class="dt-facts__number">{{ numbers.shops }}</span> {% copy "compact.desk.shops" %}</li>
     {% if numbers.checked %}<li class="dt-facts__item dt-facts__item--checked"><span class="cx-checked__dot" aria-hidden="true"></span>{% copy "compact.checked" ago=numbers.checked|ago %}</li>{% endif %}
   </ul>
-  <form class="dt-browse" action="{% url 'web:search' %}" method="get" aria-labelledby="dt-browse-title">
-    <h2 id="dt-browse-title" class="dt-browse__title">{% copy "compact.desk.browse" %}</h2>
-    <label class="pill dt-browse__field"><span class="visually-hidden">{% copy "compact.desk.game_label" %}</span><select name="game"><option value="">{% copy "compact.desk.any_game" %}</option>{% for item in desk.games %}<option value="{{ item.slug }}">{{ item.label }}</option>{% endfor %}</select></label>
-    <label class="pill dt-browse__field"><span class="visually-hidden">{% copy "compact.desk.type_label" %}</span><select name="type"><option value="">{% copy "compact.desk.any_type" %}</option>{% for kind, heading in desk.types %}<option value="{{ kind }}">{{ heading }}</option>{% endfor %}</select></label>
-    <label class="pill dt-browse__field"><span class="visually-hidden">{% copy "compact.desk.price_label" %}</span><select name="price"><option value="">{% copy "compact.desk.any_price" %}</option>{% for value, label in desk.prices %}<option value="{{ value }}">{{ label }}</option>{% endfor %}</select></label>
-    <label class="dt-browse__check"><input type="checkbox" name="in_stock" value="on" checked> {% copy "compact.in_stock" %}</label>
-    <button class="button dt-browse__go" type="submit">{% copy "compact.desk.show" %}</button>
-  </form>
 </section>
 {% include "web/includes/black_friday_banner.html" %}
 {% if season.key == "christmas" %}{% include "web/includes/season/christmas_gifts.html" %}{% endif %}

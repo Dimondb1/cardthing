@@ -22,6 +22,8 @@
     <nav class="feed-games" aria-label="{% copy 'feed.games.label' %}">
       <a class="feed-game" href="{% url 'web:home' %}"{% if not feed.game %} aria-current="page"{% endif %}><span class="feed-game__pill"><svg class="feed-ic" aria-hidden="true" focusable="false"><use href="#rr-game-all"/></svg></span><span class="feed-game__label">{% copy "feed.games.all" %}</span></a>
       {% for item in feed.games %}<a class="feed-game" href="{{ item.url }}"{% if feed.game and item.slug == feed.game.slug %} aria-current="page"{% endif %}><span class="feed-game__pill"><svg class="feed-ic" aria-hidden="true" focusable="false"><use href="#rr-game-{{ item.icon }}"/></svg></span><span class="feed-game__label">{{ item.label }}</span></a>{% endfor %}
+      {# A desktop screen's row shows the first games as buttons (web/feed.py DESK_BAR); the rest open under More, a fold with nothing in it: open, site.css shows the games it was holding back. A phone's bar scrolls through every game and has no More. #}
+      {% if feed.more %}<details class="feed-games__more"><summary class="feed-game feed-game--more"><span class="feed-game__pill"><svg class="feed-ic" aria-hidden="true" focusable="false"><use href="#rr-chevron-right"/></svg></span><span class="feed-game__label">{% copy "feed.games.more" %}</span></summary></details>{% endif %}
     </nav>
   </div>
   {# The arrows on the dock's edge (feed.js): down takes the page to the next heading while there is one below, and names it (feed.js fills feed-dock__where), up to the heading before, or the top. The owner, 6 Nov 2026: "the little down arrow when pressed should pop the user down to the next heading and then maybe an up one to pop them back up"; 9 Nov 2026: it should show where it goes. #}

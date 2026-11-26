@@ -63,18 +63,25 @@ Hidden until the script opens it; without script the Ask button opens the Find p
         <p class="ask-sheet__private">{% copy "askrip.sheet.listen_private" %}</p>
       </div>
       <div class="ask-sheet__more" data-ask-more>
-        <ul class="ask-sheet__chips" aria-label="{% copy 'askrip.sheet.chips' %}">
+        {# Beside the page on a wide screen (site.css, html.rip-side) the order is the questions, the box, then Quick insights and the ways in: the list's own questions (ask_side.html) take the place of these suggestions where the page is a list, and the box sits under them. A phone's popup is as it was: these suggestions, today's deal, the ways in. #}
+        {% rip_side as side %}{% include "web/includes/ask_side.html" %}
+        <ul class="ask-sheet__chips{% if side.suggestions %} ask-sheet__chips--also{% endif %}" aria-label="{% copy 'askrip.sheet.chips' %}">
           {% copy "askrip.sheet.chip_1" as chip_1 %}{% if chip_1 %}<li><a class="chip ask-sheet__chip" href="{% url 'web:search' %}?q={{ chip_1|urlencode }}&amp;from=ask" data-ask-search data-ask-ahead>{{ chip_1 }}</a></li>{% endif %}
           {% copy "askrip.sheet.chip_2" as chip_2 %}{% if chip_2 %}<li><a class="chip ask-sheet__chip" href="{% url 'web:search' %}?q={{ chip_2|urlencode }}&amp;from=ask" data-ask-search data-ask-ahead>{{ chip_2 }}</a></li>{% endif %}
           <li><a class="chip ask-sheet__chip" href="{% url 'web:drops' %}?show=out">{% copy "askrip.sheet.chip_new" %}</a></li>
         </ul>
-        {% with today=ask_today %}{% if today %}{% copy "askrip.sheet.today" as today_label %}{% include "web/includes/ask_pick.html" with product=today.product listing=today.summary.best summary=today.summary label=today_label %}{% endif %}{% endwith %}
-        <nav class="ask-sheet__ways" aria-label="{% copy 'askrip.sheet.ways' %}">
-          <a class="ask-sheet__way" href="{% url 'web:find_list' %}">{% include "web/includes/icons/list-add.svg" %}<span class="ask-sheet__way-name">{% copy "askrip.sheet.build" %}</span></a>
-          <a class="ask-sheet__way" href="{% url 'web:shopping_list' %}" rel="nofollow">{% include "web/includes/icons/list.svg" %}<span class="ask-sheet__way-name">{% copy "askrip.sheet.list" %} <span data-list-count></span></span></a>
-          <a class="ask-sheet__way" href="{% url 'web:find' %}?go=find">{% include "web/includes/icons/steps.svg" %}<span class="ask-sheet__way-name">{% copy "askrip.sheet.steps" %}</span></a>
-        </nav>
-        {% rip_side as side %}{% include "web/includes/ask_side.html" %}
+        <div class="ask-sheet__lower">
+          {% with today=ask_today %}
+          {% if today or side.saving or side.pack or side.set or side.shops %}<h3 class="ask-side__only ask-side__head">{% copy "askrip.side.insights" %}</h3>{% endif %}
+          {% if today %}{% copy "askrip.sheet.today" as today_label %}{% include "web/includes/ask_pick.html" with product=today.product listing=today.summary.best summary=today.summary label=today_label %}{% endif %}
+          {% endwith %}
+          {% include "web/includes/ask_insights.html" %}
+          <nav class="ask-sheet__ways" aria-label="{% copy 'askrip.sheet.ways' %}">
+            <a class="ask-sheet__way" href="{% url 'web:find_list' %}">{% include "web/includes/icons/list-add.svg" %}<span class="ask-sheet__way-name">{% copy "askrip.sheet.build" %}</span></a>
+            <a class="ask-sheet__way" href="{% url 'web:shopping_list' %}" rel="nofollow">{% include "web/includes/icons/list.svg" %}<span class="ask-sheet__way-name">{% copy "askrip.sheet.list" %} <span data-list-count></span></span></a>
+            <a class="ask-sheet__way" href="{% url 'web:find' %}?go=find">{% include "web/includes/icons/steps.svg" %}<span class="ask-sheet__way-name">{% copy "askrip.sheet.steps" %}</span></a>
+          </nav>
+        </div>
       </div>
     </div>
   </section>

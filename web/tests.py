@@ -11,6 +11,7 @@ from django.utils import timezone
 
 from catalogue.models import DailyLowestPrice, Listing, OutboundClick, Product, Retailer
 from catalogue.testing import make_game, make_listing, make_product, make_retailer, make_set
+from content.registry import OWNERS_SLOGAN
 
 
 class PageTestCase(TestCase):
@@ -325,7 +326,8 @@ class CopyStyleTests(PageTestCase):
             html = self.client.get(url).content.decode()
             visible_text = re.sub(r"<[^>]*>", " ", html)
             with self.subTest(url=url):
-                self.assertNotIn("!", visible_text)
+                # But for the owner's slogan, his to punctuate (content.registry.OWNERS_SLOGAN): it alone, word for word.
+                self.assertNotIn("!", visible_text.replace(OWNERS_SLOGAN, ""))
 
     def test_the_product_page_alert_form_keeps_the_house_style(self):
         mail_on = {"RIPRAPTOR_ZEPTOMAIL_TOKEN": "tok", "RIPRAPTOR_MAIL_FROM": "alerts@ripraptor.com",

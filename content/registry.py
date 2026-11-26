@@ -167,6 +167,12 @@ H, T, P, B = Kind.HEADING, Kind.TEXT, Kind.PARAGRAPHS, Kind.BUTTON
 OUTREACH_FILL = ("shop", "visitors_month", "visitors_quarter", "visitors_total", "since", "top_products", "listed",
                  "in_stock", "site_url", "badge_url", "sent", "shopper_update", "top_line")
 
+# The site's slogan, in the owner's words and with his exclamation mark (26 Nov 2026: "Correct the homepage slogan to
+# \"Ripping Packs, Not Rip-Offs!\""). It is the one sentence the copy rules let end in one: the tests that keep
+# exclamation marks out of the site's wording (content/tests.py and the pages' own) take the slogan out before they
+# look, so every other sentence is still held to the rule.
+OWNERS_SLOGAN = "Ripping Packs, Not Rip-Offs!"
+
 ENTRIES = [
     # Header and search box ------------------------------------------------
     Entry(
@@ -556,6 +562,9 @@ ENTRIES = [
           "Read out for the bar of games at the foot of a phone; not shown."),
     Entry("feed.games.all", B, "New home page game bar: all games", "All",
           "The first item of the game bar, which opens the home page."),
+    Entry("feed.games.more", B, "Game bar: the rest of the games", "More",
+          "The last button in a desktop screen's row of games, when there are more games than the row shows: it "
+          "opens the rest under the row."),
     Entry("feed.search.placeholder", T, "New home page search box hint", "Search any product",
           "Grey words in the search box at the foot of the new home page. Short: a phone's box shows about eighteen "
           "letters beside the microphone and the go button (the owner, 5 Nov 2026: \"it cut off\")."),
@@ -935,10 +944,12 @@ ENTRIES = [
           "Before the shop's name on a product row when its cheapest price is a pre-order."),
     Entry("compact.row.none", T, "Compact layout: a row none has", "None in stock",
           "On a product row when no shop has it in stock or on pre-order."),
-    # The compact home page on a desktop screen (from 64rem wide): its own intro, a browse bar, the deals as a grid and
-    # the sets in a tab for each game. Phones and tablets keep the compact.home wording above.
-    Entry("compact.desk.title", H, "Desktop home: headline", "Find your cards. Pay less.",
-          "The home page's headline on a desktop screen. Short: it sits on one line beside the numbers."),
+    # The compact home page on a desktop screen (from 64rem wide): its own intro, the deals as a grid and the sets in a
+    # tab for each game. Phones and tablets keep the compact.home wording above.
+    # The headline is the owner's slogan (OWNERS_SLOGAN, above).
+    Entry("compact.desk.title", H, "Desktop home: headline", OWNERS_SLOGAN,
+          "The home page's headline on a desktop screen: the site's slogan. Short: it sits on one line beside the "
+          "numbers."),
     Entry("compact.desk.lead", T, "Desktop home: line under the headline",
           "Compare sealed TCG prices from UK retailers. Delivery included, cheapest first.",
           "Under the desktop headline. Says what the site does in one line."),
@@ -946,22 +957,6 @@ ENTRIES = [
           "After the live count of shop prices in stock, beside the desktop headline."),
     Entry("compact.desk.shops", T, "Desktop home: label after the shops count", "UK shops compared",
           "After the live count of shops, beside the desktop headline."),
-    Entry("compact.desk.browse", H, "Desktop home: browse bar label", "Browse products",
-          "At the start of the slim bar of choices under the desktop headline."),
-    Entry("compact.desk.game_label", T, "Desktop home: browse bar game label", "Game",
-          "Read out by screen readers for the browse bar's game choice."),
-    Entry("compact.desk.type_label", T, "Desktop home: browse bar type label", "Product type",
-          "Read out by screen readers for the browse bar's product type choice."),
-    Entry("compact.desk.price_label", T, "Desktop home: browse bar price label", "Price",
-          "Read out by screen readers for the browse bar's price choice."),
-    Entry("compact.desk.any_game", T, "Desktop home: browse bar, every game", "Any game",
-          "The first choice in the browse bar's game list."),
-    Entry("compact.desk.any_type", T, "Desktop home: browse bar, every type", "Any product type",
-          "The first choice in the browse bar's product type list."),
-    Entry("compact.desk.any_price", T, "Desktop home: browse bar, every price", "Any price",
-          "The first choice in the browse bar's price list."),
-    Entry("compact.desk.show", B, "Desktop home: browse bar button", "Show products",
-          "The browse bar's button: opens the products that match the choices."),
     Entry("compact.desk.cheapest_at", T, "Desktop home: the shop on a deal card", "Cheapest at {shop}",
           "On a deal card on a desktop screen, under the price: the shop with the cheapest price.",
           placeholders=("shop",)),

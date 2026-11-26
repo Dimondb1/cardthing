@@ -2,7 +2,7 @@
 Ask Rip beside the page on a wide screen (the owner's brief of 26 Nov 2026: "an integrated desktop shopping assistant
 rather than requiring users to leave their browsing experience", with suggestions "relevant to what the user is
 browsing" and Quick insights from "existing calculated information"). What the panel adds to Ask Rip's own popup
-(ask_sheet.html, ask_side.html), worked out for each page from what the page already has:
+(ask_sheet.html, ask_side.html, ask_insights.html), worked out for each page from what the page already has:
 
 - suggestions: short questions about the list in view (its game, set and product type), each a plain link to an
   existing answer: Great value, Best for ripping, Lowest in 90 days, the Deals page. A tap costs Rip nothing; no
@@ -78,7 +78,8 @@ def trending_set(game):
 
 
 def panel(context):
-    """What ask_side.html draws: {"suggestions", "saving", "pack", "set", "shops"}."""
+    """What ask_side.html (the questions) and ask_insights.html draw: {"suggestions", "saving", "pack", "set",
+    "shops"}."""
     request = context.get("request")
     store = copy.for_request(request) if request is not None else None
     game = context.get("game")

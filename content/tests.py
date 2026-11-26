@@ -11,7 +11,7 @@ from . import service
 from .admin import SiteContentForm
 from .formatting import check
 from .models import SiteContent
-from .registry import ENTRIES, REGISTRY, SECTION_KEYS
+from .registry import ENTRIES, OWNERS_SLOGAN, REGISTRY, SECTION_KEYS
 
 
 def render(source, **context):
@@ -32,8 +32,10 @@ class RegistryTests(TestCase):
                 self.assertEqual(problems, [])
 
     def test_defaults_have_no_exclamation_marks(self):
+        # But for the owner's slogan, which is his to punctuate (registry.OWNERS_SLOGAN): it alone, word for word.
         for entry in ENTRIES:
-            self.assertNotIn("!", entry.default, entry.key)
+            self.assertNotIn("!", entry.default.replace(OWNERS_SLOGAN, ""), entry.key)
+        self.assertEqual([entry.key for entry in ENTRIES if "!" in entry.default], ["compact.desk.title"])
 
     def test_keys_start_with_a_known_section(self):
         for entry in ENTRIES:

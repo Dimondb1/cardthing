@@ -80,6 +80,10 @@ design: "why is it different than everything else".
   the foot of a phone. Copy how a game's list page does it. On a desktop screen
   the same parts lead with three steps (game, set or collection, product type)
   and the rows show as cards, with a Grid/List switch (the owner, 26 Nov 2026).
+  The games are a row of bordered buttons, the less popular ones behind More.
+- From 1,280px wide Ask Rip sits beside the page as a column that is part of
+  the layout, not a card: questions, then the box, then Quick insights. Its
+  questions are neutral; orange is for the send button and what is chosen.
 - A product is only shown through a shared part listed in `web/design.py`
   (a row, a card, a table row and so on). Need something a part does not
   show? Add one line or one modifier to the part, for every page to share.
@@ -96,7 +100,9 @@ design: "why is it different than everything else".
 
 - Short, direct British English. Every sentence has a job.
 - No em dashes anywhere. No exclamation marks. No marketing filler
-  ("unlock", "seamless", "ultimate", "all in one place").
+  ("unlock", "seamless", "ultimate", "all in one place"). The one exception is
+  the owner's slogan, "Ripping Packs, Not Rip-Offs!" (26 Nov 2026), held in
+  `content.registry.OWNERS_SLOGAN`.
 - Public wording lives in `content/registry.py` and is edited in Django
   Admin. Do not hard-code sentences in templates. Short data labels (stock
   states, product types) stay in code.

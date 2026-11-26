@@ -159,7 +159,8 @@
 {% endif %}
 
 {% if compact %}
-{# The compact layout: the types as small tiles above the rows, and the In stock switch where the stock tabs do not do that job (web/compact.py). #}
+{# The compact layout: on a desktop screen the game's sets, then the types as small tiles above the rows, and the In stock switch where the stock tabs do not do that job (web/compact.py). #}
+{% include "web/includes/compact_set_row.html" %}
 {% include "web/includes/compact_tiles.html" with tiles=compact_tiles hint=list_hints %}
 {% if compact_switch %}{% include "web/includes/compact_switch.html" with keep=compact_keep hint=list_hints %}{% endif %}
 {% endif %}

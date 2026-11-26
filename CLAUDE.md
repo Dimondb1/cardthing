@@ -77,7 +77,9 @@ design: "why is it different than everything else".
   (`web/look.py`) and is built from the shared parts: in the compact look the
   status line, the heading with one short line under it, the type tiles, the
   switches, each product as a compact row, and the search box and games at
-  the foot of a phone. Copy how a game's list page does it.
+  the foot of a phone. Copy how a game's list page does it. On a desktop screen
+  the same parts lead with three steps (game, set or collection, product type)
+  and the rows show as cards, with a Grid/List switch (the owner, 26 Nov 2026).
 - A product is only shown through a shared part listed in `web/design.py`
   (a row, a card, a table row and so on). Need something a part does not
   show? Add one line or one modifier to the part, for every page to share.

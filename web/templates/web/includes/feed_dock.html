@@ -18,6 +18,7 @@
       <button class="feed-search__go" type="submit" aria-label="{% copy 'site.search.button' %}"><svg class="feed-ic" aria-hidden="true" focusable="false"><use href="#rr-arrow-right"/></svg></button>
     </form>
     {% if feed.hints == "home" %}<span class="feed-hint feed-hint--games" hidden aria-hidden="true">{% copy "feed.hint.games" %}</span>{% endif %}
+    <p class="cx-step cx-step--games" aria-hidden="true">{% copy "compact.step.game" %}</p>
     <nav class="feed-games" aria-label="{% copy 'feed.games.label' %}">
       <a class="feed-game" href="{% url 'web:home' %}"{% if not feed.game %} aria-current="page"{% endif %}><span class="feed-game__pill"><svg class="feed-ic" aria-hidden="true" focusable="false"><use href="#rr-game-all"/></svg></span><span class="feed-game__label">{% copy "feed.games.all" %}</span></a>
       {% for item in feed.games %}<a class="feed-game" href="{{ item.url }}"{% if feed.game and item.slug == feed.game.slug %} aria-current="page"{% endif %}><span class="feed-game__pill"><svg class="feed-ic" aria-hidden="true" focusable="false"><use href="#rr-game-{{ item.icon }}"/></svg></span><span class="feed-game__label">{{ item.label }}</span></a>{% endfor %}

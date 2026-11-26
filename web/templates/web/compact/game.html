@@ -9,6 +9,8 @@
 {% include "web/includes/feed_sprite.svg" %}
 {% include "web/includes/feed_dock.html" with feed=dock %}
 {% include "web/includes/compact_status.html" %}
+{% include "web/includes/compact_set_row.html" %}
+<div class="cx-desk">{% include "web/includes/compact_tiles.html" with tiles=desk_tiles %}</div>
 {# The owner, 15 Nov 2026: "Talk about waffle central ... only the necessary": the heading is for search engines and screen readers only, and the counts sentence is at the foot (web/proof.py reads it there). #}
 <h1 class="visually-hidden">{% copy "browse.hub.answer.title" game=game.name %}</h1>
 {% include "web/includes/compact_strip.html" %}

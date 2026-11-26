@@ -536,3 +536,23 @@ document.addEventListener("ripraptor:content", (event) => {
     setTimeout(done, MOST + 2000);
   }
 }
+
+// Grid or list on a desktop screen (compact_switch.html): the products as cards or as the phone's rows. The choice is
+// kept in this browser (ripraptor.view) and put on <html> before the first paint (theme_head.html), so a list never
+// flashes the other way. Without this file the buttons stay hidden and a desktop screen shows the grid.
+(() => {
+  const root = document.documentElement;
+  document.querySelectorAll("[data-view-switch]").forEach((box) => {
+    const buttons = box.querySelectorAll("[data-view]");
+    const show = (view) => {
+      root.classList.toggle("view-list", view === "list");
+      buttons.forEach((button) => button.setAttribute("aria-pressed", String(button.dataset.view === view)));
+    };
+    show(root.classList.contains("view-list") ? "list" : "grid");
+    buttons.forEach((button) => button.addEventListener("click", () => {
+      show(button.dataset.view);
+      try { localStorage.setItem("ripraptor.view", button.dataset.view); } catch (e) { /* kept for this page only */ }
+    }));
+    box.hidden = false;
+  });
+})();

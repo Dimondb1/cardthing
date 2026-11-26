@@ -11,6 +11,10 @@ The rules, each with its test:
 2. A LIST page wears the look the site is in (web/look.py). In the compact look that is: the compact body, the search
    box and games at the foot of a phone (the dock), the status line or the home page's numbers, and its products as
    compact rows. In the classic look: none of those, and its products as cards. It has no design of its own.
+   On a desktop screen (from 64rem; the owner, 26 Nov 2026) the same parts are laid out for the width: the list leads
+   with three steps, each a shared part with its label (the dock's games, compact_set_row.html, compact_tiles.html),
+   and the compact rows are shown as cards in a grid whose columns follow the space, or as rows with List chosen. The
+   markup is the same row on every screen: only site.css lays it out, so a phone is unchanged.
 3. A product is only ever shown through one of the shared parts in PRODUCT_PARTS (a row, a card, a table row...), or
    named in a sentence (PROSE). A new way to show a product is a new entry here, which the owner agrees first.
 4. Every page has exactly one main heading.

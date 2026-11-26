@@ -35,6 +35,7 @@ STRIP = 10          # cards in the deals strip
 POPULAR = 24        # sets on the home page
 DESK_SETS = 12      # sets in each game's tab on a desktop screen
 DESK_GAMES = 5      # games with a tab of their own beside All
+SET_ROW = 12        # sets in a desktop screen's row of sets (compact_set_row.html), newest first
 # The product that pictures a set: a booster box first, the way a set is known, then the boxes and bundles.
 COVER_ORDER = ("booster_box", "elite_trainer_box", "bundle", "collection_box", "booster_pack", "tin", "deck")
 
@@ -132,6 +133,49 @@ def newest_first(rows):
 def game_sets(game, fresh=False):
     """The game's sets for its page, newest first, cached (kept)."""
     return kept(f"sets/{game.pk}", lambda: newest_first(set_rows(game)), fresh)
+
+
+def set_row(game, current=None, kind="", rows=None):
+    """Step two of a desktop screen's three (game, set, type: compact_set_row.html): the game's newest sets, each with
+    its picture and a link to its page that keeps the type in view, the one in view marked, after All sets, which goes
+    back to the game's page (or the type's). The owner, 26 Nov 2026: "Game, Set or collection, Product type, Products
+    ... consistent across relevant desktop browsing pages". ``rows``: the game's sets with their covers when the page
+    has them already (its own list); else the cached list and one query for the pictures. None without a game."""
+    from . import type_pages
+
+    if game is None:
+        return None
+    if rows is None:
+        found = game_sets(game)
+        rows = found[:SET_ROW]
+        if current is not None and all(row["set"].pk != current.pk for row in rows):
+            rows = [row for row in found if row["set"].pk == current.pk] + rows[:SET_ROW - 1]
+        rows = with_covers(rows)
+    else:
+        rows = rows[:SET_ROW]
+    keep = f"?type={kind}" if kind else ""
+    all_url = (type_pages.url_for(game, kind) or f"{game.get_absolute_url()}?type={kind}") if kind else game.get_absolute_url()
+    items = [{"set": row["set"], "cover": row["cover"], "url": row["set"].get_absolute_url() + keep,
+              "current": current is not None and row["set"].pk == current.pk} for row in rows]
+    return {"items": items, "all_url": all_url, "all_current": current is None} if items else None
+
+
+def game_type_tiles(request, game, all_url):
+    """Step three on a game's own page on a desktop screen: its product types as the small tiles, each a link to that
+    type's page (web/type_pages.py) and All to every product of the game. One query for the pictures."""
+    from . import type_pages
+
+    store = copy.for_request(request)
+    rows = in_game_order(game, feed.tile_picks()["games"].get(game.pk, []))
+    rows = [row for row in rows if row[0] in feed.TYPE_LABELS][:feed.TILES_SHOWN]
+    products = Product.objects.active().in_bulk([pk for _kind, pk, _n in rows]) if rows else {}
+    tiles = [feed.Tile(feed.ALL, copy.get("compact.types.all", store=store), None, all_url, False)]
+    for kind, pk, _n in rows:
+        product = products.get(pk)
+        if product is not None:
+            url = type_pages.url_for(game, kind) or f"{all_url}&type={kind}"
+            tiles.append(feed.Tile(kind, feed.TYPE_LABELS[kind], product, url, False))
+    return tiles
 
 
 def popular_sets(limit=POPULAR, fresh=False):
@@ -353,6 +397,7 @@ def game_page(request, game, extra, answer):
 
     sets = with_covers(game_sets(game))
     deals = strip(game)
+    all_url = f"{reverse('web:search')}?game={game.slug}"
     words, stats, facts, page_url = answer["words"], answer["stats"], answer["facts"], answer["page_url"]
     faq = answers.game_faq(words, game, stats, facts, len(sets))
     listed = answers.listed_products(facts["picks"], [card.product for card in deals])
@@ -370,7 +415,11 @@ def game_page(request, game, extra, answer):
         "picks": facts["picks"],
         "faq": faq,
         "structured_json": ld_json(structured),
-        "all_url": f"{reverse('web:search')}?game={game.slug}",
+        "all_url": all_url,
+        # A desktop screen's steps two and three (compact_set_row.html, compact_tiles.html): the newest sets and the
+        # game's types, from what the page has already, plus one query for the types' pictures.
+        "set_row": set_row(game, rows=sets),
+        "desk_tiles": game_type_tiles(request, game, all_url),
         # The light hints by the sets and the All products link on each landing (feed.js; the owner, 17 Nov 2026).
         "dock": dock(request, game, hints="game"),
     })
@@ -439,6 +488,7 @@ def set_page(request, product_set, extra, answer):
         "stock_switch": True,
         "rip_on": rip,
         "value_on": value,
+        "set_row": set_row(product_set.game, current=product_set, kind=chosen),
         "dock": dock(request, product_set.game),
     })
 

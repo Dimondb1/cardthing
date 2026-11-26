@@ -1,0 +1,8 @@
+{% load sitecopy ripraptor %}{# Step two of a desktop screen's three (game, set or collection, product type; web/compact.py set_row): All sets, back to the game's page or its type's, then its newest sets, each pictured by one of its own products, the one in view marked, as a row that scrolls sideways. Plain links, so it works without script and search engines follow it. Hidden below 64rem, where the game's page lists its sets. Takes set_row. #}
+{% if set_row %}<nav class="cx-setrow" aria-labelledby="cx-setrow-title">
+  <p class="cx-step" id="cx-setrow-title">{% copy "compact.step.set" %}</p>
+  <ul class="cx-setrow__list">
+    <li><a class="cx-setrow__item" href="{{ set_row.all_url }}"{% if set_row.all_current %} aria-current="page"{% endif %}><span class="cx-setrow__pic cx-setrow__pic--all" aria-hidden="true"><svg class="feed-ic" focusable="false"><use href="#rr-game-all"/></svg></span><span class="cx-setrow__name">{% copy "compact.setrow.all" %}</span></a></li>
+    {% for item in set_row.items %}<li><a class="cx-setrow__item" href="{{ item.url }}"{% if item.current %} aria-current="page"{% endif %}><span class="cx-setrow__pic">{% if item.cover %}{% product_image item.cover "tile" %}{% endif %}</span><span class="cx-setrow__name">{{ item.set.name }}</span></a></li>{% endfor %}
+  </ul>
+</nav>{% endif %}

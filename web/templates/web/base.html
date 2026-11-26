@@ -46,9 +46,12 @@
   {% include "web/includes/launch.html" %}
   <a class="skip-link" href="#main">Skip to main content</a>
   {% include "web/includes/header.html" %}
+  {# The page and, on a wide screen, Ask Rip beside it (site.css, Desktop browsing). #}
+  <div class="frame">
   <main id="main" class="page {% block page_class %}{% endblock %}">
     {% block content %}{% endblock %}
   </main>
+  </div>
   {% include "web/includes/footer.html" %}
   {% include "web/includes/install.html" %}
   {% block refer_card %}{% if refer_asked %}<script nonce="{{ csp_nonce }}" src="{% static 'js/refer-card.js' %}" data-refer-asked defer></script>{% elif refer_card %}{% include "web/includes/refer_card.html" %}{% endif %}{% endblock %}

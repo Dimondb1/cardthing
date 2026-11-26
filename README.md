@@ -4285,6 +4285,40 @@ sends a confirmation again: only its link turns restocks on. The reminder
 is deleted when its restock days are up. The wording is in Site wording
 under the home page ("Drop spotlight") and the drop reminder emails.
 
+## Desktop browsing
+
+The owner's brief of 26 Nov 2026: make better use of a desktop screen without
+changing the site's look or a phone's layout. Everything here is the shared
+parts laid out by `site.css` from 64rem (a laptop) up; a phone and a tablet are
+unchanged, pixel for pixel.
+
+- **Width**: from 80rem the header, footer and every list in the compact layout
+  grow to `--page-wide` (112rem, about 1,800px, `tokens.css`) with the usual
+  outer margins. Every other page (a product, a guide, About) keeps
+  `--page-standard` (80rem) inside it, so nothing is stretched. The page sits in
+  a frame (`base.html .frame`) that holds Ask Rip beside it on a wide screen.
+- **Three steps** at the top of every list, each an existing part with its label
+  from the registry (`compact.step.*`): 1. Choose a game (the dock's game bar,
+  which a desktop screen hid before), 2. Pick a set or collection
+  (`compact_set_row.html`: All sets, then the game's newest 12 sets with their
+  pictures, the one in view marked, each keeping the product type in view),
+  3. Choose a product type (the type tiles; on a game's own page they link to
+  each type's page). Plain links throughout, so they work without script and
+  search engines follow them. The sets come from the cached set list
+  (`compact.set_row`), with one query for their pictures.
+- **Cards**: the compact rows (`compact_row.html`) show as cards in a grid whose
+  columns follow the space (`--desk-card`, 15rem at least): the picture in a
+  well, the name, the shop, why it is a deal (the same evidence a deal card
+  gives), the Price check, the delivered price, the shops, the price a pack,
+  Compare prices at the foot and Watch in the corner. A phone still sees the
+  row, with the Price check only with Best for ripping on. The deals and sets
+  grids take as many columns as fit from 80rem too.
+- **Grid or List**: buttons at the end of the switches (`compact_switch.html`,
+  `site.js`) show the rows again; the choice is kept in the browser
+  (`ripraptor.view`) and put on `<html>` before the first paint
+  (`theme_head.html`). Without script the buttons stay hidden and a desktop
+  screen shows the grid.
+
 ## Layout rules
 
 The site's layout and design rules are strict and enforced. `CLAUDE.md`

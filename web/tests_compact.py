@@ -551,7 +551,10 @@ class RipTests(CompactCase):
         html = self.page(url, game="pokemon")
         self.assertIn('<input type="checkbox" name="rip" value="on"><span class="toggle__track" aria-hidden="true">'
                       '</span><span>Best for ripping</span>', html)
-        self.assertNotIn("fair--small", html)          # the chips only with the switch on
+        # The chips only with the switch on: without it a row carries its chip for a desktop screen's card alone, hidden
+        # on a phone (crow__check--desk).
+        self.assertNotIn('<span class="crow__check">', html)
+        self.assertEqual(html.count("fair--small"), html.count("crow__check crow__check--desk"))
         html = self.page(url, game="pokemon", rip="on")
         self.assertIn('<input type="checkbox" name="rip" value="on" checked>', html)
         # The tin holds no cards anyone has counted, so it goes; the pack at 45p a card, the box at 50p, the ETB at

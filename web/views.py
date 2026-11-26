@@ -492,6 +492,9 @@ def _browse(request, template_context, *, base_queryset, fixed_game=None, defaul
         # The types as small tiles above the rows, then the switches: Best for ripping on every list, In stock where
         # the stock tabs do not do that job.
         context["compact_tiles"] = compact.list_tiles(request, fixed_game or game, product_type)
+        # A desktop screen's step two (compact_set_row.html): the game's sets, keeping the type in view.
+        context["set_row"] = compact.set_row(fixed_game or game,
+                                             kind=product_type or template_context.get("desk_kind", ""))
         context["compact_switch"] = True
         context["stock_switch"] = not tabs
         context["in_stock_on"] = bool(form.value("in_stock")) and not tabs
@@ -1590,6 +1593,8 @@ def game_page(request, game, type_code=None):
                      if feed_on else None),
             "chosen_set": chosen_set, "set_options": set_options, "set_clear_url": set_clear_url,
             "sets_in_row": FEED_SETS,
+            # The kind in view, for a desktop screen's row of sets to keep (compact.set_row): a type's own page, or ?type=.
+            "desk_kind": type_code or (kind if kind in Product.Type.values else ""),
         },
         base_queryset=base,
         fixed_game=game,

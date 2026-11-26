@@ -488,9 +488,18 @@
   --desk-set-well: 10rem;          /* a set card's picture well */
   --desk-icon: 1.25rem;            /* an icon beside a header link */
   --desk-rule: 2px;                /* the line under the place in view, in the row under the header */
+  /* Desktop browsing (the owner, 26 Nov 2026: "Expand naturally to utilise wider displays. Maintain sensible outer
+     margins. Dynamically adjust the number of product columns"). */
+  --page-wide: 112rem;             /* the page from 80rem: a wide screen gets more columns, its margins stay */
+  --page-standard: 80rem;          /* a page that is not a list keeps this measure inside the wider page */
+  --desk-card: 15rem;              /* the least a product card in a desktop grid is wide: the columns follow the space */
+  --desk-set-chip: 11rem;          /* a set in a desktop screen's row of sets */
 }
 @media (min-width: 64rem) {
   :root { --page-width: 80rem; }   /* 1280px of content once the screen has room, the header and footer with it */
+}
+@media (min-width: 80rem) {
+  :root { --page-width: var(--page-wide); }
 }
 
 /* A game's written answer (web/answers.py): the column that names each kind of product, from a tablet up. */

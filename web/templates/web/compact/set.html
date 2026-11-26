@@ -19,6 +19,7 @@
   </div>
 </header>
 {% if set_intro %}<p class="cx-setintro">{{ set_intro }}</p>{% endif %}
+{% include "web/includes/compact_set_row.html" %}
 {% include "web/includes/compact_tiles.html" %}
 {% include "web/includes/compact_switch.html" with keep=type_keep %}
 {% if rows %}

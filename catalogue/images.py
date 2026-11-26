@@ -75,6 +75,7 @@ def steps(low, high):
 #   spotlight the home page's drop spotlight: a fan of the set's boxes, 5.5rem a picture on a phone, 8rem from 48rem.
 #   tile     the feed's product type tile (.feed-tile__well, web/feed.py): a 4.5rem picture in a 5.25rem well.
 #   deal_grid the compact home page's deal card: 3.5rem in the phone's strip, 12rem in the desktop grid.
+#   crow      a product row in the compact layout: 3.5rem on a phone, a card's picture in a desktop grid.
 #   set_grid  the compact home page's set card: 4.5rem on a phone, 13rem in the desktop grid.
 #   feed     the feed's product card (.feed-card__well): a 6.75rem picture in its well.
 #   swipe    .swipe__image: as tall as the screen allows on a phone, up to 27.5rem inside the 30rem deck, and
@@ -102,6 +103,8 @@ SLOTS = {
     # The compact home page's deal and set cards: small on a phone and a tablet as before, and drawn large in the desktop
     # grid from 64rem (the owner, 9 Nov 2026: "A reasonably large product image").
     "deal_grid": (100, "(min-width: 64rem) 12rem, 3.5rem", steps(56, 576)),
+    # A product row in the compact layout: 3.5rem on a phone, a card's picture in a desktop screen's grid from 64rem.
+    "crow": (100, "(min-width: 64rem) 12rem, 3.5rem", steps(56, 576)),
     "set_grid": (100, "(min-width: 64rem) 13rem, 4.5rem", steps(72, 624)),
     "feed": (200, "6.75rem", steps(108, 324)),
 }

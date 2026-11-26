@@ -21,6 +21,8 @@
     <label class="toggle"><input type="checkbox" name="great" value="on"{% if value_on %} checked{% endif %}><span class="toggle__track" aria-hidden="true"></span><span>{% copy "compact.value" %}</span></label>
     <button class="button button--quiet button--small" type="submit" data-autosubmit-hide>{% copy "browse.filters.apply" %}</button>
   </form>
+  {# Grid or list on a desktop screen (site.js, kept in this browser as ripraptor.view and put on <html> before the first paint, theme_head.html). Buttons need the script, so they show only with it; without, a desktop screen shows the grid. #}
+  <div class="cx-view" role="group" aria-label="{% copy 'compact.view.label' %}" hidden data-view-switch><button class="cx-view__button" type="button" data-view="grid" aria-pressed="true">{% copy "compact.view.grid" %}</button><button class="cx-view__button" type="button" data-view="list" aria-pressed="false">{% copy "compact.view.list" %}</button></div>
   {% if hint %}<span class="feed-hint feed-hint--soft feed-hint--cx-tools" hidden aria-hidden="true" data-hint-hold="2200" data-hint-glow="900">{% copy "compact.hint.switches" %}</span>{% endif %}
 </div>
 {% if rip_on %}<p class="cx-rip-note">{% if rip_chosen_order %}{% copy "compact.rip_note_chosen" %}{% else %}{% copy "compact.rip_note" %}{% endif %}</p>{% endif %}

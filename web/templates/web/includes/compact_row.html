@@ -1,12 +1,14 @@
 {% load sitecopy ripraptor %}{# One product as a row in the compact layout (web/compact.py): the whole row is the link to its page. Picture, name, the cheapest shop in stock (or that it is a pre-order when nobody has it, or that no shop has it), a cheaper pre-order's price when there is one, then the delivered price, how many shops, and for a box how many packs it holds and the price of each (the owner, 9 Nov 2026: "when I looking up booster boxes, I would like to see the pack count"). With Best for ripping on (rip_on), the price a card and the Price check's chip too. A list may give a product one line of its own under the shop (product.row_note: the Black Friday pages say how far under its 30-day average it is). Takes product (with for_lists' prices and its offers), summary (offers.Summary) and, in a set's list, product.compact_name. #}
 <li class="crow{% if not summary.best %} crow--none{% endif %}">
   <a class="crow__link" href="{{ product.get_absolute_url }}">
-    <span class="crow__pic">{% product_image product "compact" %}</span>
+    <span class="crow__pic">{% product_image product "crow" %}</span>
     <span class="crow__body">
       <span class="crow__name">{{ product.compact_name|default:product.name }}</span>
       <span class="crow__sub">{% if summary.best %}{% if summary.best.availability == "preorder" %}{% copy "compact.row.preorder" %}<span aria-hidden="true"> · </span><span class="visually-hidden">, </span>{% endif %}{{ summary.best.retailer.name }}{% elif product.last_price %}{% copy "product.last_seen" price=product.last_price|gbp %}{% else %}{% copy "compact.row.none" %}{% endif %}{% if product.language %}<span aria-hidden="true"> · </span><span class="visually-hidden">, </span>{{ product.language_name }}{% endif %}</span>
       {% if product.row_note %}<span class="crow__note">{{ product.row_note }}</span>{% endif %}
-      {% if rip_on and summary.best %}<span class="crow__check">{% include "web/includes/fair_card.html" %}</span>{% endif %}
+      {# On a desktop screen the row is a card (site.css), with why it is a deal, from the evidence the summary holds, as on a deal card (compact_strip.html), and its Price check always; on a phone the Price check only with Best for ripping on. #}
+      {% if summary.best %}<span class="crow__why">{% if summary.low_deal %}{% if summary.under %}{% copy "feed.card.why_low_under" percent=summary.under %}{% else %}{% copy "feed.card.why_low" %}{% endif %}{% elif summary.saving and summary.second %}{% copy "feed.card.why_save" amount=summary.saving|gbp retailer=summary.second.retailer.name %}{% endif %}</span>
+      {% if product.card_check %}<span class="crow__check{% if not rip_on %} crow__check--desk{% endif %}">{% include "web/includes/fair_card.html" %}</span>{% endif %}{% endif %}
     </span>
     {% if summary.best %}<span class="crow__offer">
       <span class="crow__price">{{ summary.best.shown_price|gbp }}{% if not summary.best.delivery_known %} <small>{% copy "browse.price.plus" %}</small>{% endif %}</span>
@@ -15,5 +17,8 @@
       {% with each=summary.best.shown_price|per_pack:product.packs_inside %}{% if each %}<span class="crow__meta">{% copy "compact.row.packs" packs=product.packs_inside each=each|gbp %}</span>{% endif %}{% endwith %}
       {% if rip_on %}{% with card=summary.best.shown_price|per_card:product %}{% if card %}<span class="crow__meta crow__meta--card">{% copy "browse.card.per_card" each=card %}</span>{% endif %}{% endwith %}{% endif %}
     </span>{% else %}<span class="crow__offer crow__offer--none">{% copy "compact.row.none" %}</span>{% endif %}
+    <span class="crow__cta" aria-hidden="true">{% copy "compact.desk.compare" %}<svg class="crow__arrow" viewBox="0 0 24 24" focusable="false"><path d="M5 12h14m-6-6 6 6-6 6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
   </a>
+  {# Watch, on a desktop screen's card: the Watchlist's own button (watch.js), beside the link rather than in it. #}
+  <span class="crow__save">{% include "web/includes/save_link.html" with price=summary.best.shown_price icon_only=True %}</span>
 </li>

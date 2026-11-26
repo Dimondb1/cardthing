@@ -2,3 +2,5 @@
   {% if season.bar %}<meta name="theme-color" content="{{ season.bar }}">{% else %}<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
   <meta name="theme-color" content="#14161c" media="(prefers-color-scheme: dark)">{% endif %}
   <script nonce="{{ csp_nonce }}">(function () { try { var t = localStorage.getItem("ripraptor.theme"); if (t === "dark" || t === "light") { var d = document; d.documentElement.setAttribute("data-theme", t); d.querySelector('meta[name="color-scheme"]').setAttribute("content", t); d.querySelectorAll('meta[name="theme-color"][media]').forEach(function (m) { m.setAttribute("content", t === "dark" ? "#14161c" : "#ffffff"); }); } } catch (e) { /* no storage: the device decides */ } })();</script>
+  {# Grid or list on a desktop screen (site.js, compact_switch.html), put on <html> before the first paint like the theme. #}
+  <script nonce="{{ csp_nonce }}">(function () { try { if (localStorage.getItem("ripraptor.view") === "list") document.documentElement.classList.add("view-list"); } catch (e) { /* no storage: the grid */ } })();</script>

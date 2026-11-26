@@ -7,7 +7,15 @@
 # sets it up, starts it and the background reader, and schedules the hourly
 # fallback. Run it again to update to the latest code.
 set -euo pipefail
-DOMAIN="${1:?Usage: install.sh yourdomain.com}"
+# The address as typed, checked before anything is changed: a web address is letters, numbers, dots and hyphens. On
+# 26 Nov 2026 an update typed with a stray "~" after it wrote the web server's settings for "ripraptor.com~", and every
+# visitor was served a blank page until the file was mended by hand.
+DOMAIN="$(printf '%s' "${1:?Usage: install.sh yourdomain.com}" | tr 'A-Z' 'a-z')"
+WEB_ADDRESS='^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$'
+if [[ ! "$DOMAIN" =~ $WEB_ADDRESS ]]; then
+  echo "Stopped before changing anything: \"$1\" is not a web address. Type it as ripraptor.com, with nothing after it." >&2
+  exit 1
+fi
 REPO="https://github.com/Dimondb1/cardthing.git"
 BRANCH="${BRANCH:-claude/compassionate-edison-aot3li}"
 DIR=/srv/ripraptor

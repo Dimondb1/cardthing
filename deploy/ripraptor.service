@@ -8,7 +8,9 @@ User=ripraptor
 WorkingDirectory=/srv/ripraptor
 EnvironmentFile=/srv/ripraptor/.env
 # As python -m, so the packages' folder can be made again beside the old one and moved into place (install.sh).
-ExecStart=/srv/ripraptor/.venv/bin/python -m gunicorn ripraptor.wsgi:application --bind 127.0.0.1:8000 --workers 2 --timeout 60
+# No control socket: gunicorn 25.1 added one, made in the home folder the site may not write, and logged "Control
+# server error: Permission denied" at every start. Nothing here uses it.
+ExecStart=/srv/ripraptor/.venv/bin/python -m gunicorn ripraptor.wsgi:application --bind 127.0.0.1:8000 --workers 2 --timeout 60 --no-control-socket
 # The site reads its code and settings but writes only its own data and the shared /tmp (the cron jobs' locks,
 # gunicorn's own files): even a break-in to it cannot change the code root later updates. install.sh owns the rest.
 ProtectSystem=strict

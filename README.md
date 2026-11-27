@@ -619,6 +619,29 @@ our own label per shop ... You confirm each one in Admin".
   is marked Caution. Rip is told the label as a warning sign or a trust
   sign for the offer (`web/askrip.py`).
 
+**Product page: the picture, ways around and the promise** (the owner, 27
+Nov 2026: "the layout on a product is crazy the image doesnt need to be
+this big", "some navi buttons to move around the page ... another one down
+and another back up again", and "we should have the ripraptor promise
+easily available to read").
+
+- **The picture on a desktop screen** is a square at the top of its column
+  with the smaller share of the width (`--split-minor`), and no longer runs
+  the height of the column beside it, which grew as tall as Ask Rip's
+  conversation. A phone is unchanged.
+- **Jump chips** (`web/includes/page_jumps.html`): a row of the shared chips
+  under the price box, again under the price list and at the foot of the
+  page: Prices, Price history, Details, Our promise, More like this, and Top
+  on the rows below the price box. Plain links to the parts' headings, so
+  they work without script; `product.js` scrolls there smoothly and moves
+  focus. A part the page does not have gets no chip.
+- **The RipRaptor promise** (`web/includes/promise.html`,
+  `views.promise_points`): four short points, each something the site does
+  (delivery in every price, the Price check, the shop labels, the eBay
+  seller minimums), on the how it works page (`/about/#promise`, linked from
+  every footer) and on product pages. The wording is in the registry
+  (`about.promise.*`); change a point only if the site still does it.
+
 **Discount codes** (Admin, a shop's page, Discount code: `discount_code`,
 `discount_terms`, `discount_ends`; `Retailer.discount`): a code a shop gives
 for RipRaptor shoppers is shown beside its prices in the price list, in the

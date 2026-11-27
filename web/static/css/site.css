@@ -1399,12 +1399,14 @@ a, button, summary, select, input, label { touch-action: manipulation; }
 .product-media .product-image--large { width: auto; height: 100%; max-width: 100%; background: transparent; }
 @media (min-width: 60rem) {
   .product-head {
-    /* A golden split: the picture takes 61.8%, the name and price box 38.2%. The picture's well runs the full
-       height of the column beside it, so their bottoms meet. */
-    grid-template-columns: minmax(0, var(--split-major)) minmax(0, var(--split-minor)); grid-template-rows: auto 1fr;
+    /* A golden split, the smaller share to the picture: the name and the price box are what the page is for. The
+       picture's well is a square at the top of its column and never follows the height of the column beside it
+       (the owner, 27 Nov 2026, of a well that grew as tall as Ask Rip's conversation: "the layout on a product is
+       crazy the image doesnt need to be this big"). */
+    grid-template-columns: minmax(0, var(--split-minor)) minmax(0, var(--split-major)); grid-template-rows: auto 1fr;
     grid-template-areas: "media intro" "media buy"; column-gap: var(--split-gap); row-gap: var(--space-4); align-items: start;
   }
-  .product-media { align-self: stretch; min-height: var(--product-media-min); }
+  .product-media { align-self: start; aspect-ratio: 1; }
   .product-media .product-image--large { position: absolute; inset: 0; margin: auto; height: 100%; aspect-ratio: 1; }
 }
 
@@ -1596,7 +1598,8 @@ a, button, summary, select, input, label { touch-action: manipulation; }
 @media (min-width: 60rem) { .buy-bar { display: none; } }
 
 /* The price list heading: where Compare prices lands, clear of anything stuck to the top of the screen. */
-#offers-title { scroll-margin-top: calc(var(--sticky-top, 0px) + var(--space-3)); }
+/* The parts of a product page the jump chips lead to (page_jumps.html) stop clear of anything stuck to the top. */
+#offers-title, #history-title, #details-title, #promise-title, #related-title { scroll-margin-top: calc(var(--sticky-top, 0px) + var(--space-3)); }
 #offers-title:focus { outline: none; }
 #offers-title:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 4px; border-radius: var(--radius-sm); }
 

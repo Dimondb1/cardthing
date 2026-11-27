@@ -110,6 +110,7 @@
   </section>
 </div>
 {% if fair %}{% include "web/includes/fair_sheet.html" %}{% endif %}
+{% include "web/includes/page_jumps.html" with top=False %}
 
 {% if instead %}
 {# Nothing to buy here: the closest products shops have in stock (catalogue/picks.instead), right under the sold-out buy box. #}
@@ -175,10 +176,11 @@
   <p class="small-print">{% copy "product.small_print" %} <a href="{% url 'web:terms' %}">{% copy "site.nav.terms" %}</a></p>
 </section>
 {% endif %}
+{% if has_listings or amazon_search or amazon_offer %}{% include "web/includes/page_jumps.html" with top=True %}{% endif %}
 <div class="block product-lower">
   {% if chart or has_listings %}
   <section class="history" aria-labelledby="history-title">
-    <h2 id="history-title" class="section-title">{% copy "product.history.title" %}</h2>
+    <h2 id="history-title" class="section-title" tabindex="-1">{% copy "product.history.title" %}</h2>
     <p class="section-note">{% copy "product.history.caption" days=history_days %}</p>
     {% if fair %}{% include "web/includes/fair_facts.html" %}{% endif %}
     {% if chart %}
@@ -190,7 +192,7 @@
   {% endif %}
 
   <section class="details" aria-labelledby="details-title">
-    <h2 id="details-title" class="section-title">{% copy "product.details.title" %}</h2>
+    <h2 id="details-title" class="section-title" tabindex="-1">{% copy "product.details.title" %}</h2>
     {# The page's facts as plain sentences, which search engines and AI answers quote: only what the page already shows. #}
     {% if cheapest %}<p class="details__summary">{% if cheapest.delivery_known %}{% copy "product.summary.cheapest" name=product.name price=cheapest.shown_price|gbp retailer=cheapest.retailer.name %}{% else %}{% copy "product.summary.cheapest_basket" name=product.name price=cheapest.shown_price|gbp retailer=cheapest.retailer.name %}{% endif %}{% if in_stock_count %} {% copy_count "product.summary.stock" in_stock_count %}{% endif %}{% if per_pack %} {% copy "product.summary.packs" packs=product.packs_inside each=per_pack|gbp %}{% endif %}</p>{% endif %}
     <dl class="details__list">
@@ -205,9 +207,11 @@
   </section>
 </div>
 
+{% include "web/includes/promise.html" with block=True title_class="section-title" %}
+
 {% if related %}
 <section class="block related" aria-labelledby="related-title">
-  <h2 id="related-title" class="section-title">{% if product.product_set %}{% copy "product.related.title" set=product.product_set.name %}{% else %}{% copy "product.related.title_game" game=product.game.display_short %}{% endif %}</h2>
+  <h2 id="related-title" class="section-title" tabindex="-1">{% if product.product_set %}{% copy "product.related.title" set=product.product_set.name %}{% else %}{% copy "product.related.title_game" game=product.game.display_short %}{% endif %}</h2>
   <ul class="results results--compact">
     {% for product in related %}
       {% include "web/includes/product_row.html" with heading_tag="h3" image_size="compact" %}
@@ -215,6 +219,7 @@
   </ul>
 </section>
 {% endif %}
+{% include "web/includes/page_jumps.html" with top=True %}
 {% if has_listings %}
 {% comment %}The buy bar: on a phone, the cheapest price, Buy now and Compare prices stay at the foot of the screen while
 the price box is off it (product.js), so Compare prices is never below the fold whatever the browser's own bars take.

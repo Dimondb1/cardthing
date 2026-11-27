@@ -2126,6 +2126,7 @@ def product_detail(request, slug):
             "current": current,
             "unavailable": [listing for listing in unavailable if listing not in lotteries],
             "lotteries": sorted(lotteries, key=lambda listing: listing.delivered_price),
+            "promise": promise_points(request),
             # A shop on the page carries the owner's label (Shop checked, Caution): the price list says what they mean.
             "shop_marks": any(listing.retailer.shop_mark for listing in listings),
             # ?report=<listing> opens the report form under the shops for that offer; ?report_state= says how
@@ -2398,6 +2399,7 @@ def about(request):
         {
             "shops_compared": pricing.shops_compared(),
             "why": why_points(request),
+            "promise": promise_points(request),
             "faq": faq,
             "contact_email": settings.RIPRAPTOR_CONTACT_EMAIL,
             "stale_hours": settings.RIPRAPTOR_STALE_AFTER_HOURS,
@@ -2426,6 +2428,18 @@ def about_values():
     the days the usual UK price is worked out over."""
     return {"shops": pricing.shops_compared(), "hours": settings.RIPRAPTOR_STALE_AFTER_HOURS,
             "days": fair_price.WINDOW_DAYS}
+
+
+# The RipRaptor promise (web/includes/promise.html): each point is something the site does, never a hope.
+PROMISE_POINTS = ("price", "honest", "shops", "ebay")
+
+
+def promise_points(request):
+    """The RipRaptor promise as (title, text) points, for the how it works page and product pages. The owner, 27 Nov
+    2026: "we should have the ripraptor promise easily available to read". From the request's own copy: no query."""
+    store = copy.for_request(request)
+    return [{"title": copy.get(f"about.promise.{key}.title", store=store),
+             "body": copy.get(f"about.promise.{key}.body", store=store)} for key in PROMISE_POINTS]
 
 
 def why_points(request):

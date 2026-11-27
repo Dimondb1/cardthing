@@ -40,7 +40,10 @@ in stock, when checked) as a table like the UK prices pages' (price-table).
 
 Queries: the deals (one, plus one for the shops' offers of those shown, one for the cheapest shop of each, and one for
 the questions' booster box figures) and the look's own (its numbers and games, kept). The head's figures, the games
-and the price bands are counted from the deals already read. Pages are kept like any list page (web.pagecache).
+and the price bands are counted from the deals already read. Pages are kept like any list page (web.pagecache), and
+what every view of a page shares (shared: its deals, shops and box figures) is kept too, so a switch, a type or a
+price band chooses from the deals already read (chosen_rows) and asks only for the offers of those it shows. The
+page's own choices load in place (browse.js, the region marked data-browse), so the page does not move.
 """
 
 from dataclasses import dataclass
@@ -163,13 +166,13 @@ def in_band(price, low, high):
     return (low is None or price >= low) and (high is None or price < high)
 
 
-def deal_rows(game=None, kind="", sort="", lowest=False, today=None, band=None):
+def deal_rows(game=None, kind="", sort="", lowest=False, today=None):
     """The genuine price drops now (see the module's notes), each with ``month_average``, ``month_days``,
     ``week_price`` and ``month_price`` (the cheapest price recorded about a week and a month ago), ``low`` and
     ``low_date`` (the lowest recorded before today, and the latest day at it), ``saving`` and ``saving_ratio``
-    (today's price under the 30-day average). Narrowed to ``game`` and ``kind``, with ``lowest`` to those at the
-    lowest price recorded and with ``band`` (from, under) to today's prices in it; biggest % saving first, or with
-    ``sort`` POUNDS the biggest in pounds. One query."""
+    (today's price under the 30-day average). Narrowed to ``game`` and ``kind``, and with ``lowest`` to those at the
+    lowest price recorded; biggest % saving first, or with ``sort`` POUNDS the biggest in pounds. One query. A page
+    reads a game's once and makes its other choices from those rows (chosen_rows)."""
     today = today or timezone.localdate()
     money = DecimalField(max_digits=12, decimal_places=4)
 
@@ -225,14 +228,52 @@ def deal_rows(game=None, kind="", sort="", lowest=False, today=None, band=None):
     )
     if lowest:
         products = products.filter(lowest_known__lte=F("low"))
-    if band is not None:
-        low, high = band
-        if low is not None:
-            products = products.filter(lowest_known__gte=low)
-        if high is not None:
-            products = products.filter(lowest_known__lt=high)
     order = ("-saving", "-saving_ratio") if sort == POUNDS else ("-saving_ratio", "-saving")
     return products.order_by(*order, "name")
+
+
+def chosen_rows(every, kind="", sort="", lowest=False, band=None):
+    """The rows of ``every`` (a page's deals, biggest % first) a visitor's choices leave, in the order asked for: as
+    deal_rows would give them, with no query. The owner, 27 Nov 2026, of a switch that asked the database for every
+    deal again: "takes ages to respond"."""
+    rows = [row for row in every
+            if (not kind or row.product_type == kind)
+            and (not lowest or (row.low is not None and row.lowest_known <= row.low))
+            and (band is None or in_band(row.lowest_known, *band))]
+    if sort == POUNDS:
+        rows.sort(key=lambda row: (-row.saving, -row.saving_ratio, row.name))
+    return rows
+
+
+def gathered(game=None):
+    """What every view of a page shares, whatever is chosen on it: its deals (``every``), the game its questions are
+    about, the shops with the most of its deals and that game's booster box figures. Four queries."""
+    every = list(deal_rows(game=game))              # the page's deals before its own filters, biggest % first
+    # The questions: about the page's game, or on the hub about Pokémon.
+    asked = game or next((row.game for row in every if row.game.slug == QUESTION_GAME), None) \
+        or Game.objects.filter(slug=QUESTION_GAME, is_active=True).first()
+    return {"every": every, "asked": asked, "shops": top_shops(every),
+            "boxes": box_figures(asked) if asked is not None else None}
+
+
+def shared(game=None, fresh=False):
+    """``gathered(game)``, kept in the shared cache for twice the time a page is (as the compact look's own lists are,
+    compact.kept), so a switch, a type or a price band flicked on a page reads the deals once and not again each
+    time. warm_pages builds the hub's again (``fresh``) as it builds the hub. Built every time while pages are not
+    kept (the tests)."""
+    from django.core.cache import cache
+
+    from . import pagecache
+
+    seconds = pagecache.seconds()
+    if seconds <= 0:
+        return gathered(game)
+    key = pagecache.key_for(f"blackfriday/{game.slug if game is not None else ''}")
+    found = None if fresh else cache.get(key)
+    if found is None:
+        found = gathered(game)
+        cache.set(key, found, seconds * 2)
+    return found
 
 
 def pounds(value):
@@ -524,13 +565,15 @@ def page(request, game=None):
     price = request.GET.get("price", "")
     band = band_of(price)
     price = price if band is not None else ""
-    every = list(deal_rows(game=game))              # the page's deals before its own filters, biggest % first
+    held = shared(game)
+    every = held["every"]                           # the page's deals before its own filters, biggest % first
     kinds = kinds_in(every, game.slug if game else "")
     kind = kind if kind in dict(kinds) else ""
-    chosen = every if not (kind or sort or lowest or band) else list(
-        deal_rows(game=game, kind=kind, sort=sort, lowest=lowest, band=band))
+    chosen = chosen_rows(every, kind=kind, sort=sort, lowest=lowest, band=band)
     limit = SHOWN["game" if game else None]
-    shown = ready(chosen[:limit])
+    # A kept row whose last shop has sold out since is left out: its offers are read now, and a tile with a saving and
+    # no price would be wrong.
+    shown = [product for product in ready(chosen[:limit]) if product.best is not None]
     for product in shown:
         # Its badge and its one line: how far under its 30-day average, in percent and in pounds. A product here for
         # being at its lowest recorded, not for a clear fall on the month, says that.
@@ -543,14 +586,13 @@ def page(request, game=None):
             product.row_note = words("blackfriday.row.note_low")
     checked = max((row.best.last_checked for row in shown if row.best is not None), default=None)
     # The questions: about the page's game, or on the hub about Pokémon, with its biggest drop now.
-    asked = game or next((row.game for row in every if row.game.slug == QUESTION_GAME), None) \
-        or Game.objects.filter(slug=QUESTION_GAME, is_active=True).first()
+    asked = held["asked"]
     questions = []
     if asked is not None:
         lead = next((row for row in every if row.game_id == asked.pk), None)
         if lead is not None:
             ready([lead])
-        questions = faq(words, when, asked, lead, top_shops(every), box_figures(asked))
+        questions = faq(words, when, asked, lead, held["shops"], held["boxes"])
     least = min((row.lowest_known for row in every), default=None)
     if game is None:
         path = reverse("web:black_friday")
@@ -590,8 +632,7 @@ def page(request, game=None):
                                               ("price", price)) if value]
     most_percent, most_pounds = headline(every)
     # The price bands count the deals the other choices leave, so none leads to an empty list.
-    narrowed = [row for row in every if (not kind or row.product_type == kind)
-                and (not lowest or (row.low is not None and row.lowest_known <= row.low))]
+    narrowed = chosen_rows(every, kind=kind, lowest=lowest)
     games = [Shortcut(each.display_short, reverse("web:black_friday_game", args=[each.slug]), n)
              for each, n in by_game(every).items()] if game is None else []
     return render(request, "web/black_friday.html", {

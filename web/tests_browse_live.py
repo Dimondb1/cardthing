@@ -94,7 +94,8 @@ class MotionTests(TestCase):
 
     def test_a_list_waiting_dims_only_opacity_and_only_after_a_moment(self):
         css = static_text("css/site.css")
+        # Cards, and the compact look's rows (the Black Friday pages' tiles among them), dim alike.
         self.assertIn('[data-browse][aria-busy="true"] .stock-panes, [data-browse][aria-busy="true"] > .cards, '
-                      '[data-browse][aria-busy="true"] > .empty { opacity: var(--opacity-waiting); '
-                      "transition-delay: var(--motion-fast); }", css)
+                      '[data-browse][aria-busy="true"] > .crows, [data-browse][aria-busy="true"] > .empty '
+                      "{ opacity: var(--opacity-waiting); transition-delay: var(--motion-fast); }", css)
         self.assertIn("--opacity-waiting: 0.6;", static_text("css/tokens.css"))

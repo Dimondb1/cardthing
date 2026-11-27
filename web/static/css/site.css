@@ -2372,8 +2372,8 @@ a, button, summary, select, input, label { touch-action: manipulation; }
 @view-transition { navigation: auto; }
 ::view-transition-old(root), ::view-transition-new(root), ::view-transition-group(masthead) { animation-duration: var(--motion-normal); }
 .masthead { view-transition-name: masthead; }
-[data-browse] .stock-panes, [data-browse] > .cards, [data-browse] > .empty { transition: opacity var(--motion-fast) var(--ease-standard); }
-[data-browse][aria-busy="true"] .stock-panes, [data-browse][aria-busy="true"] > .cards, [data-browse][aria-busy="true"] > .empty { opacity: var(--opacity-waiting); transition-delay: var(--motion-fast); }
+[data-browse] .stock-panes, [data-browse] > .cards, [data-browse] > .crows, [data-browse] > .empty { transition: opacity var(--motion-fast) var(--ease-standard); }
+[data-browse][aria-busy="true"] .stock-panes, [data-browse][aria-busy="true"] > .cards, [data-browse][aria-busy="true"] > .crows, [data-browse][aria-busy="true"] > .empty { opacity: var(--opacity-waiting); transition-delay: var(--motion-fast); }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition-duration: 1ms !important; animation-duration: 1ms !important; animation-delay: 0ms !important; }

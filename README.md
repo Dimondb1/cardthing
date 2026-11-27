@@ -4491,6 +4491,22 @@ and tiny products"). From the top:
 The hub shows the top 60, a game's page the top 120, and says so under the
 list when there are more.
 
+**Choosing is quick and the page stays put** (the owner, 27 Nov 2026, of the
+switches: "It moves the page up and takes ages to respond"). A switch, a
+type or a price band loads in place: `browse.js` fetches the page it names
+and swaps in the region marked `data-browse` (the shortcuts, the switches,
+the count and the list) and the table of figures at the foot
+(`data-browse-also`, swapped by its id), so nothing scrolls, the head stays
+and Back goes through the lists seen. The rows dim while their replacement
+comes. Without script each is still a plain link or form. On the server a
+page's deals are read once and kept for twice the time a page is
+(`black_friday.shared`, with the shops and box figures its questions use);
+every choice is then made from those rows in Python
+(`black_friday.chosen_rows`), and only the offers of the tiles shown are
+read. While the season shows, `warm_pages` keeps the hub and its deals
+built (`pagecache.event_paths`), so neither the first visitor nor a switch
+waits for them.
+
 Under the questions, the figures behind each drop are a table like the UK
 prices pages' (`price-table`, with `price-table--wide` so it stays labelled
 blocks until a wide screen): today's delivered price, the 30-day average,

@@ -135,3 +135,18 @@ def warm(path):
 def game_paths(games):
     """The pages kept warm: each game's own page, the one a tap from the home page opens. None while off."""
     return [game.get_absolute_url() for game in games] if on() else []
+
+
+def event_paths():
+    """The Black Friday hub while its season shows (web/black_friday.py), kept warm like a game's page: its first
+    visitor, and every switch flicked on it, finds its deals already read. None while off or out of season."""
+    from django.urls import reverse
+
+    from . import black_friday
+
+    return [reverse("web:black_friday")] if on() and black_friday.season().showing else []
+
+
+def warm_paths(games):
+    """Every page kept warm (web.warming)."""
+    return game_paths(games) + event_paths()

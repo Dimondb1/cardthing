@@ -4,7 +4,9 @@
 // screen, under a short cross-fade where the browser has view transitions and motion is not reduced: nothing
 // scrolls away, the folded panel stays open, the address follows and Back goes through the lists seen. The
 // scripts that enhance the list hear ripraptor:content (images, Save links, the filter form, the feed's rows) and
-// ripraptor:page (the stock tabs) and set the new markup up. Nothing here is required.
+// ripraptor:page (the stock tabs) and set the new markup up. A part elsewhere on the page that follows the list (the
+// Black Friday pages' table of figures) is marked data-browse-also with an id, and is swapped for the fetched
+// page's part of the same id at the same moment. Nothing here is required.
 (() => {
   const OPEN = "rr-filters-open";   // the folded panel, kept open across a full load of the same page
   let root = document.querySelector("[data-browse]");
@@ -33,7 +35,7 @@
     return url;
   };
 
-  function show(fresh, title) {
+  function show(fresh, title, page) {
     const open = !!(panel() && panel().open);
     const focused = document.activeElement && document.activeElement.id;
     const apply = () => {
@@ -41,6 +43,10 @@
       if (details) details.open = open;
       root.replaceWith(fresh);
       root = fresh;
+      document.querySelectorAll("[data-browse-also][id]").forEach((part) => {
+        const again = page && page.getElementById(part.id);
+        if (again) part.replaceWith(again);
+      });
       if (title) document.title = title;
       // The select that was changed keeps the focus, so the next choice is a keypress away.
       const again = focused && document.getElementById(focused);
@@ -69,7 +75,7 @@
         const fresh = page.querySelector("[data-browse]");
         if (!fresh) throw new Error("no list");
         if (push) history.pushState({ browse: true }, "", landed);
-        show(fresh, page.title);
+        show(fresh, page.title, page);
       })
       .catch((error) => {
         if (error.name === "AbortError") return;

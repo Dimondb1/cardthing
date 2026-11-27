@@ -11,7 +11,7 @@ from unittest import mock
 
 from django.core.cache import cache
 from django.db import connection
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
@@ -300,7 +300,7 @@ class HubTests(PageCase):
         self.assertIn(self.box.get_absolute_url(), html)
         self.assertNotIn(f'href="{self.etb.get_absolute_url()}"', html)
         # Each switch keeps the other choices, and the line under them says the order.
-        self.assertIn('<input type="checkbox" name="sort" value="pounds" checked>', html)
+        self.assertIn('<input type="checkbox" id="bf-sort" name="sort" value="pounds" checked>', html)
         self.assertIn('<input type="hidden" name="type" value="booster_box">', html)
         self.assertIn("Biggest £ saving first.", html)
         self.assertIn('href="/black-friday/?type=elite_trainer_box&amp;sort=pounds"', html)
@@ -310,7 +310,7 @@ class HubTests(PageCase):
         DailyLowestPrice.objects.create(product=self.etb, date=timezone.localdate() - timedelta(days=50), price="43.00")
         cache.clear()
         html = self.html("/black-friday/", lowest="on")
-        self.assertIn('<input type="checkbox" name="lowest" value="on" checked>', html)
+        self.assertIn('<input type="checkbox" id="bf-lowest" name="lowest" value="on" checked>', html)
         self.assertIn(f'href="{self.box.get_absolute_url()}"', html)
         self.assertNotIn(f'href="{self.etb.get_absolute_url()}"', html)
         self.assertIn("2 genuine price drops", html)
@@ -654,19 +654,149 @@ class SellingTests(PageCase):
         self.assertIn("background: var(--color-price); color: var(--color-price-ink);", badge)
         self.assertIn("html:not(.view-list) .crows--tiles .crow__badge { position: absolute;", css)
 
-    def test_the_queries_are_no_more_than_a_filtered_page(self):
+    def test_a_choice_reads_no_more_than_the_page_itself(self):
         self.wear(compact=True)
         self.html("/black-friday/")                       # the look's own kept numbers and games
-        cache.clear()
-        from web import look
-        look.remember()
-        with CaptureQueriesContext(connection) as kind:
-            self.html("/black-friday/", type="bundle")
-        cache.clear()
-        look.remember()
-        with CaptureQueriesContext(connection) as band:
-            self.html("/black-friday/", price="25-50")
-        self.assertEqual(len(band), len(kind))
+
+        def queries(**params):
+            from web import look
+
+            cache.clear()
+            look.remember()
+            with CaptureQueriesContext(connection) as found:
+                self.html("/black-friday/", **params)
+            return len(found)
+
+        plain = queries()
+        for params in ({"type": "bundle"}, {"price": "25-50"}, {"sort": "pounds"}, {"lowest": "on"},
+                       {"type": "bundle", "price": "25-50", "sort": "pounds", "lowest": "on"}):
+            with self.subTest(params=params):
+                # The deals are read once whatever is chosen; one more only for the offers of the questions' product
+                # when the choice leaves it off the list.
+                self.assertLessEqual(queries(**params), plain + 1)
+
+
+class FastChoiceTests(PageCase):
+    """A switch, a type or a price band chooses from the deals the page already read, and loads in place. The owner,
+    27 Nov 2026, of switches that built the whole page again from its top: "isn't a fast not smooth change in
+    products. It moves the page up and takes ages to respond"."""
+
+    wear = LookTests.wear
+
+    def test_choosing_in_python_gives_what_the_query_gives(self):
+        # More to choose from: one seen cheaper before, one at its lowest, kinds and prices apart.
+        self.product("Surging Sparks Tin", "18.00", others=("24.00",), history=steady("20.00"), kind="tin")
+        self.product("Surging Sparks Display", "180.00", others=("240.00",), history=steady("200.00"))
+        DailyLowestPrice.objects.create(product=self.etb, date=timezone.localdate() - timedelta(days=50), price="43.00")
+        self.bands()
+        every = self.deals()
+        self.assertEqual(len(every), 5)
+        for kind in ("", "booster_box", "bundle", "tin"):
+            for sort in ("", "pounds"):
+                for lowest in (False, True):
+                    with self.subTest(kind=kind, sort=sort, lowest=lowest):
+                        self.assertEqual(black_friday.chosen_rows(every, kind=kind, sort=sort, lowest=lowest),
+                                         self.deals(kind=kind, sort=sort, lowest=lowest))
+        self.assertEqual([row.name for row in black_friday.chosen_rows(every, band=(None, 25))], ["Surging Sparks Tin"])
+        self.assertEqual({row.name for row in black_friday.chosen_rows(every, band=(100, None))},
+                         {"Surging Sparks Display"})
+        # A price on a band's edge belongs to the band it opens.
+        self.assertTrue(black_friday.in_band(Decimal("25.00"), 25, 50))
+        self.assertFalse(black_friday.in_band(Decimal("25.00"), None, 25))
+
+    @override_settings(RIPRAPTOR_PAGE_CACHE_SECONDS=300)
+    def test_while_pages_are_kept_a_choice_does_not_read_the_deals_again(self):
+        self.wear(compact=True)
+        self.html("/black-friday/")
+        for params in ({"sort": "pounds"}, {"lowest": "on"}, {"type": "bundle"}, {"price": "25-50"}):
+            with self.subTest(params=params), CaptureQueriesContext(connection) as found:
+                html = self.html("/black-friday/", **params)
+            self.assertIn('class="crows crows--tiles"', html)
+            # Neither the deals nor the box figures: both set prices against the daily record.
+            self.assertEqual([q["sql"] for q in found if "dailylowestprice" in q["sql"].lower()], [])
+            # What is left is small: the offers of those shown, and of the questions' product when it is not among them.
+            self.assertLessEqual(len(found), 4)
+        # A game's page keeps its own.
+        self.html("/black-friday/pokemon/")
+        with CaptureQueriesContext(connection) as found:
+            self.html("/black-friday/pokemon/", sort="pounds")
+        self.assertEqual([q["sql"] for q in found if "dailylowestprice" in q["sql"].lower()], [])
+
+    @override_settings(RIPRAPTOR_PAGE_CACHE_SECONDS=300)
+    def test_the_kept_deals_are_read_again_when_asked_and_forgotten_with_the_pages(self):
+        from web import pagecache
+
+        first = black_friday.shared()
+        self.assertEqual(len(first["every"]), 3)
+        self.assertEqual(first["shops"], [("Harbour Games", 3)])
+        Listing.objects.filter(product=self.bundle).delete()
+        self.bands()
+        self.assertEqual(len(black_friday.shared()["every"]), 3)           # kept
+        self.assertEqual(len(black_friday.shared(fresh=True)["every"]), 2)
+        self.product("Surging Sparks Tin", "18.00", others=("24.00",), history=steady("20.00"), kind="tin")
+        self.bands()
+        pagecache.forget()
+        self.assertEqual(len(black_friday.shared()["every"]), 3)
+
+    def test_a_kept_deal_that_has_since_sold_out_is_left_off(self):
+        self.wear(compact=True)
+        held = black_friday.gathered()
+        Listing.objects.filter(product=self.box).update(availability=Listing.Availability.OUT_OF_STOCK)
+        with mock.patch.object(black_friday, "shared", return_value=held):
+            html = self.html("/black-friday/")
+        self.assertEqual(html.count('<li class="crow">'), 2)
+        self.assertNotIn(f'<a class="crow__link" href="{self.box.get_absolute_url()}"', html)
+
+    def test_the_page_marks_what_a_choice_changes_and_loads_it_in_place(self):
+        self.wear(compact=True)
+        html = self.html("/black-friday/")
+        self.assertIn('src="/static/js/browse.js" defer></script>', html)
+        start = html.index("<div data-browse>")
+        region = html[start:html.index('<section class="cx-section" aria-labelledby="bf-about-title">')]
+        # The head stays put; the shortcuts, the switches, the count, the list and its note are what changes.
+        self.assertLess(html.index("</h1>"), start)
+        for part in ('aria-label="Black Friday deals by game"', 'class="feed-tile__link" href="?type=booster_box" '
+                     "data-browse-link", 'aria-label="Deals by price"', '<form method="get" action="/black-friday/" '
+                     "data-autosubmit>", 'class="browse-head__count" role="status"', '<ul class="crows crows--tiles"'):
+            with self.subTest(part=part):
+                self.assertIn(part, region)
+        self.assertTrue(region.rstrip().endswith("</div>"))
+        self.assertNotIn("hub-faq", region)
+        # The list is the region's own child, so it dims while its replacement comes.
+        self.assertRegex(region, r'\n<ul class="crows crows--tiles"')
+        # The figures follow the list from the foot of the page, and stand empty while there is nothing to show.
+        self.assertIn('<section id="bf-figures" class="cx-section" aria-labelledby="bf-figures-title" data-browse-also>',
+                      html)
+        html = self.html("/black-friday/", type="booster_box", price="under-25")       # the box is £90: nothing
+        self.assertIn('aria-labelledby="bf-figures-title" data-browse-also hidden>', html)
+        self.assertNotIn('<table class="price-table', html)
+
+    def test_the_loader_swaps_the_parts_that_follow_the_list_and_the_rows_dim(self):
+        script = (Path(__file__).resolve().parent / "static/js/browse.js").read_text()
+        self.assertIn('document.querySelectorAll("[data-browse-also][id]").forEach((part) => {', script)
+        self.assertIn("const again = page && page.getElementById(part.id);", script)
+        self.assertIn("show(fresh, page.title, page);", script)
+        css = (Path(__file__).resolve().parent / "static/css/site.css").read_text()
+        self.assertIn('[data-browse][aria-busy="true"] > .crows,', css)
+        self.assertIn("[data-browse] > .crows,", css)
+
+    def test_the_hub_is_kept_warm_in_its_season_only(self):
+        from web import pagecache, warming
+
+        with override_settings(RIPRAPTOR_PAGE_CACHE_SECONDS=300):
+            self.assertEqual(pagecache.event_paths(), ["/black-friday/"])
+            self.assertIn("/black-friday/", pagecache.warm_paths([self.pokemon]))
+            self.assertIn("page:/black-friday/", warming.missing([self.pokemon]))
+            with mock.patch.object(black_friday, "shared", wraps=black_friday.shared) as shared, \
+                    mock.patch.object(pagecache, "game_paths", return_value=[]):
+                took = warming.warm_pages(only=["page:/black-friday/"])
+            self.assertIn("page: /black-friday/", took)
+            self.assertIn(mock.call(fresh=True), shared.call_args_list)
+            self.assertTrue(pagecache.has("/black-friday/"))
+            self.assertNotIn("page:/black-friday/", warming.missing([self.pokemon]))
+            with mock.patch("web.black_friday.local_today", return_value=date(2026, 12, 3)):
+                self.assertEqual(pagecache.event_paths(), [])
+        self.assertEqual(pagecache.event_paths(), [])          # pages not kept: nothing to warm
 
 
 class DesktopTests(PageCase):

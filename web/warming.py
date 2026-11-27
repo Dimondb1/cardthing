@@ -52,7 +52,7 @@ def missing(games=None):
 
     games = active_games() if games is None else games
     return ([key for key in cached_keys(games) if not cache.has_key(key)]
-            + [f"page:{path}" for path in pagecache.game_paths(games) if not pagecache.has(path)])
+            + [f"page:{path}" for path in pagecache.warm_paths(games) if not pagecache.has(path)])
 
 
 def due(games=None):
@@ -63,7 +63,7 @@ def due(games=None):
     games = active_games() if games is None else games
     now, marks = time.time(), listcache.cleared()
     return ([key for key in cached_keys(games) if listcache.is_due(key, now=now, marks=marks)]
-            + [f"page:{path}" for path in pagecache.game_paths(games) if not pagecache.has(path)])
+            + [f"page:{path}" for path in pagecache.warm_paths(games) if not pagecache.has(path)])
 
 
 def warm_pages(fresh=False, only=None):
@@ -122,7 +122,8 @@ def warm_pages(fresh=False, only=None):
     started = time.monotonic()
     if compact.warm(games):
         took["compact"] = time.monotonic() - started
-    # Each game's own page, built whole and kept (web.pagecache), so the tap from the home page never waits.
+    # Each game's own page, built whole and kept (web.pagecache), so the tap from the home page never waits; and the
+    # Black Friday hub while its season shows.
     from web import pagecache
 
     # The comparing guide's live examples (guides/compare.py), once their kept copy has gone, while the Guides pages
@@ -135,10 +136,17 @@ def warm_pages(fresh=False, only=None):
         started = time.monotonic()
         compare.examples(fresh=True)
         took["guide examples"] = time.monotonic() - started
-    for path in pagecache.game_paths(games):
+    events = pagecache.event_paths()
+    for path in pagecache.game_paths(games) + events:
         if (only is not None and f"page:{path}" not in only) or (not fresh and pagecache.has(path)):
             continue
         started = time.monotonic()
+        if path in events:
+            # The Black Friday hub: its deals are read again first, so the page, and every switch, type and price
+            # band flicked on it until the next build, has them (web.black_friday.shared).
+            from web import black_friday
+
+            black_friday.shared(fresh=True)
         pagecache.warm(path)
         took[f"page: {path}"] = time.monotonic() - started
     return took

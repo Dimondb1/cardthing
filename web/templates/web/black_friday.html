@@ -3,7 +3,7 @@
 {# Black Friday (web/black_friday.py): a list page like a game's, built from the shared parts, and made to sell (the owner, 27 Nov 2026, of a page that led with a paragraph, a line of links and small rows: "just a load of ... text and tiny products"). The look the site is in (the search box and games at the foot, the status line); the seasonal banner as the page's own head, with the heading and the page's real figures (how many drops, the biggest in percent and in pounds); shortcuts as chips (each game's own page, then price bands) either side of the product types as tiles; two switches; then each product as a picture tile, two across a phone, with a green badge saying how far under its 30-day average it is (compact_row.html in a crows--tiles list; a card in the usual look). The words that explain it come after the products: how the deals are chosen, the questions (given again as FAQPage, word for word) and the figures behind each drop as a table like the UK prices pages'. Plain links and forms throughout, so it all works without script. #}
 {% block body_class %}{% if look == "feed" %}feed-look{% elif compact %}feed-look compact-look{% endif %}{% endblock %}
 {% block page_class %}{% if look == "feed" %}page--feed{% elif compact %}page--feed page--compact{% endif %}{% endblock %}
-{% block scripts %}{% if dock %}{% include "web/compact/_scripts.html" %}{% endif %}{% if not compact %}<script nonce="{{ csp_nonce }}" src="{% static 'js/share.js' %}" defer></script>{% endif %}{% endblock %}
+{% block scripts %}{% if dock %}{% include "web/compact/_scripts.html" %}{% endif %}{% if not compact %}<script nonce="{{ csp_nonce }}" src="{% static 'js/share.js' %}" defer></script>{% endif %}<script nonce="{{ csp_nonce }}" src="{% static 'js/browse.js' %}" defer></script>{% endblock %}
 
 {% block content %}
 {% if not compact %}{% include "web/includes/share_dialog.html" %}{% endif %}
@@ -26,6 +26,8 @@
   </div>
 </div>
 
+{# Everything a choice on the page changes: browse.js fetches the page a switch, a type or a price band names and swaps this region in (and the figures at the foot, data-browse-also), so the page does not move and the head stays put. The owner, 27 Nov 2026, of switches that loaded the page again from its top: "It moves the page up and takes ages to respond". Without script each is the plain link or form it always was. #}
+<div data-browse>
 {% if every %}
 {% if games %}
 {# Each game's own Black Friday page, with how many drops it has: plain links a search engine follows. #}
@@ -57,12 +59,12 @@
 <div class="cx-tools">
   <form method="get" action="{{ path }}" data-autosubmit>
     {% for name, value in keep %}{% if name != "sort" %}<input type="hidden" name="{{ name }}" value="{{ value }}">{% endif %}{% endfor %}
-    <label class="toggle"><input type="checkbox" name="sort" value="pounds"{% if pounds_on %} checked{% endif %}><span class="toggle__track" aria-hidden="true"></span><span>{% copy "blackfriday.sort.pounds" %}</span></label>
+    <label class="toggle"><input type="checkbox" id="bf-sort" name="sort" value="pounds"{% if pounds_on %} checked{% endif %}><span class="toggle__track" aria-hidden="true"></span><span>{% copy "blackfriday.sort.pounds" %}</span></label>
     <button class="button button--quiet button--small" type="submit" data-autosubmit-hide>{% copy "browse.filters.apply" %}</button>
   </form>
   <form method="get" action="{{ path }}" data-autosubmit>
     {% for name, value in keep %}{% if name != "lowest" %}<input type="hidden" name="{{ name }}" value="{{ value }}">{% endif %}{% endfor %}
-    <label class="toggle"><input type="checkbox" name="lowest" value="on"{% if lowest_on %} checked{% endif %}><span class="toggle__track" aria-hidden="true"></span><span>{% copy "blackfriday.sort.lowest" %}</span></label>
+    <label class="toggle"><input type="checkbox" id="bf-lowest" name="lowest" value="on"{% if lowest_on %} checked{% endif %}><span class="toggle__track" aria-hidden="true"></span><span>{% copy "blackfriday.sort.lowest" %}</span></label>
     <button class="button button--quiet button--small" type="submit" data-autosubmit-hide>{% copy "browse.filters.apply" %}</button>
   </form>
 </div>
@@ -80,6 +82,7 @@
 {% else %}
 <p class="cx-empty">{% copy "blackfriday.empty" %}</p>
 {% endif %}
+</div>
 
 {# What the page is, in words, after the products: how the deals are chosen and when the weekend is. #}
 <section class="{% if compact %}cx-section{% else %}block{% endif %}" aria-labelledby="bf-about-title">
@@ -96,9 +99,9 @@
 </section>
 {% endif %}
 
-{% if rows %}
 {# The figures behind each drop, as the UK prices pages show theirs (price-table): a table on a wide screen, each product a block of labelled figures on a phone. The price history and the difference between shops are apart, as the line above it says. #}
-<section class="{% if compact %}cx-section{% else %}block{% endif %}" aria-labelledby="bf-figures-title">
+<section id="bf-figures" class="{% if compact %}cx-section{% else %}block{% endif %}" aria-labelledby="bf-figures-title" data-browse-also{% if not rows %} hidden{% endif %}>
+{% if rows %}
   <h2 id="bf-figures-title" class="{% if compact %}cx-section__title{% else %}section-title{% endif %}">{% copy "blackfriday.table.title" %}</h2>
   <p class="section-head__note">{% copy "blackfriday.two_kinds" %}</p>
 {% copy "blackfriday.table.today" as today_label %}{% copy "blackfriday.table.average" as average_label %}{% copy "blackfriday.row.week" as week_label %}{% copy "blackfriday.row.month" as month_label %}{% copy "blackfriday.row.lowest" as lowest_label %}{% copy "blackfriday.row.between" as between_label %}{% copy "blackfriday.row.stock" as stock_label %}{% copy "blackfriday.row.checked" as checked_label %}
@@ -118,8 +121,8 @@
     </tr>{% endfor %}
   </tbody>
 </table>
-</section>
 {% endif %}
+</section>
 
 <p class="small-print">{% copy "product.small_print" %} <a href="{% url 'web:terms' %}">{% copy "site.nav.terms" %}</a></p>
 {% endblock %}

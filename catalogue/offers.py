@@ -72,7 +72,7 @@ def without_caution_lead(products):
     """``products`` without those whose leading offer (buyable_prefetch's first, Summary.best) is at a shop the owner
     marked Caution: for a list of deals built in the database, where no Summary is to hand (pricing.price_drops).
     With no shop marked Caution, which is most days, the products come back untouched after one small query."""
-    shops = list(Retailer.objects.filter(trust=Retailer.Trust.CAUTION).values_list("pk", flat=True))
+    shops = list(Retailer.objects.order_by().filter(trust=Retailer.Trust.CAUTION).values_list("pk", flat=True))
     if not shops:
         return products
     lead = Listing.objects.buyable().filter(product=OuterRef("pk")).order_by(*lead_order())

@@ -288,7 +288,8 @@ class ConfirmTests(Base):
         make_listing(product, self.kestrel, price="50.00")
         before = self.client.get(product.get_absolute_url()).content.decode()
         self.assertIn("Kestrel Cards", before)
-        for words in ("Caution", "Mostly negative public reviews", "orders never arrived", "from 14 reviews"):
+        for words in ("<strong>Caution</strong>", "Mostly negative public reviews", "orders never arrived",
+                      "from 14 reviews"):
             self.assertNotIn(words, before)
         self.client.post(URL, {"action": "confirm", "shop": self.kestrel.pk, "label": "caution",
                                "note": "Mostly negative public reviews."})

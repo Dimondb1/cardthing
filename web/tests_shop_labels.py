@@ -41,7 +41,9 @@ class ProductPageTests(TestCase):
     def test_a_shop_with_no_label_or_not_yet_checked_shows_nothing(self):
         shop_check.confirm(self.kestrel, "new", "Too few public reviews for us to say yet.", REVIEWS)
         html = self.page()
-        for words in ("Shop checked", "Caution", "How we label shops", REVIEWS, "Too few public reviews"):
+        # (The promise lower down the page names the labels in a sentence: only the labels themselves are looked for.)
+        for words in ("<strong>Shop checked</strong>", "<strong>Caution</strong>", "offer__trust", "How we label shops",
+                      REVIEWS, "Too few public reviews"):
             self.assertNotIn(words, html)
 
     def test_a_checked_shop_says_so_on_its_row_and_under_buy_now_with_its_reviews(self):
@@ -99,7 +101,8 @@ class ProductPageTests(TestCase):
         self.kestrel.save(update_fields=["is_active"])
         html = self.page()
         self.assertNotIn("Kestrel Cards", html)
-        self.assertNotIn("Caution", html)
+        self.assertNotIn("<strong>Caution</strong>", html)
+        self.assertNotIn("Mostly negative public reviews", html)
 
     def test_the_labels_cost_no_more_queries(self):
         with CaptureQueriesContext(connection) as plain:

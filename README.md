@@ -555,6 +555,51 @@ its own data, with its delivery unknown until the daily delivery check reads
 it. The page lists every shop pasted with the result and why, refreshes
 itself while any wait, and a shop not added can be checked again.
 
+**Shop check** (Admin, owner only, `/admin/shop-check/`, `web/shop_check.py`,
+`catalogue/shop_check.py`): the owner's own label for each shop, from its
+public record: Checked, New (not yet checked) or Caution. The owner, 27 Nov
+2026, told that a shop leading the deals was badly reviewed: "it just opens
+a question about giving the user a bit more confidence in what they're
+buying and what shop they're buying from", then: "Look each shop up the way
+a person would (search, read what comes back) ... and use that to propose
+our own label per shop ... You confirm each one in Admin".
+
+- **The findings.** A search for each shop's reviews is read by a person or
+  an assistant, never a scraper: review sites' pages are not read by a
+  program, and their scores are not ours to publish. What it turned up is
+  one entry a shop in a JSON file: the label proposed, a one-sentence
+  reason, the review site and the rating and count the search showed, any
+  complaints, and the links it rests on. The rules for the proposal are
+  fixed (`catalogue/shop_check.py`): Caution for mostly negative reviews (an
+  average under 3 from at least 5), two or more independent reports of
+  orders not arriving, refunds not paid or fake goods, or an official
+  warning; Checked for an average of 4 or more from at least 20 reviews, or
+  a long-established retailer with no pattern of complaints; New for
+  everything else.
+- **The file is never part of the code.** It is research about named
+  businesses, so it is loaded on the page (choose the file, or paste it) and
+  kept in the database (`ShopCheck`), matched to a shop by its slug, else
+  its website. Only plain web addresses are kept as links, and loading sets
+  no label.
+- **Confirming.** Each shop with a finding waiting is a card, the Cautions
+  first: what was found, with its links to open and read, then the label,
+  the reason in words a shopper could read and the link to its public
+  reviews, all his to change. Confirm saves them on the shop
+  (`Retailer.trust`, `trust_note`, `trust_on`, `reviews_url`). A shop can be
+  switched off in the same tap. Those proposed Checked, and those proposed
+  New, can each be confirmed together; a Caution never is: it is a statement
+  about a business, so each is read and confirmed by itself.
+- **Looked up again.** A shop loaded again takes the newer finding. When
+  that proposes a different label from the one he gave, the shop goes back
+  to the top of those waiting, saying what he chose and when, so a second
+  look is never hidden behind his first answer. His label stays until he
+  changes it, such a shop is never confirmed together with others, and a
+  proposal he has already read and chosen against is not raised again
+  (`ShopCheck.answered`).
+- **Not on the site yet.** A label is the owner's record until he decides
+  where a visitor should see it and what it should keep out of the deals.
+  The scores a review site gives are shown to him alone.
+
 **Discount codes** (Admin, a shop's page, Discount code: `discount_code`,
 `discount_terms`, `discount_ends`; `Retailer.discount`): a code a shop gives
 for RipRaptor shoppers is shown beside its prices in the price list, in the

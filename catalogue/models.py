@@ -557,6 +557,12 @@ class Retailer(models.Model):
         null=True, blank=True,
         help_text="The last day the code works, if the shop gave one. It disappears from the site after that day.")
 
+    class Trust(models.TextChoices):
+        """The owner's label for a shop (trust), from its public record."""
+        CHECKED = "checked", "Checked"
+        NEW = "new", "New, not yet checked"
+        CAUTION = "caution", "Caution"
+
     class Source(models.TextChoices):
         MANUAL = "manual", "Entered by hand"
         SHOPIFY = "shopify", "Shopify store"
@@ -626,6 +632,23 @@ class Retailer(models.Model):
         "to pounds, for example https://shop.example/changecurrency/3?returnUrl=%2F.",
     )
     is_active = models.BooleanField("show on site", default=True)
+
+    # The shop check: the owner's own label for the shop, from its public record, confirmed by him on the Shop check
+    # page in Admin (web/shop_check.py) from what a search for the shop turned up (ShopCheck holds that). The owner,
+    # 27 Nov 2026, told a shop leading the deals was badly reviewed: "it just opens a question about giving the user
+    # a bit more confidence in what they're buying and what shop they're buying from". Empty until he confirms one:
+    # a label is a statement about a business, so none is ever set by a program.
+    trust = models.CharField(
+        "shop check", max_length=10, blank=True, default="", choices=Trust.choices,
+        help_text="Your label for this shop from its public record. Set on the Shop check page.")
+    trust_note = models.CharField(
+        "shop check: the reason", max_length=200, blank=True,
+        help_text="One factual sentence a shopper could read, for example “Mostly positive public reviews over "
+                  "several years.”")
+    trust_on = models.DateField("shop check: confirmed on", null=True, blank=True)
+    reviews_url = models.URLField(
+        "public reviews", max_length=300, blank=True,
+        help_text="This shop's page on an independent review site, for a shopper to read the reviews there.")
 
     # When and how often the shop is read. The hourly import and the background reader follow the same rules.
     read_every_minutes = models.PositiveIntegerField(
@@ -1698,6 +1721,38 @@ class ShopToAdd(models.Model):
 
     def __str__(self):
         return self.host
+
+
+class ShopCheck(models.Model):
+    """What a search for a shop's public record turned up, and the label proposed from it, for the owner to read
+    and confirm on the Shop check page (web/shop_check.py): he sets Retailer.trust, never this. Loaded from a file
+    of findings (catalogue/shop_check.py), which is kept out of the code: it is research about named businesses.
+    Nothing here is shown to visitors. ``rating_seen`` and ``review_count_seen`` are what the search results showed
+    for the review site named, for his judgement only: a review site's scores are not ours to publish."""
+
+    retailer = models.OneToOneField(Retailer, on_delete=models.CASCADE, related_name="shop_check")
+    label = models.CharField("proposed label", max_length=10, choices=Retailer.Trust.choices)
+    reason = models.CharField(max_length=300, blank=True, help_text="One factual sentence a shopper could read.")
+    review_site = models.CharField(max_length=40, blank=True)
+    rating_seen = models.DecimalField(max_digits=2, decimal_places=1, null=True, blank=True)
+    review_count_seen = models.PositiveIntegerField(null=True, blank=True)
+    reviews_url = models.URLField(max_length=300, blank=True)
+    company = models.CharField(max_length=200, blank=True)
+    complaints = models.TextField(blank=True)
+    sources = models.JSONField(default=list, blank=True, help_text="The links the findings rest on.")
+    confidence = models.CharField(max_length=10, blank=True)
+    notes = models.TextField(blank=True)
+    loaded_at = models.DateTimeField(default=timezone.now)
+    answered = models.BooleanField(
+        default=False,
+        help_text="The owner has given the shop his label since this finding was loaded. A finding loaded later is "
+                  "not answered, so one that proposes a different label is put in front of him again.")
+
+    class Meta:
+        ordering = ["retailer__name"]
+
+    def __str__(self):
+        return f"{self.retailer.name}: {self.get_label_display()}"
 
 
 class RemovedShop(models.Model):

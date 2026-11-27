@@ -1,0 +1,117 @@
+{% extends "admin/base_site.html" %}
+{% block title %}Shop check | {{ site_title }}{% endblock %}
+{% block extrahead %}{{ block.super }}<meta name="robots" content="noindex, nofollow"><meta name="referrer" content="no-referrer">{% endblock %}
+{% block extrastyle %}{{ block.super }}<style>
+  .shop-check { display: grid; gap: 24px; max-width: 60rem; }
+  .shop-check h2 { margin: 0 0 4px; }
+  .shop-check p { margin: 0 0 6px; }
+  .shop-check .note, .shop-check .muted { color: var(--body-quiet-color); }
+  .shop-check .tags { display: flex; flex-wrap: wrap; gap: 6px 14px; padding: 0; margin: 0 0 8px; list-style: none; }
+  .shop-check .tags li { list-style-type: none; }
+  .shop-check textarea { width: 100%; max-width: 40rem; min-height: 6rem; box-sizing: border-box; font-family: inherit; }
+  .checks { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; }
+  .checks > li { list-style-type: none; padding: 12px; border: 1px solid var(--hairline-color); border-radius: 10px; display: grid; gap: 6px; }
+  .checks h3 { margin: 0; font-size: 1.05em; overflow-wrap: anywhere; }
+  .checks .label { font-weight: 600; }
+  .checks .label--caution { text-decoration: underline; }
+  .checks .sources { margin: 0; padding-left: 1.2em; font-size: 0.9em; overflow-wrap: anywhere; }
+  .checks form { display: grid; gap: 8px; margin-top: 6px; padding-top: 8px; border-top: 1px solid var(--hairline-color); }
+  .checks form label { display: grid; gap: 2px; font-size: 0.9em; color: var(--body-quiet-color); }
+  .checks form label.tick { display: flex; gap: 8px; align-items: center; color: inherit; }
+  .checks form input[type="text"], .checks form input[type="url"], .checks form select { width: 100%; max-width: 40rem; box-sizing: border-box; }
+  .shop-check table { width: 100%; }
+  .shop-check td, .shop-check th { vertical-align: top; overflow-wrap: anywhere; }
+  .shop-check details > summary { cursor: pointer; }
+  .shop-check form.inline { display: inline; margin: 0; }
+</style>{% endblock %}
+{% block breadcrumbs %}<div class="breadcrumbs"><a href="{% url 'admin:index' %}">Home</a> &rsaquo; Shop check</div>{% endblock %}
+{% block content %}
+<div class="shop-check">
+  <section>
+    <p>Your own label for each shop, from its public record: <strong>Checked</strong>, <strong>New, not yet checked</strong> or <strong>Caution</strong>. A search for each shop's reviews was read and a label proposed by fixed rules. Nothing is set until you confirm it here. Open the links, read them, then confirm, change or leave each one.</p>
+    <ul class="tags">
+      <li>Waiting for you: {{ waiting|length }}</li>
+      {% for label, n in counts.items %}<li>{{ label }}: {{ n }}</li>{% endfor %}
+      <li>Not looked up yet: {{ bare|length }}</li>
+    </ul>
+    <p class="note">A label is a statement about a business. Keep each reason to what the links show. The scores a review site gives are shown here for you alone and are never put on the site.</p>
+  </section>
+
+  <section>
+    <details{% if not waiting and not confirmed %} open{% endif %}>
+      <summary>Load a findings file</summary>
+      <form method="post" enctype="multipart/form-data">{% csrf_token %}<input type="hidden" name="action" value="load">
+        <p><label>Choose the file <input type="file" name="file" accept=".json,application/json,text/plain"></label></p>
+        <p><label>Or paste what it holds<br><textarea name="findings" aria-label="Findings"></textarea></label></p>
+        <p><button type="submit" class="button default">Load the findings</button></p>
+        <p class="note">Loading sets no label. A shop loaded again takes the newer finding. A label you confirmed stays, and the shop comes back to the top here if the newer finding proposes a different one.</p>
+      </form>
+    </details>
+  </section>
+
+  {% if waiting %}
+  <section>
+    <h2>Waiting for you</h2>
+    {% if differing %}<p><strong>{{ differing }} looked up again, with a different answer from the label you gave.</strong> First below. Your label stays until you change it.</p>{% endif %}
+    {% if cautions %}<p>{{ cautions }} proposed Caution, {% if differing %}next{% else %}first{% endif %} below. Each is confirmed by itself.</p>{% endif %}
+    {% for label, name, n in together %}<form method="post" class="inline">{% csrf_token %}<input type="hidden" name="action" value="together"><input type="hidden" name="label" value="{{ label }}"><button type="submit" class="button">Confirm all {{ n }} proposed {{ name }}</button></form> {% endfor %}
+    <ul class="checks">
+      {% for shop in waiting %}{% with found=shop.proposal %}
+      <li id="shop-{{ shop.pk }}">
+        <h3>{{ shop.name }} <a href="{{ shop.website }}" target="_blank" rel="noopener noreferrer">{{ shop.host }}</a></h3>
+        {% if not shop.is_active %}<p class="muted">Switched off: its prices are not on the site.</p>{% endif %}
+        {% if shop.differs %}<p><strong>Looked up again.</strong> You labelled this shop {{ shop.get_trust_display }} on {{ shop.trust_on|date:"j M Y" }}. The newer finding proposes otherwise.</p>{% endif %}
+        <p><span class="label label--{{ found.label }}">Proposed: {{ found.get_label_display }}</span>{% if found.confidence %} <span class="muted">({{ found.confidence }} confidence)</span>{% endif %}</p>
+        {% if found.reason %}<p>{{ found.reason }}</p>{% endif %}
+        <p class="muted">{% if found.review_site %}{{ found.review_site }}{% if found.rating_seen is not None %}: {{ found.rating_seen }}{% if found.review_count_seen is not None %} from {{ found.review_count_seen }} reviews{% endif %}, as the search showed. It may be out of date{% endif %}.{% else %}No independent review page was found.{% endif %}</p>
+        {% if found.complaints %}<p><strong>Complaints found:</strong> {{ found.complaints }}</p>{% endif %}
+        {% if found.company %}<p class="muted">Company: {{ found.company }}</p>{% endif %}
+        {% if found.notes %}<p class="muted">Note: {{ found.notes }}</p>{% endif %}
+        {% if found.sources %}<ul class="sources">{% for link in found.sources %}<li><a href="{{ link }}" target="_blank" rel="noopener noreferrer nofollow">{{ link }}</a></li>{% endfor %}</ul>{% else %}<p class="muted">No links.</p>{% endif %}
+        <form method="post">{% csrf_token %}<input type="hidden" name="action" value="confirm"><input type="hidden" name="shop" value="{{ shop.pk }}">
+          <label>Label<select name="label">{% for value, name in labels %}<option value="{{ value }}"{% if value == found.label %} selected{% endif %}>{{ name }}</option>{% endfor %}<option value="">No label</option></select></label>
+          <label>The reason, in words a shopper could read<input type="text" name="note" value="{{ found.reason }}" maxlength="200"></label>
+          <label>Link to its public reviews<input type="url" name="reviews_url" value="{{ found.reviews_url }}" maxlength="300"></label>
+          {% if shop.is_active %}<label class="tick"><input type="checkbox" name="hide" value="1"> Also switch this shop off now: its prices leave the site</label>{% endif %}
+          <p><button type="submit" class="button default">Confirm</button></p>
+        </form>
+      </li>
+      {% endwith %}{% endfor %}
+    </ul>
+  </section>
+  {% endif %}
+
+  {% if confirmed %}
+  <section>
+    <h2>Confirmed</h2>
+    <ul class="checks">
+      {% for shop in confirmed %}
+      <li id="shop-{{ shop.pk }}">
+        <h3>{{ shop.name }} <a href="{{ shop.website }}" target="_blank" rel="noopener noreferrer">{{ shop.host }}</a></h3>
+        <p><span class="label label--{{ shop.trust }}">{{ shop.get_trust_display }}</span> <span class="muted">confirmed {{ shop.trust_on|date:"j M Y" }}</span>{% if not shop.is_active %} <span class="muted">· switched off</span>{% endif %}</p>
+        {% if shop.trust_note %}<p>{{ shop.trust_note }}</p>{% endif %}
+        {% if shop.reviews_url %}<p class="muted"><a href="{{ shop.reviews_url }}" target="_blank" rel="noopener noreferrer nofollow">Its public reviews</a></p>{% endif %}
+        <details>
+          <summary>Change</summary>
+          <form method="post">{% csrf_token %}<input type="hidden" name="action" value="confirm"><input type="hidden" name="shop" value="{{ shop.pk }}">
+            <label>Label<select name="label">{% for value, name in labels %}<option value="{{ value }}"{% if value == shop.trust %} selected{% endif %}>{{ name }}</option>{% endfor %}<option value="">No label</option></select></label>
+            <label>The reason, in words a shopper could read<input type="text" name="note" value="{{ shop.trust_note }}" maxlength="200"></label>
+            <label>Link to its public reviews<input type="url" name="reviews_url" value="{{ shop.reviews_url }}" maxlength="300"></label>
+            {% if shop.is_active %}<label class="tick"><input type="checkbox" name="hide" value="1"> Also switch this shop off now: its prices leave the site</label>{% endif %}
+            <p><button type="submit" class="button">Save</button></p>
+          </form>
+        </details>
+      </li>
+      {% endfor %}
+    </ul>
+  </section>
+  {% endif %}
+
+  {% if bare %}
+  <section>
+    <h2>Not looked up yet</h2>
+    <p class="note">Shops with no finding loaded and no label: {% for shop in bare %}{{ shop.name }}{% if not forloop.last %}, {% endif %}{% endfor %}.</p>
+  </section>
+  {% endif %}
+</div>
+{% endblock %}

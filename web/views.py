@@ -2126,6 +2126,8 @@ def product_detail(request, slug):
             "current": current,
             "unavailable": [listing for listing in unavailable if listing not in lotteries],
             "lotteries": sorted(lotteries, key=lambda listing: listing.delivered_price),
+            # A shop on the page carries the owner's label (Shop checked, Caution): the price list says what they mean.
+            "shop_marks": any(listing.retailer.shop_mark for listing in listings),
             # ?report=<listing> opens the report form under the shops for that offer; ?report_state= says how
             # sending went (report_listing).
             "report_listing": next((listing for listing in listings if str(listing.pk) == request.GET.get("report")), None),

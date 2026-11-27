@@ -99,6 +99,13 @@ class ListTests(Base):
         self.assertEqual(self.slugs(), [])
         self.assertIn("No deals to post now", self.page().content.decode())
 
+    def test_a_deal_at_a_shop_marked_caution_is_never_offered_for_a_story(self):
+        from catalogue import shop_check
+
+        shop_check.confirm(self.harbour, "caution", "Mostly negative public reviews.", "")
+        # Harbour Games leads shop-deal and ebay-beaten; the eBay seller's own deal is untouched.
+        self.assertEqual(self.slugs(**{"from": "all"}), ["ebay-deal"])
+
     def test_each_card_has_its_picture_one_tap_share_and_the_link_for_the_sticker(self):
         card = self.page().context["cards"][0]
         picture = reverse("story_deal_image", args=["ebay-deal"])

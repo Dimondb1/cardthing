@@ -45,7 +45,7 @@ from django.utils.formats import date_format
 
 from catalogue import insights, judge, pricing
 from catalogue.models import (
-    AMAZON, AskRipSettings, CardmarketMatch, ClaudeAsk, ClaudeJudge, DailyLowestPrice, Listing, Product,
+    AMAZON, AskRipSettings, CardmarketMatch, ClaudeAsk, ClaudeJudge, DailyLowestPrice, Listing, Product, Retailer,
 )
 from content.registry import REGISTRY
 
@@ -493,6 +493,10 @@ def warning_signs(listing, product, rrp, cheapest_uk, released):
         signs.append("it is listed as in stock before the release date")
     if listing.sanity == Listing.Sanity.DOUBTFUL:
         signs.append("its price is far from the others, so it may not be this product")
+    if listing.retailer.held_back:
+        # The owner's own label for the shop and his reason (Admin, Shop check), as the page shows them.
+        reason = PRICE_IN_TEXT.sub("(a price)", listing.retailer.trust_note).strip().rstrip(".")
+        signs.append("RipRaptor marks this shop Caution after reading its public reviews" + (f": {reason}" if reason else ""))
     return signs
 
 
@@ -590,6 +594,8 @@ def trust_signs(listing, rrp):
     signs = []
     if listing.retailer.source_type not in pricing.MARKETPLACES:
         signs.append("a UK shop we check")
+    if listing.retailer.trust == Retailer.Trust.CHECKED:
+        signs.append("RipRaptor has read this shop's public reviews and marks it Shop checked")
     if listing.seller_note:
         signs.append(f"eBay gives it {listing.get_seller_note_display()}")
     if listing.seller_ratings and listing.seller_ratings >= 1000 and (listing.seller_feedback or 0) >= 99:

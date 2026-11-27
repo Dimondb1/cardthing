@@ -82,6 +82,8 @@ def deals(source, store=None):
         lead = share.post_lead(product, summary)
         if lead is None or summary.suspect or lead is not summary.best or not lead.delivery_known:
             continue
+        if summary.held_back:       # never a story that sends people to a shop marked Caution
+            continue
         if source == EBAY and lead.retailer.source_type != Retailer.Source.EBAY:
             continue
         check = product.price_check

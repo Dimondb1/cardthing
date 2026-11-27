@@ -195,8 +195,9 @@ def deal_rows(game=None, kind="", sort="", lowest=False, today=None):
     low_day = (DailyLowestPrice.objects.filter(product=OuterRef("pk"), date__lt=today,
                                                date__gte=today - timedelta(days=fair_price.WINDOW_DAYS))
                .order_by("price", "-date").values("date")[:1])
-    products = (Product.objects.for_lists().in_stock()
-                .filter(price_basis__in=ON_RECORD, price_band__in=GOOD_BANDS))
+    # Never a drop to the price of a shop the owner marked Caution (offers.without_caution_lead).
+    products = offers.without_caution_lead(Product.objects.for_lists().in_stock()
+                                           .filter(price_basis__in=ON_RECORD, price_band__in=GOOD_BANDS))
     if game is not None:
         products = products.filter(game=game)
     if kind:
@@ -289,7 +290,8 @@ def sale_items(game, every, now=None, today=None):
     and has in stock now (the readers mark them: Listing.shop_sale, importers.sale_handles), each with what the
     price record says of it; the real drops first, biggest first, then those cheaper elsewhere, then the rest.
     ``every`` is the page's genuine drops. A shop's label is never taken for a saving: the owner, 27 Nov 2026, chose
-    "each one checked". Every product in a sale that is a genuine drop is read, so the count of real drops is whole,
+    "each one checked". The sale of a shop he marked Caution is never listed (offers.PUT_FORWARD). Every product in a
+    sale that is a genuine drop is read, so the count of real drops is whole,
     and up to SALE_MOST of the others (a shop may put its whole range in its sale). Four queries; one when no shop
     has such a sale."""
     now = now or timezone.now()
@@ -297,7 +299,8 @@ def sale_items(game, every, now=None, today=None):
     marked = (Product.objects.for_lists().in_stock()
               .filter(listings__shop_sale=Listing.Sale.BLACK_FRIDAY,
                       listings__shop_sale_at__gt=now - Listing.SALE_FRESH,
-                      listings__is_active=True, listings__availability=Listing.Availability.IN_STOCK))
+                      listings__is_active=True, listings__availability=Listing.Availability.IN_STOCK,
+                      listings__retailer__trust__in=offers.PUT_FORWARD))
     if game is not None:
         marked = marked.filter(game=game)
     ids = [pk for pk, _name in marked.order_by("name").values_list("pk", "name").distinct()]
@@ -317,7 +320,7 @@ def sale_items(game, every, now=None, today=None):
         # The shop's own offer, in stock at a delivered price we know; the cheapest when two shops have it in a sale.
         offer = next((each for each in product.offers if each.in_sale(now) and each.delivery_known
                       and each.availability == Listing.Availability.IN_STOCK
-                      and each.sanity != Listing.Sanity.DOUBTFUL), None)
+                      and each.sanity != Listing.Sanity.DOUBTFUL and not each.retailer.held_back), None)
         if offer is not None:
             found.append(sale_verdict(product, offer, drops.get(product.pk), averages.get(product.pk)))
     found.sort(key=lambda item: (SALE_ORDER.index(item.verdict), -item.percent if item.verdict == REAL else 0,

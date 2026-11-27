@@ -50,6 +50,7 @@
       </a>
       {% with code=cheapest.retailer.discount %}{% if code %}<p class="buybox__code">{% include "web/includes/discount_code.html" %}</p>{% endif %}{% endwith %}
       {% if cheapest.seller_name or cheapest.seller_feedback is not None %}<p class="buybox__seller">{% include "web/includes/ebay_seller.html" with listing=cheapest %}{% if cheapest.seller_note %}<span aria-hidden="true"> · </span><span class="visually-hidden">, </span>{{ cheapest.get_seller_note_display }}{% endif %}</p>{% endif %}
+      {% if cheapest.retailer.shop_mark %}<p class="buybox__seller">{% include "web/includes/shop_trust.html" with retailer=cheapest.retailer %}</p>{% endif %}
       </div>
     {% elif has_listings %}
       <p class="buybox__none">{% copy "product.out_of_stock.message" %}</p>
@@ -161,6 +162,8 @@
   </ul>
   {% endif %}
   {% if report_listing or report_state %}{% include "web/includes/report_form.html" %}{% endif %}
+  {# What the shop labels mean, once, when a shop on this page has one (web/includes/shop_trust.html). #}
+  {% if shop_marks %}<p class="restock-note">{% copy "product.shop.note" %} <a href="{% url 'web:terms' %}#terms-shops">{% copy "product.shop.note_link" %}</a></p>{% endif %}
   {% if restocks %}
   <p class="restock-note">
     {% if restocks.count %}{% copy_count "product.restock.recent" restocks.count days=restocks.days retailer=restocks.latest.retailer.name date=restocks.latest_date|short_date %}{% else %}{% copy "product.restock.last" retailer=restocks.latest.retailer.name date=restocks.latest_date|short_date %}{% endif %}

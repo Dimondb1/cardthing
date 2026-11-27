@@ -596,9 +596,28 @@ our own label per shop ... You confirm each one in Admin".
   changes it, such a shop is never confirmed together with others, and a
   proposal he has already read and chosen against is not raised again
   (`ShopCheck.answered`).
-- **Not on the site yet.** A label is the owner's record until he decides
-  where a visitor should see it and what it should keep out of the deals.
-  The scores a review site gives are shown to him alone.
+- **On the site** (the owner, 27 Nov 2026: "build it").
+  `web/includes/shop_trust.html` shows a confirmed label beside the shop's
+  price on a product page, and under Buy now when it is the cheapest,
+  through the trust line the eBay seller already uses: "Shop checked", or
+  "Caution" with his reason, then a Reviews link where he gave one
+  (`rel="nofollow noopener noreferrer"`, never a counted or sponsored
+  link). A shop with no label, or one not yet checked, shows nothing. No
+  colour: green and red are for prices. A review site's own scores are
+  never shown. One line under the price list says what the labels mean and
+  links to the new Shop labels section of the Terms, which also tells a
+  shop how to ask for another look. The wording is in the registry
+  (`product.shop.*`, `terms.shops.*`).
+- **Never put forward.** A product whose cheapest price is at a shop marked
+  Caution is still listed and compared, with the label beside the price,
+  but is never a deal: `offers.Summary.held_back` (so `is_deal`, the home
+  rails, featured deals and Best prices), `offers.biggest_savings` and
+  `pricing.price_drops` (the Deals page, the feeds, Discord),
+  `catalogue/picks.py` (Picked for you), the Black Friday pages and the
+  shop sales on them, and Story deals. Lists built in the database use
+  `offers.without_caution_lead`, which costs one small query when no shop
+  is marked Caution. Rip is told the label as a warning sign or a trust
+  sign for the offer (`web/askrip.py`).
 
 **Discount codes** (Admin, a shop's page, Discount code: `discount_code`,
 `discount_terms`, `discount_ends`; `Retailer.discount`): a code a shop gives

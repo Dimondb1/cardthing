@@ -22,7 +22,7 @@ from .models import (
     DailyLowestPrice, Listing, OutboundClick, PreorderOpen, Product, Restock, Retailer, fresh, listing_stale_cutoff,
     shown_change,
 )
-from .offers import MAX_REAL_PERCENT
+from .offers import MAX_REAL_PERCENT, without_caution_lead
 
 # A listing that flips out and back within this long is one restock, not two.
 RESTOCK_COLLAPSE = timedelta(hours=2)
@@ -462,7 +462,8 @@ def price_drops(limit=6, days=None, today=None, game=None):
     had_price = DailyLowestPrice.objects.filter(
         product=OuterRef("pk"), date__lte=target, date__gt=target - timedelta(days=days),
     )
-    products = Product.objects.for_lists().priced().filter(Exists(had_price))
+    # A fall to the price of a shop marked Caution is not put forward (offers.without_caution_lead).
+    products = without_caution_lead(Product.objects.for_lists().priced().filter(Exists(had_price)))
     if game is not None:
         products = products.filter(game=game)
     return (

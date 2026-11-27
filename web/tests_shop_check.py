@@ -281,17 +281,21 @@ class ConfirmTests(Base):
         self.client.post(URL, {"action": "together", "label": "checked"})
         self.assertEqual([self.trust(self.harbour), self.trust(self.moor)], ["checked", "new"])
 
-    def test_a_label_is_not_on_the_site_yet(self):
-        # The label is the owner's record for now: where a visitor sees it is his next decision.
+    def test_a_label_reaches_the_site_only_once_he_confirms_it(self):
+        # A finding is his to read: nothing of it is shown. His own label and reason are (web/tests_shop_labels.py).
         self.load()
         product = make_product(make_set(make_game()), name="Surging Sparks Booster Box")
         make_listing(product, self.kestrel, price="50.00")
         before = self.client.get(product.get_absolute_url()).content.decode()
+        self.assertIn("Kestrel Cards", before)
+        for words in ("Caution", "Mostly negative public reviews", "orders never arrived", "from 14 reviews"):
+            self.assertNotIn(words, before)
         self.client.post(URL, {"action": "confirm", "shop": self.kestrel.pk, "label": "caution",
                                "note": "Mostly negative public reviews."})
         cache.clear()
         after = self.client.get(product.get_absolute_url()).content.decode()
-        self.assertNotIn("Mostly negative public reviews", after)
-        self.assertNotIn("Caution", after)
-        self.assertIn("Kestrel Cards", after)
-        self.assertEqual("Kestrel Cards" in before, True)
+        self.assertIn("<strong>Caution</strong>", after)
+        self.assertIn("Mostly negative public reviews.", after)
+        # Never what the search showed of a review site's own scores, nor the complaints he read.
+        for words in ("orders never arrived", "from 14 reviews", "Trustpilot"):
+            self.assertNotIn(words, after)

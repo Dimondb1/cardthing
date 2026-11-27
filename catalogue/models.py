@@ -839,6 +839,18 @@ class Retailer(models.Model):
         self.save(update_fields=["error_streak", "backoff_until", "failing_since", "last_error"])
 
     @property
+    def shop_mark(self):
+        """The owner's label as a visitor is shown it where this shop sells from: "checked" or "caution". "" for a
+        shop with no label and for one not yet checked: until someone has looked, the site says nothing."""
+        return self.trust if self.trust in (self.Trust.CHECKED, self.Trust.CAUTION) else ""
+
+    @property
+    def held_back(self):
+        """True for a shop the owner marked Caution. Its prices are still listed and compared, with the label beside
+        them, but a product it is cheapest for is never put forward as a deal (offers.Summary.held_back)."""
+        return self.trust == self.Trust.CAUTION
+
+    @property
     def discount(self):
         """(code, terms) to show beside the shop's prices now, or None: no code, or one past its last day."""
         if not self.discount_code or (self.discount_ends and self.discount_ends < timezone.localdate()):

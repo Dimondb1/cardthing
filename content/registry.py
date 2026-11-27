@@ -2552,6 +2552,21 @@ ENTRIES = [
           "eBay gives them.", placeholders=("percent", "ratings")),
     Entry("product.ebay.feedback_only", T, "eBay row: the seller's feedback, no count", "{percent}% positive",
           "After the seller's name on an eBay row when eBay gave no count of ratings.", placeholders=("percent",)),
+    Entry("product.shop.checked", T, "Shop label: checked", "Shop checked",
+          "Beside a shop's price on a product page, and under Buy now when it is the cheapest, for a shop you "
+          "confirmed as Checked at Admin, Shop check. Worded apart from the price's own \"checked 2 hours ago\"."),
+    Entry("product.shop.caution", T, "Shop label: caution", "Caution",
+          "Beside a shop's price on a product page for a shop you confirmed as Caution at Admin, Shop check. Your own "
+          "reason for it follows."),
+    Entry("product.shop.reviews", B, "Shop label: reviews link", "Reviews",
+          "After a shop's label on a product page: the link to the shop's public reviews, where you gave one."),
+    Entry("product.shop.reviews_label", T, "Shop label: reviews link, read out", "of {retailer} (opens in a new tab)",
+          "Read out after the reviews link, for people using a screen reader.", placeholders=("retailer",)),
+    Entry("product.shop.note", T, "Shop labels: what they mean",
+          "Shop checked and Caution are our own reading of a shop's public reviews. They are not a guarantee.",
+          "Under the price list on a product page, when a shop on it carries a label.", legal=True),
+    Entry("product.shop.note_link", B, "Shop labels: link to the terms", "How we label shops",
+          "After the line saying what the shop labels mean. Opens the Shop labels section of the terms page."),
     Entry("product.ebay.button", B, "eBay button", "Search eBay", "Product page price box when no shop has stock. Opens an eBay UK search for new, buy it now listings."),
     Entry(
         "product.amazon.button", B, "Amazon button",
@@ -4679,6 +4694,19 @@ ENTRIES = [
     ),
     Entry("terms.prices.title", H, "Prices heading", "Prices", "Heading on the terms page."),
     Entry("terms.independence.title", H, "Independence heading", "Independence", "Heading on the terms page."),
+    Entry("terms.shops.title", H, "Shop labels heading", "Shop labels", "Heading on the terms page."),
+    Entry(
+        "terms.shops.body", P, "Shop labels",
+        "Some shops carry a label of ours beside their prices. Shop checked means we have read the shop's public "
+        "reviews and found it in good standing on the day we looked. Caution means its public reviews were mostly "
+        "negative, or buyers reported orders that did not arrive.\n\n"
+        "A label is our opinion from what was public on that day. It is not a guarantee, and a shop with no label "
+        "has not been looked at yet. A product whose cheapest price is at a shop marked Caution is still listed, but "
+        "we do not feature it as a deal.\n\n"
+        "If you run a shop and think its label is wrong or out of date, contact us and we will look again.",
+        "Terms page: what the shop labels on product pages mean, and how a shop can ask for another look.",
+        legal=True,
+    ),
     Entry("terms.use.title", H, "Using RipRaptor heading", "Using RipRaptor", "Heading on the terms page."),
     Entry(
         "terms.use.body", P, "Using RipRaptor",

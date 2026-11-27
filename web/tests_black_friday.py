@@ -1069,3 +1069,29 @@ class DesktopTests(PageCase):
         fold = script[script.index("details[data-fold]") - 300:script.index("details[data-fold]") + 80]
         self.assertIn('window.matchMedia("(min-width: 64rem)").matches) return;', fold)
         self.assertIn("item.open = false;", fold)
+
+
+class CautionTests(ShopSaleTests):
+    """A shop the owner marked Caution (Admin, Shop check) is never put forward here: not a drop to its price, not its
+    own sale. The owner, 27 Nov 2026, told that a badly reviewed shop led the deals: "most of our top deals are
+    pointing towards them"."""
+
+    def caution(self, shop):
+        from catalogue import shop_check
+
+        shop_check.confirm(shop, "caution", "Mostly negative public reviews.", "")
+
+    def test_a_drop_to_its_price_is_no_deal_and_a_dearer_shops_label_changes_nothing(self):
+        self.assertEqual(len(self.deals()), 3)
+        self.caution(self.kestrel)                      # dearer than Harbour Games on every one
+        self.assertEqual(len(self.deals()), 3)
+        self.caution(self.harbour)                      # cheapest on every one
+        self.assertEqual(self.deals(), [])
+        html = self.html("/black-friday/")
+        self.assertNotIn(self.box.get_absolute_url(), html)
+
+    def test_its_own_sale_is_not_listed_or_counted(self):
+        self.mark(self.box, self.kestrel)               # Kestrel's £110, in its sale
+        self.assertEqual(len(self.items()), 1)
+        self.caution(self.kestrel)
+        self.assertEqual(black_friday.sale_items(None, self.deals()), ([], 0))

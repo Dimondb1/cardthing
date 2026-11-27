@@ -19,16 +19,21 @@ Deal claims rest on evidence, not on one dear listing:
   against its own past says nothing about the market.
 * A product is a deal (Summary.is_deal: featured deals, Too good to miss)
   only with such a 30-day low, or a credible saving of at least DEAL_PERCENT.
+* Never a deal when the cheapest price is at a shop the owner marked Caution
+  (Admin, Shop check; Summary.held_back, without_caution_lead). The owner, 27
+  Nov 2026, told that a badly reviewed shop led the deals: "most of our top
+  deals are pointing towards them". Such a shop is still listed and compared,
+  with its label beside its price; it is only never put forward.
 """
 
 from datetime import timedelta
 from decimal import ROUND_HALF_UP, Decimal
 
 from django.conf import settings
-from django.db.models import Case, OuterRef, Prefetch, Subquery, Value, When
+from django.db.models import Case, OuterRef, Prefetch, Q, Subquery, Value, When
 from django.utils import timezone
 
-from .models import DailyLowestPrice, Listing, fresh
+from .models import DailyLowestPrice, Listing, Retailer, fresh
 
 LOW_30 = "low_30"
 BEST_WEEK = "best_week"
@@ -51,6 +56,30 @@ def with_lead(products):
     return products.annotate(lead_source=Subquery(cheapest.values("retailer__source_type")[:1]),
                              lead_checked=Subquery(cheapest.values("last_checked")[:1]))
 
+# The labels of the shops whose prices may be put forward: every shop but one marked Caution. For a filter on a
+# listing's own shop where a deal is found by one (the Black Friday pages' shop sales).
+PUT_FORWARD = ("", *(value for value in Retailer.Trust.values if value != Retailer.Trust.CAUTION))
+
+
+def lead_order():
+    """How a product's offers are ranked, the leading one first: in stock before pre-orders, then confirmed delivered
+    prices, cheapest first, with shops whose delivery is unknown after them."""
+    return (Case(When(availability=Listing.Availability.IN_STOCK, then=Value(0)), default=Value(1)),
+            "-delivery_known", "delivered_price", "retailer__name")
+
+
+def without_caution_lead(products):
+    """``products`` without those whose leading offer (buyable_prefetch's first, Summary.best) is at a shop the owner
+    marked Caution: for a list of deals built in the database, where no Summary is to hand (pricing.price_drops).
+    With no shop marked Caution, which is most days, the products come back untouched after one small query."""
+    shops = list(Retailer.objects.filter(trust=Retailer.Trust.CAUTION).values_list("pk", flat=True))
+    if not shops:
+        return products
+    lead = Listing.objects.buyable().filter(product=OuterRef("pk")).order_by(*lead_order())
+    return (products.annotate(lead_shop=Subquery(lead.values("retailer_id")[:1]))
+            .filter(Q(lead_shop__isnull=True) | ~Q(lead_shop__in=shops)))
+
+
 def buyable_prefetch():
     """Attach ``product.offers``: buyable listings, in stock before pre-orders, then cheapest first. A list leads with
     the cheapest price in stock today, as the product page does; a pre-order leads only when nobody has it in stock.
@@ -66,8 +95,7 @@ def buyable_prefetch():
         .exclude(sanity=Listing.Sanity.EXCLUDED)
         .select_related("retailer")
         # In stock first; then confirmed delivered prices, cheapest first; shops whose delivery is unknown after them.
-        .order_by(Case(When(availability=Listing.Availability.IN_STOCK, then=Value(0)), default=Value(1)),
-                  "-delivery_known", "delivered_price", "retailer__name"),
+        .order_by(*lead_order()),
         to_attr="offers",
     )
 
@@ -110,9 +138,16 @@ class Summary:
         return self.badge == LOW_30
 
     @property
+    def held_back(self):
+        """True when the cheapest offer is at a shop the owner marked Caution (Retailer.held_back): the product is
+        listed and compared as ever, and never put forward as a deal, a pick or a story."""
+        return self.best is not None and self.best.retailer.held_back
+
+    @property
     def is_deal(self):
-        """Evidence that today's price is a good one: a 30-day low under the average, or a credible saving."""
-        return self.low_deal or (self.percent or 0) >= DEAL_PERCENT
+        """Evidence that today's price is a good one: a 30-day low under the average, or a credible saving. Never
+        when that price is at a shop marked Caution."""
+        return not self.held_back and (self.low_deal or (self.percent or 0) >= DEAL_PERCENT)
 
     @property
     def strength(self):
@@ -229,11 +264,12 @@ def week_low_map(product_ids, days=None, today=None):
 
 def biggest_savings(products, limit=6):
     """Products whose cheapest offer beats the runner-up by the most, as (product, summary). Never one the Price
-    check calls dearer than usual (Product.dear): beating the next shop is no saving on a high price."""
+    check calls dearer than usual (Product.dear): beating the next shop is no saving on a high price. Nor one whose
+    cheapest offer is at a shop marked Caution."""
     rows = []
     for product in products:
         summary = summarise(product)
-        if summary.saving and not product.dear:
+        if summary.saving and not product.dear and not summary.held_back:
             rows.append((product, summary))
     rows.sort(key=lambda row: (-row[1].percent, -row[1].saving, row[0].name))
     return rows[:limit]

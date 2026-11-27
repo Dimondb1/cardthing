@@ -104,7 +104,8 @@ def picks(seen, limit=PICKS_MAX, closest_first=False):
     ranked = []
     for product in candidates:
         summary = offers.summarise(product, week_lows)
-        if summary.best is None:
+        # Never a pick when its cheapest price is at a shop marked Caution (offers.Summary.held_back).
+        if summary.best is None or summary.held_back:
             continue
         hot = (summary.percent or 0) >= GOOD_SAVING or summary.low_deal
         closeness = (2 if product.product_set_id in sets else 1) + (product.language in tongues)

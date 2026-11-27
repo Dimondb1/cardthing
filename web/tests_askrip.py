@@ -561,6 +561,23 @@ class RedFlagTests(AskRipCase):
         found, amounts, _checked = askrip.facts(self.box)
         return next(offer for offer in found["offers"] if offer["shop"] == "eBay"), found, amounts
 
+    def test_the_owners_label_for_a_shop_is_a_sign_rip_is_told(self):
+        from catalogue import shop_check
+
+        shop_check.confirm(self.harbour, "checked", "Mostly positive public reviews.", "")
+        shop_check.confirm(self.kestrel, "caution", "Mostly negative public reviews, with refunds of £40 unpaid.", "")
+        found, _amounts, _checked = askrip.facts(self.box)
+        offers = {offer["shop"]: offer for offer in found["offers"]}
+        self.assertIn("RipRaptor has read this shop's public reviews and marks it Shop checked",
+                      offers["Harbour Games"]["trust_signs"])
+        self.assertNotIn("warning_signs", offers["Harbour Games"])
+        # His own reason, as the page gives it, with no amount of its own for Rip to quote as a price.
+        self.assertEqual(offers["Kestrel Cards"]["warning_signs"], [
+            "RipRaptor marks this shop Caution after reading its public reviews: Mostly negative public reviews, "
+            "with refunds of (a price) unpaid"])
+        self.assertNotIn("RipRaptor has read this shop's public reviews and marks it Shop checked",
+                         offers["Kestrel Cards"].get("trust_signs", []))
+
     def test_a_clean_uk_shop_offer_has_no_warning_signs(self):
         found, _amounts, _checked = askrip.facts(self.box)
         self.assertEqual([offer.get("warning_signs") for offer in found["offers"]], [None, None])

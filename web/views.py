@@ -3410,7 +3410,9 @@ def product_story_image(request, slug):
     """Share to story: the tall picture, PNG (web/share.py). The Story button is a link to it that saves it, so it
     works without script; share.js hands it to the phone's share sheet instead."""
     product, summary = post_product(slug)
-    response = HttpResponse(share.story_image(product, summary, copy.for_request(request)), content_type="image/png")
+    # It wears the season that is on (Black Friday, Christmas...; share.story_theme): staff may name one to look ahead.
+    png = share.story_image(product, summary, copy.for_request(request), theme=share.story_theme_for(request))
+    response = HttpResponse(png, content_type="image/png")
     response["X-Robots-Tag"] = "noindex"
     response["Cache-Control"] = f"private, max-age={share.POST_SECONDS}"
     return response

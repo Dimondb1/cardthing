@@ -8088,6 +8088,10 @@ and when it was checked.
   reloads the page. They are his words, drawn as typed; the price, the shops
   compared and the checked time stay the site's own. The product page's own
   story picture is never one with his words on it (kept apart in the cache).
+- **Picture look**, a row of links over the deals: Today's (the season that
+  is on, what a visitor's Share to story gives), Plain, and each season, so
+  the owner can make Christmas pictures ahead or leave a season off. The
+  look chosen is kept by the forms and the seller links (`?theme=`).
 - Staff only, never for editors, never cached or indexed; the picture
   (`/admin/story-deals/<slug>/story.png`) too. The same queries however many
   deals.
@@ -8268,6 +8272,33 @@ that saves the picture, so it works without script and on a computer (where
 the link is copied too). A browser that loses the tap while the picture
 comes saves it instead. The picture is kept an hour for the same price,
 noindex. Drawing one takes under a second.
+
+**The story wears the season** (`share.story_theme`, `STORY_THEMES`; the
+owner, 27 Nov 2026, Black Friday: "Can the share to stories be depending on
+the current theme ... then xmas.... Easter..."). The card is the same all
+year. The ground round it takes the season's colour, the season is named
+over the card in capitals with its year in orange (Site wording, Story
+picture: Black Friday and so on), and the season's art is drawn on the
+ground, most of it in the strips above and below the card:
+
+- **Black Friday**, while the site's own Black Friday banner shows: black
+  and bare. Under its name it says how far the price is under the product's
+  own 30-day average ("16% under its 30-day average", or "Lowest recorded
+  price"), only for a product the Black Friday pages list as a genuine drop
+  and only when the picture's price is that price (`share.story_drop`, one
+  query). On any other product the season is dressing, never a claim.
+- **Christmas, Easter, Halloween, the summer holidays**, while that seasonal
+  theme is on (`web/seasons.py`, with the owner's Seasonal themes switch):
+  Christmas is the site's foil pack (midnight blue, gold sparkle, crimped
+  ends, no red or green); the others use the colours of the site's own
+  artwork for them. The art is laid out from a fixed seed, so a theme's
+  picture is the same every time, and it keeps clear of the name.
+
+The name takes its room from the photo's well, so the card still ends clear
+of Instagram's reply box. Each look is kept apart in the cache. Staff can
+see any look on any day by adding `?theme=christmas` (or `black_friday`,
+`easter`, `halloween`, `summer`, `plain`) to a story picture's address;
+anyone else's `?theme=` is ignored.
 
 **Download a report** (`/dashboard/report.txt`, `web/report.py`; linked at
 the top of the dashboard and on the admin home): the dashboard's figures,

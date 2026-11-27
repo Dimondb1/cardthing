@@ -316,8 +316,18 @@ class StoryTests(TestCase):
     website had a insta stories share button one Tap created the insta story in its drafting state", then, with the
     marketing team's template: "Could it be a bit more exciting like" it."""
 
-    setUp = PostTests.setUp
     GROUND = (246, 246, 248)   # --color-shelf, round the card and in the photo's well
+
+    def setUp(self):
+        from datetime import date
+        from unittest import mock
+
+        PostTests.setUp(self)
+        # Between seasons, so the picture is the plain one whatever day the tests run (web/tests_story_themes.py has
+        # the seasons' own).
+        season = mock.patch("web.black_friday.local_today", return_value=date(2026, 9, 1))
+        season.start()
+        self.addCleanup(season.stop)
 
     def story(self, photo=None, product=None):
         """The picture as served, with the shop's photo coming or not."""

@@ -2,7 +2,7 @@
 Nov 2026: "I need a list of ebay products to add to my insta stories easily ... a one tap carousel of great deals
 where I can customise the advert slightly if I need to"."""
 
-from datetime import timedelta
+from datetime import date, timedelta
 from decimal import Decimal
 from unittest import mock
 
@@ -39,6 +39,11 @@ class Base(TestCase):
         self.ebay = make_retailer("eBay", source_type=Retailer.Source.EBAY)
         self.harbour, self.northgate = make_retailer("Harbour Games"), make_retailer("Northgate Cards")
         self.client.force_login(get_user_model().objects.create_superuser("boss", password="x"))
+        # Between seasons, so the pictures are the plain ones whatever day the tests run (web/tests_story_themes.py
+        # has the seasons' own).
+        season = mock.patch("web.black_friday.local_today", return_value=date(2026, 9, 1))
+        season.start()
+        self.addCleanup(season.stop)
 
     def product(self, slug, ebay=None, shop="70.00", history=("60.00",) * 20, **fields):
         """A product two UK shops list (one out of stock), with an eBay seller's price when ``ebay`` is given."""
@@ -206,7 +211,8 @@ class PictureTests(Base):
         with mock.patch.object(share, "draw_story", return_value=b"png") as drawn, \
                 mock.patch.object(share, "photo_bytes", return_value=None):
             self.client.get(reverse("story_deal_image", args=[product.slug]), {"badge": "b" * 99, "line": "l" * 99})
-        self.assertEqual(drawn.call_args.kwargs, {"badge": "b" * share.STORY_BADGE_MOST, "line": "l" * share.STORY_LINE_MOST})
+        self.assertEqual(drawn.call_args.kwargs, {"badge": "b" * share.STORY_BADGE_MOST, "line": "l" * share.STORY_LINE_MOST,
+                                                  "theme": None, "year": None, "drop": ""})
 
     def test_no_such_product_is_not_found(self):
         self.assertEqual(self.client.get(reverse("story_deal_image", args=["no-such"])).status_code, 404)

@@ -1,6 +1,9 @@
 """The words a share fills in for the visitor: the text under a Reddit post's title (product page and cards)."""
 
+import math
+import random
 import re
+from dataclasses import dataclass
 from decimal import Decimal
 
 from catalogue.discord import when_words
@@ -389,10 +392,280 @@ def story_words(text, most):
     return " ".join(word for word in words if word)[:most].strip()
 
 
-def story_image(product, summary, store=None, badge="", line=""):
+# Seasons on a story ---------------------------------------------------------------------------------------------------
+# The owner, 27 Nov 2026 (Black Friday): "Can the share to stories be depending on the current theme. Like today is
+# black Friday so they theme the posts like that, then xmas.... Easter...". The card stays as it is, so a product reads
+# the same all year; the ground round it takes the season's colour, the season is named over the card (its year in the
+# brand's orange), and the season's own art is drawn on the ground, most of it in the strips above and below the card
+# that Instagram's bars partly cover. Black Friday is black and bare, and under its name says how far the price is
+# under the product's own 30-day average, only when the Black Friday pages list it as a genuine drop
+# (web/black_friday.py): the season is dressing, never a claim. Christmas is the site's own foil pack (midnight blue,
+# gold sparkle, crimped ends; no red or green, which mean dearer and cheapest here); Easter, Halloween and the summer
+# holidays use the colours of the site's own artwork for them (tokens.css, the seasonal themes).
+
+STORY_LABEL_SIZES = (60, 54, 48, 42)            # the season's name steps down to fit the card's width
+STORY_LABEL, STORY_LABEL_PAD, STORY_LABEL_GAP = 60, 10, 30   # its line, the air over it, and under the block
+STORY_DROP, STORY_DROP_GAP = 40, 16             # the line under the name (Black Friday: the drop), and the air over it
+STORY_WELL_THEMED_LEAST = 320                   # the photo's well gives the label its room, down to this
+STORY_ART_OVER = 2                              # the art is drawn this many times over size, then scaled down
+STORY_LABEL_CLEAR = (228, 430)                  # scattered art keeps out of this band: the season's name is in it
+PRICE_ON_DARK = "#3fd07a"                       # the price green on a dark ground (tokens.css, the dark look)
+WRAP, WRAP_RIDGE, GOLD, GOLD_SHADE = "#16224a", "#25357a", "#f2b632", "#c98e12"
+NIGHT, VIOLET, FLAKE = "#2a2438", "#6b3fa0", "#c7d3e3"
+SHELL, PINK, SKY, BUTTER, MINT = "#fbf3dc", "#f6b6c8", "#8fd0f0", "#f8e08e", "#8fd4ad"
+SEA, SAND, SAND_DEEP = "#2f9bd6", "#f3dfb0", "#d9b878"
+BLACK_FRIDAY, PLAIN = "black_friday", "plain"
+
+
+@dataclass(frozen=True)
+class StoryTheme:
+    key: str
+    name: str        # for the owner, on the Story deals page
+    ground: str      # the picture's ground, round the card
+    ink: str         # the season's name on it
+    accent: str      # the year in the name: the brand's orange as it reads on this ground
+    art: str = ""    # the art drawn on the ground: a function of STORY_ART, by name
+
+    @property
+    def label(self):
+        """The wording of the season's name over the card (content/registry.py)."""
+        return f"product.share.story_theme.{self.key}"
+
+
+STORY_THEMES = {theme.key: theme for theme in (
+    StoryTheme(BLACK_FRIDAY, "Black Friday", "#14161c", PAPER, BRAND),
+    StoryTheme("christmas", "Christmas", WRAP, PAPER, BRAND, "christmas"),
+    StoryTheme("easter", "Easter", SHELL, INK, BRAND_TEXT, "easter"),
+    StoryTheme("halloween", "Halloween", NIGHT, PAPER, BRAND, "halloween"),
+    StoryTheme("summer", "Summer holidays", SKY, INK, BRAND_TEXT, "summer"),
+)}
+
+
+def story_theme(asked="", day=None):
+    """The season a story's picture wears, or None for the plain one: Black Friday while the site's own banner for
+    it shows (web/black_friday.py), else the seasonal theme that is on (web/seasons.py, with the owner's switch).
+    ``asked`` names one outright, PLAIN for none: the owner's choice on the Story deals page, or a member of staff
+    looking ahead."""
+    from . import black_friday, seasons
+
+    if asked:
+        return STORY_THEMES.get(asked)
+    if black_friday.season(day).showing:
+        return STORY_THEMES[BLACK_FRIDAY]
+    season = seasons.current(day)
+    return STORY_THEMES.get(season.key) if season is not None else None
+
+
+def story_theme_for(request):
+    """The theme for a picture this request asks for: today's, or for staff the one named in ?theme= (as a page's
+    seasonal theme is previewed, web/seasons.py). Anyone else's ?theme= is ignored."""
+    from . import seasons
+
+    asked = request.GET.get(seasons.PREVIEW, "")
+    if asked:
+        user = getattr(request, "user", None)
+        if user is None or not (user.is_active and user.is_staff) or asked not in (*STORY_THEMES, PLAIN):
+            asked = ""
+    return story_theme(asked)
+
+
+def story_year(theme, day=None):
+    """The year in the season's name: Black Friday's own, else today's."""
+    from django.utils import timezone
+
+    from . import black_friday
+
+    if theme.key == BLACK_FRIDAY:
+        return black_friday.season(day).year
+    return (day or timezone.localdate()).year
+
+
+def story_drop(product, summary, store=None):
+    """The line under Black Friday's name: how far today's price is under the product's own 30-day average, or that
+    it is the lowest recorded, only when the Black Friday pages list the product as a genuine drop and the price on
+    the picture is the one they mean. "" for every other product: the season is never a claim. One query."""
+    from . import black_friday
+
+    best = post_lead(product, summary)
+    if best is None or best is not summary.best:
+        return ""
+    row = black_friday.deal_rows().filter(pk=product.pk).first()
+    if row is None or row.lowest_known != best.shown_price:
+        return ""
+    _money, percent = black_friday.saved(row)
+    if percent >= int(black_friday.DROP * 100):
+        return copy.get("product.share.story_drop", store=store, percent=percent)
+    return copy.get("blackfriday.row.note_low", store=store)
+
+
+def scattered(spots, count, margin, low, high):
+    """``count`` places for scattered art, from ``low`` to ``high`` down the picture and ``margin`` in from its
+    sides, none in the band the season's name is in (STORY_LABEL_CLEAR)."""
+    found = []
+    while len(found) < count:
+        x, y = spots.uniform(margin, STORY_WIDTH - margin), spots.uniform(low, high)
+        if not STORY_LABEL_CLEAR[0] <= y <= STORY_LABEL_CLEAR[1]:
+            found.append((x, y))
+    return found
+
+
+def sparkle(draw, x, y, r, fill):
+    """A four-pointed star, as a glint on foil or a star in a night sky."""
+    k = r * 0.2
+    draw.polygon([(x, y - r), (x + k, y - k), (x + r, y), (x + k, y + k), (x, y + r), (x - k, y + k), (x - r, y),
+                  (x - k, y - k)], fill=fill)
+
+
+def rgba(colour, alpha=255):
+    from PIL import ImageColor
+
+    return (*ImageColor.getrgb(colour)[:3], alpha)
+
+
+def art_christmas(layer, s):
+    """The site's Christmas wrap: gold sparkle printed on the foil, and a booster pack's crimped ends."""
+    from PIL import ImageDraw
+
+    draw = ImageDraw.Draw(layer)
+    spots = random.Random(12)
+    for x, y in scattered(spots, 64, 24, 96, STORY_HEIGHT - 96):
+        sparkle(draw, x * s, y * s, spots.uniform(7, 22) * s, rgba(GOLD, spots.randint(80, 200)))
+    band, tooth, rise = 58, 27, 16
+    for top, inner, out in ((0, band, 1), (STORY_HEIGHT - band, STORY_HEIGHT - band, -1)):
+        draw.rectangle((0, top * s, STORY_WIDTH * s, (top + band) * s), fill=WRAP_RIDGE)
+        for x in range(9, STORY_WIDTH, 18):                       # the pressed lines of the seal
+            draw.rectangle((x * s, top * s, (x + 5) * s, (top + band) * s), fill=WRAP)
+        for x in range(0, STORY_WIDTH, tooth):                    # its sawn edge, towards the card
+            draw.polygon([(x * s, inner * s), ((x + tooth / 2) * s, (inner + out * rise) * s),
+                          ((x + tooth) * s, inner * s)], fill=WRAP_RIDGE)
+
+
+def art_easter(layer, s):
+    """Painted eggs along the top and the foot, each with a band round it."""
+    from PIL import Image, ImageDraw
+
+    spots = random.Random(4)
+    colours = (PINK, SKY, MINT, BUTTER)
+    n = 0
+    for low, high in ((16, 62), (STORY_FOOT + 60, STORY_HEIGHT - 150)):   # clear of the name, and of the card
+        for i in range(8):
+            width = spots.uniform(84, 118)
+            height = width * 1.3
+            egg = Image.new("RGBA", (round(width * s), round(height * s)), (0, 0, 0, 0))
+            shape = Image.new("L", egg.size, 0)
+            ImageDraw.Draw(shape).ellipse((0, 0, egg.width - 1, egg.height - 1), fill=255)
+            paint = Image.new("RGBA", egg.size, rgba(colours[n % len(colours)]))
+            band = ImageDraw.Draw(paint)
+            middle, thick = egg.height * spots.uniform(0.42, 0.6), egg.height * 0.1
+            band.rectangle((0, middle - thick, egg.width, middle + thick), fill=rgba(PAPER, 215))
+            band.rectangle((0, middle + thick * 1.7, egg.width, middle + thick * 2.2), fill=rgba(PAPER, 215))
+            egg.paste(paint, (0, 0), shape)
+            egg = egg.rotate(spots.uniform(-24, 24), resample=Image.BICUBIC, expand=True)
+            x = 50 + i * 132 + spots.uniform(-16, 16)
+            y = spots.uniform(low, high)
+            layer.alpha_composite(egg, (round(x * s - egg.width / 2 + width * s / 2), round(y * s)))
+            n += 1
+
+
+BAT = ((-1.0, -0.15), (-0.62, -0.42), (-0.30, -0.22), (-0.14, -0.34), (-0.10, -0.50), (-0.04, -0.34), (0.04, -0.34),
+       (0.10, -0.50), (0.14, -0.34), (0.30, -0.22), (0.62, -0.42), (1.0, -0.15), (0.72, -0.02), (0.56, 0.22),
+       (0.38, 0.04), (0.20, 0.30), (0.0, 0.10), (-0.20, 0.30), (-0.38, 0.04), (-0.56, 0.22), (-0.72, -0.02))
+
+
+def art_halloween(layer, s):
+    """A gold moon, stars and a few bats in the night."""
+    from PIL import ImageDraw
+
+    draw = ImageDraw.Draw(layer)
+    spots = random.Random(31)
+    for x, y in scattered(spots, 46, 20, 20, STORY_HEIGHT - 20):
+        sparkle(draw, x * s, y * s, spots.uniform(5, 13) * s, rgba(FLAKE, spots.randint(90, 210)))
+    cx, cy, r = 880, 132, 98
+    draw.ellipse(((cx - r) * s, (cy - r) * s, (cx + r) * s, (cy + r) * s), fill=GOLD)
+    for dx, dy, dr in ((-34, -22, 20), (30, 26, 14), (22, -40, 9), (-20, 38, 11)):
+        draw.ellipse(((cx + dx - dr) * s, (cy + dy - dr) * s, (cx + dx + dr) * s, (cy + dy + dr) * s),
+                     fill=GOLD_SHADE)
+    for x, y, size in ((150, 96, 78), (470, 170, 54), (640, 70, 40), (230, 1790, 66), (800, 1820, 84), (560, 1730, 44)):
+        draw.polygon([((x + px * size) * s, (y + py * size) * s) for px, py in BAT], fill=VIOLET)
+
+
+def art_summer(layer, s):
+    """The sun in the sky, and the sea coming in over the sand at the foot."""
+    from PIL import ImageDraw
+
+    draw = ImageDraw.Draw(layer)
+    cx, cy = 890, 128
+    for r, fill in ((150, rgba(PAPER, 90)), (96, rgba(GOLD))):       # its glow, then the sun
+        draw.ellipse(((cx - r) * s, (cy - r) * s, (cx + r) * s, (cy + r) * s), fill=fill)
+
+    def wave(top, height, length, shift):
+        edge = [(x * s, (top + height * math.sin((x + shift) / length * 2 * math.pi)) * s)
+                for x in range(0, STORY_WIDTH + 12, 12)]
+        return [*edge, (STORY_WIDTH * s, STORY_HEIGHT * s), (0, STORY_HEIGHT * s)]
+
+    draw.polygon(wave(STORY_FOOT + 56, 11, 220, 0), fill=SEA)
+    draw.polygon(wave(STORY_FOOT + 150, 9, 300, 80), fill=SAND)
+    spots = random.Random(8)
+    for _ in range(40):
+        x, y, r = spots.uniform(10, STORY_WIDTH - 10), spots.uniform(STORY_FOOT + 176, STORY_HEIGHT - 8), spots.uniform(2, 5)
+        draw.ellipse(((x - r) * s, (y - r) * s, (x + r) * s, (y + r) * s), fill=SAND_DEEP)
+
+
+STORY_ART = {"christmas": art_christmas, "easter": art_easter, "halloween": art_halloween, "summer": art_summer}
+
+
+def story_ground(theme):
+    """The picture's ground: the shelf grey, or the season's colour with its art, drawn over size and scaled down so
+    its edges are smooth. The same every time for a theme: its art is laid out from a fixed seed."""
+    from PIL import Image
+
+    size = (STORY_WIDTH, STORY_HEIGHT)
+    if theme is None:
+        return Image.new("RGBA", size, SHELF)
+    ground = Image.new("RGBA", size, theme.ground)
+    draw_art = STORY_ART.get(theme.art)
+    if draw_art is not None:
+        layer = Image.new("RGBA", (STORY_WIDTH * STORY_ART_OVER, STORY_HEIGHT * STORY_ART_OVER), (0, 0, 0, 0))
+        draw_art(layer, STORY_ART_OVER)
+        ground.alpha_composite(layer.resize(size, Image.LANCZOS))
+    return ground
+
+
+def story_label_height(theme, drop=""):
+    """The room the season's name takes over the card, with the line under it when there is one."""
+    if theme is None:
+        return 0
+    return STORY_LABEL_PAD + STORY_LABEL + (STORY_DROP_GAP + STORY_DROP if drop else 0) + STORY_LABEL_GAP
+
+
+def draw_story_label(draw, theme, top, width, store=None, year=None, drop=""):
+    """The season's name, in capitals, centred over the card from ``top``: its year in the brand's orange; and
+    ``drop`` under it in the price green."""
+    before, dated, behind = copy.get(theme.label, store=store, year="\x00").partition("\x00")
+    parts = [(before.upper(), theme.ink), (str(year) if dated else "", theme.accent), (behind.upper(), theme.ink)]
+    for size in STORY_LABEL_SIZES:
+        font = post_font(size, 800, 40)
+        tracking = round(size / 14)
+        total = sum(tracked_length(draw, words, font, tracking) + (tracking if words else 0) for words, _ink in parts)
+        if total <= width:
+            break
+    x = (STORY_WIDTH - total) / 2
+    baseline = top + STORY_LABEL_PAD + round(STORY_LABEL * 0.82)
+    for words, ink in parts:
+        if words:
+            x += tracked_text(draw, (x, baseline), words, font, ink, tracking) + tracking
+    if drop:
+        drop_font = post_font(38, 700, 24)
+        words = fit_lines(draw, drop, drop_font, width, lines=1)[0]
+        draw.text((STORY_WIDTH / 2, top + STORY_LABEL_PAD + STORY_LABEL + STORY_DROP_GAP + STORY_DROP // 2), words,
+                  font=drop_font, fill=PRICE_ON_DARK if theme.ink == PAPER else PRICE, anchor="mm")
+
+
+def story_image(product, summary, store=None, badge="", line="", theme=None):
     """The story's picture as PNG bytes, kept POST_SECONDS for the same price, as the post's is. ``badge`` and
     ``line`` are the owner's own words for the chip on the photo and the line under the price (the Story deals page,
-    web/story_deals.py): each kept apart, so the product page's picture is never one of them."""
+    web/story_deals.py): each kept apart, so the product page's picture is never one of them. ``theme`` is the
+    season it wears (story_theme), each kept apart too."""
     import hashlib
 
     from django.core.cache import cache
@@ -401,10 +674,16 @@ def story_image(product, summary, store=None, badge="", line=""):
     key = post_image_key(product, summary, kind="story-image:v2")
     if badge or line:
         key += ":" + hashlib.sha256(f"{badge}\x00{line}".encode()).hexdigest()[:16]
+    year, drop = None, ""
+    if theme is not None:
+        year = story_year(theme)
+        drop = story_drop(product, summary, store) if theme.key == BLACK_FRIDAY else ""
+        key += f":{theme.key}:{year}:" + hashlib.sha256(drop.encode()).hexdigest()[:8]
     found = cache.get(key)
     if found is not None:
         return found
-    png = draw_story(product, summary, photo_bytes(product), store, badge=badge, line=line)
+    png = draw_story(product, summary, photo_bytes(product), store, badge=badge, line=line, theme=theme, year=year,
+                     drop=drop)
     cache.set(key, png, POST_SECONDS)
     return png
 
@@ -534,18 +813,22 @@ def story_facts(product, best, store=None):
     return facts
 
 
-def draw_story(product, summary, photo, store=None, badge="", line=""):
+def draw_story(product, summary, photo, store=None, badge="", line="", theme=None, year=None, drop=""):
     """The picture, as the marketing team's template (story_mock.png): see the notes above. ``badge`` is the owner's
     own words for the chip on the photo, in place of the Price check's, and ``line`` his own line under the price, in
-    place of what it is under the RRP (the Story deals page)."""
+    place of what it is under the RRP (the Story deals page). ``theme`` is the season it wears (Seasons on a story):
+    its ground and art, and its name over the card with ``year`` in it and ``drop`` under it."""
     from io import BytesIO
 
     from PIL import Image, ImageDraw
 
     from . import feed, glyphs
 
-    story = Image.new("RGBA", (STORY_WIDTH, STORY_HEIGHT), SHELF)
+    if theme is not None and year is None:
+        year = story_year(theme)
+    story = story_ground(theme)
     draw = ImageDraw.Draw(story)
+    label = story_label_height(theme, drop)
     inner = STORY_CARD_WIDTH - 2 * STORY_PAD
     best = post_lead(product, summary)
     check = product.price_check if best is not None and best is summary.best else None
@@ -581,12 +864,17 @@ def draw_story(product, summary, photo, store=None, badge="", line=""):
     rest = (STORY_PAD_TOP + STORY_HEAD + 28 + 38 + len(names) * title_line
             + (26 + price_font.size if best is not None else 0) + (14 + 50 if under else 0)
             + 30 + len(facts) * STORY_ICON + (len(facts) - 1) * 18 + 40 + STORY_SEARCH + STORY_PAD)
-    room = STORY_FOOT - STORY_TOP
-    well_height = max(STORY_WELL_LEAST, min(STORY_WELL, room - rest))
+    # The season's name takes its room from the photo's well, so the card still ends clear of Instagram's reply box.
+    room = STORY_FOOT - STORY_TOP - label
+    least = max(STORY_WELL_THEMED_LEAST, STORY_WELL_LEAST - label) if label else STORY_WELL_LEAST
+    well_height = max(least, min(STORY_WELL, room - rest))
     card_height = rest + well_height
     left = (STORY_WIDTH - STORY_CARD_WIDTH) // 2
-    top = STORY_TOP + max(0, (room - card_height) // 2)
+    group = STORY_TOP + max(0, (room - card_height) // 2)
+    top = group + label
     card = (left, top, left + STORY_CARD_WIDTH - 1, top + card_height - 1)
+    if theme is not None:
+        draw_story_label(draw, theme, group, inner, store, year, drop)
     shadow(story, card, 44, 8, 18, 20)
     draw = ImageDraw.Draw(story)
     draw.rounded_rectangle(card, radius=44, fill=PAPER, outline=LINE, width=2)

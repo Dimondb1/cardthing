@@ -105,10 +105,21 @@ def waiting_count(now=None):
     return deals.filter(stale_ebay(now)).count()
 
 
-def picture_url(slug, badge="", line=""):
-    """Where a deal's story picture is, with the owner's own words when he gave any."""
-    words = {name: value for name, value in (("badge", badge), ("line", line)) if value}
+def picture_url(slug, badge="", line="", theme=""):
+    """Where a deal's story picture is, with the owner's own words when he gave any and the look he chose."""
+    words = {name: value for name, value in (("badge", badge), ("line", line), ("theme", theme)) if value}
     return reverse("story_deal_image", args=[slug]) + (f"?{urlencode(words)}" if words else "")
+
+
+def looks(chosen, source):
+    """The looks a picture can wear, for the row of links over the deals: today's own first (what the product page's
+    Share to story gives a visitor), then plain, then each season, so the owner can look ahead or leave one off.
+    [(link, name, chosen)]."""
+    today = share.story_theme()
+    own = f"Today's ({today.name})" if today is not None else "Today's (plain)"
+    found = [("", own)] + [(share.PLAIN, "Plain")] + [(theme.key, theme.name) for theme in share.STORY_THEMES.values()]
+    return [("?" + urlencode({name: value for name, value in (("from", source), ("theme", key)) if value}), name,
+             key == chosen) for key, name in found]
 
 
 @staff_member_required
@@ -122,13 +133,16 @@ def story_deals_page(request):
     chosen = request.GET.get("p", "")
     badge = share.story_words(request.GET.get("badge", ""), share.STORY_BADGE_MOST)
     line = share.story_words(request.GET.get("line", ""), share.STORY_LINE_MOST)
+    # The look the pictures wear: today's own unless he chose one (or plain).
+    theme = request.GET.get("theme", "")
+    theme = theme if theme in (*share.STORY_THEMES, share.PLAIN) else ""
     cards = deals(source, store)
     for card in cards:
         product = card["product"]
         own = product.slug == chosen
         card["badge"], card["line"] = (badge, line) if own else ("", "")
         card["picture"] = picture_url(product.slug)
-        card["shown"] = picture_url(product.slug, card["badge"], card["line"])
+        card["shown"] = picture_url(product.slug, card["badge"], card["line"], theme)
         card["file"] = f"{product.slug}-story.png"
         card["link"] = f"{request.build_absolute_uri(product.get_absolute_url())}?{urlencode(LINK_TAGS)}"
     response = render(request, "admin/story_deals.html", {
@@ -137,6 +151,7 @@ def story_deals_page(request):
         "cards": cards, "source": source, "sources": SOURCES, "waiting": waiting_count(),
         "fresh_hours": round(FRESH.total_seconds() / 3600),
         "badge_most": share.STORY_BADGE_MOST, "line_most": share.STORY_LINE_MOST,
+        "theme": theme, "looks": looks(theme, source if source != EBAY else ""),
     })
     response["Cache-Control"] = "private, no-store"
     response["X-Robots-Tag"] = "noindex, nofollow"
@@ -147,12 +162,14 @@ def story_deals_page(request):
 @not_for_editors
 @require_GET
 def story_deal_image(request, slug):
-    """A deal's story picture, PNG, with the owner's own badge words and line when given (?badge=, ?line=)."""
+    """A deal's story picture, PNG, with the owner's own badge words and line when given (?badge=, ?line=), in the
+    season that is on or the look he chose (?theme=, share.story_theme_for)."""
     product = get_object_or_404(
         Product.objects.active().for_lists().prefetch_related(offers.buyable_prefetch()), slug=slug)
     summary = offers.summarise(product, offers.week_low_map([product.pk]))
     png = share.story_image(product, summary, copy.for_request(request),
-                            badge=request.GET.get("badge", ""), line=request.GET.get("line", ""))
+                            badge=request.GET.get("badge", ""), line=request.GET.get("line", ""),
+                            theme=share.story_theme_for(request))
     response = HttpResponse(png, content_type="image/png")
     response["X-Robots-Tag"] = "noindex, nofollow"
     response["Cache-Control"] = f"private, max-age={PICTURE_SECONDS}"

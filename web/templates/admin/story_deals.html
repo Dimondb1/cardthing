@@ -27,7 +27,9 @@
 {% block breadcrumbs %}<div class="breadcrumbs"><a href="{% url 'admin:index' %}">Home</a> &rsaquo; Story deals</div>{% endblock %}
 {% block content %}
 <div class="story-deals">
-  <p class="sources">{% for key, label in sources %}{% if key == source %}<strong>{{ label }}</strong>{% else %}<a href="?from={{ key }}">{{ label }}</a>{% endif %}{% endfor %}</p>
+  <p class="sources">{% for key, label in sources %}{% if key == source %}<strong>{{ label }}</strong>{% else %}<a href="?from={{ key }}{% if theme %}&amp;theme={{ theme }}{% endif %}">{{ label }}</a>{% endif %}{% endfor %}</p>
+  {# The look the pictures wear: the season that is on (what a visitor's Share to story gives), or one chosen here. #}
+  <p class="sources"><span class="muted">Picture look:</span> {% for link, name, chosen in looks %}{% if chosen %}<strong>{{ name }}</strong>{% else %}<a href="{{ link|default:'?' }}">{{ name }}</a>{% endif %}{% endfor %}</p>
   <p>{{ cards|length }} deal{{ cards|length|pluralize }} ready for a story: in stock, {% if source == "ebay" %}cheapest at an eBay seller{% else %}at any seller{% endif %}, and a Good price or the Lowest yet on the Price check. An eBay price is offered only when it was checked in the last {{ fresh_hours }} hours. Swipe through them.</p>
   {% if waiting %}<p class="note" id="waiting">{{ waiting }} more eBay deal{{ waiting|pluralize }} wait{{ waiting|pluralize:"s," }} for a fresh check. eBay deals are checked again every two hours, so {{ waiting|pluralize:"it,they" }} should be back soon.</p>{% endif %}
   <p class="note">Share to story sends the picture to your phone's share sheet and copies the product's link. In Instagram choose Stories, add a link sticker and paste. Only you see this page.</p>
@@ -43,7 +45,7 @@
       <p class="deal__facts">{{ lead.shown_price|gbp }} delivered &middot; {{ lead.retailer.name }}{% if lead.seller_name %}: {{ lead.seller_name }}{% if lead.seller_feedback is not None %} ({{ lead.seller_feedback }}%{% if lead.seller_ratings %} of {{ lead.seller_ratings }}{% endif %}){% endif %}{% endif %}{% if lead.seller_note %} &middot; {{ lead.get_seller_note_display }}{% endif %}</p>
       <p class="deal__facts muted">{{ card.check }}{% if card.saving %} &middot; {{ card.saving }}{% endif %} &middot; checked {{ lead.last_checked|ago }}</p>
       <form method="get" action="#deal-{{ product.slug }}" data-deal-form>
-        <input type="hidden" name="from" value="{{ source }}"><input type="hidden" name="p" value="{{ product.slug }}">
+        <input type="hidden" name="from" value="{{ source }}"><input type="hidden" name="p" value="{{ product.slug }}"><input type="hidden" name="theme" value="{{ theme }}">
         <label>Badge on the photo<input type="text" name="badge" value="{{ card.badge }}" maxlength="{{ badge_most }}" placeholder="{{ card.check }}" autocomplete="off"></label>
         <label>Your line under the price<input type="text" name="line" value="{{ card.line }}" maxlength="{{ line_most }}" placeholder="{{ card.saving|default:'Optional' }}" autocomplete="off"></label>
         <button type="submit">Update the picture</button>

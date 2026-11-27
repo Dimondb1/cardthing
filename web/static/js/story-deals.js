@@ -47,7 +47,7 @@
     const name = card.dataset.file;
     const address = () => {
       const own = new URLSearchParams();
-      ["badge", "line"].forEach((field) => {
+      ["badge", "line", "theme"].forEach((field) => {   // his own words, and the look he chose for the pictures
         const value = form.elements[field].value.trim();
         if (value) own.set(field, value);
       });

@@ -105,9 +105,10 @@
       {% include "web/includes/list_button.html" with list_count=list_slugs|length %}</div>
     {% if track_on %}{% include "web/includes/track_form.html" %}{% endif %}
     {% include "web/includes/share_box.html" %}
-    {% if ask %}{% include "web/includes/ask_rip.html" %}{% endif %}
     {% if guide_door %}<p class="buybox__guide"><a href="{{ guide_door.url }}">{{ guide_door.line }}</a></p>{% endif %}
   </section>
+  {# Ask Rip's conversation: after the price box in the page, so it reads in that order; on a desktop screen it sits under the picture, so the price box stays a short rail and the two columns end together (site.css). #}
+  {% if ask %}{% include "web/includes/ask_rip.html" %}{% endif %}
 </div>
 {% if fair %}{% include "web/includes/fair_sheet.html" %}{% endif %}
 {% include "web/includes/page_jumps.html" with top=False %}

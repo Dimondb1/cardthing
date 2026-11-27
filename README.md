@@ -625,10 +625,19 @@ this big", "some navi buttons to move around the page ... another one down
 and another back up again", and "we should have the ripraptor promise
 easily available to read").
 
-- **The picture on a desktop screen** is a square at the top of its column
-  with the smaller share of the width (`--split-minor`), and no longer runs
-  the height of the column beside it, which grew as tall as Ask Rip's
-  conversation. A phone is unchanged.
+- **The desktop layout** follows the proportions of a marketplace product
+  page (the owner, 27 Nov 2026, with an eBay page beside ours: "still looks
+  unbalnced ... it is all in far better proprotion"). The picture takes the
+  larger share of the golden split and its well fits the first screen
+  (`--product-media-desk`); it no longer runs the height of the column
+  beside it. The name and the price box are a narrow rail, so the price and
+  the buttons read at a comfortable width on any screen. Ask Rip's
+  conversation is the last part of the head, outside the price box: under
+  the price box on a phone, under the picture on a desktop, so the two
+  columns end near each other. The columns are independent (the parts
+  float, each to the top of its own side), which the rows of a grid cannot
+  do. With Ask Rip's side column open, the rail does not repeat the
+  questions that column already gives.
 - **Jump chips** (`web/includes/page_jumps.html`): a row of the shared chips
   under the price box, again under the price list and at the foot of the
   page: Prices, Price history, Details, Our promise, More like this, and Top

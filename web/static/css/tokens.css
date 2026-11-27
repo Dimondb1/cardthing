@@ -45,6 +45,8 @@
   --golden-minor: 38.2%;         /* the smaller share */
   --split-major: 1.618fr;        /* the same as grid tracks: picture beside price box, chart beside details */
   --split-minor: 1fr;
+  --split-major-share: 61.8%;    /* the same split as shares of a width, for columns that are not grid tracks */
+  --split-minor-share: 38.2%;
 
   /* Spacing scale -------------------------------------------------------- */
   --space-1: calc(0.25rem * var(--density));    /* 0.236 */
@@ -263,6 +265,7 @@
   --product-media-note: 1.25rem;
   --product-media-rip: 4rem;        /* Ask Rip's questions under the name, given up by the picture on a phone */
   --product-media-least: 5rem;      /* the picture on a phone is never shorter */
+  --product-media-desk: clamp(20rem, 100vh - 14rem, 42rem);   /* the picture's well on a desktop screen: never taller than this, so it fits the first screen under the header */
   --askrip-question-col: 12rem;     /* the Ask Rip page: the question chips' column from a tablet up */
   --partner-logo: 7.5rem;           /* a partner's logo on the home page: 120px, over 31mm wide, past the 17mm brands usually ask for */
   --partner-logo-min: 4.5rem;       /* never drawn smaller than this, 72px: over 19mm */

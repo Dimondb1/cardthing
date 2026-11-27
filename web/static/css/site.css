@@ -1378,7 +1378,9 @@ a, button, summary, select, input, label { touch-action: manipulation; }
    name and details above the picture, the price straight under it, then the buttons. Wide screens put the picture
    beside the name and the price box. */
 .page--product > .breadcrumbs { margin-top: var(--space-3); }
-.product-head { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-areas: "intro" "media" "buy"; gap: var(--space-3); margin-top: var(--space-3); }
+.product-head { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-areas: "intro" "media" "buy" "ask"; gap: var(--space-3); margin-top: var(--space-3); }
+/* Ask Rip's conversation is the last part of the head: under the price box on a phone, under the picture on a desktop. */
+.product-head > .ask { grid-area: ask; min-width: 0; }
 .product-intro { grid-area: intro; display: grid; gap: var(--space-1); min-width: 0; }
 .product-title { font-size: var(--text-product-title); line-height: var(--leading-tight); color: var(--color-ink); overflow-wrap: anywhere; }
 .product-head--long .product-title { font-size: var(--text-product-title-long); line-height: var(--leading-snug); }
@@ -1398,17 +1400,28 @@ a, button, summary, select, input, label { touch-action: manipulation; }
 /* The picture is square and as tall as the well, so it keeps its proportions at any width. */
 .product-media .product-image--large { width: auto; height: 100%; max-width: 100%; background: transparent; }
 @media (min-width: 60rem) {
-  .product-head {
-    /* A golden split, the smaller share to the picture: the name and the price box are what the page is for. The
-       picture's well is a square at the top of its column and never follows the height of the column beside it
-       (the owner, 27 Nov 2026, of a well that grew as tall as Ask Rip's conversation: "the layout on a product is
-       crazy the image doesnt need to be this big"). */
-    grid-template-columns: minmax(0, var(--split-minor)) minmax(0, var(--split-major)); grid-template-rows: auto 1fr;
-    grid-template-areas: "media intro" "media buy"; column-gap: var(--split-gap); row-gap: var(--space-4); align-items: start;
-  }
-  .product-media { align-self: start; aspect-ratio: 1; }
+  /* A golden split: the picture takes the larger share, and the name and the price box are a narrow rail beside it,
+     so the price and the buttons read at a comfortable width however wide the screen (the owner, 27 Nov 2026, of a
+     small picture beside a price box three times its width: "still looks unbalnced, look an ebay product page it is
+     all in far better proprotion"). The picture's well is as wide as its column and no taller than the first screen
+     allows; it never follows the height of the rail (the owner, the same day, of a well that grew as tall as Ask
+     Rip's conversation: "the layout on a product is crazy"). Ask Rip's conversation sits under the picture, not in
+     the rail, so the two columns end near each other with no empty column beside the price.
+     The two columns are independent: each part goes to the top of its own side, whatever the height of the other
+     side, which the rows of a grid cannot do. So the parts float, the picture and the conversation to the left, the
+     name and the price box to the right, in the order the page gives them. */
+  .product-head { display: flow-root; }
+  .product-intro, .buybox { float: right; clear: right; width: calc(var(--split-minor-share) - var(--split-gap) / 2); }
+  .product-media, .product-head > .ask { float: left; clear: left; width: calc(var(--split-major-share) - var(--split-gap) / 2); }
+  .buybox, .product-head > .ask { margin-top: var(--space-4); }
+  .product-media { aspect-ratio: 1; max-height: var(--product-media-desk); }
   .product-media .product-image--large { position: absolute; inset: 0; margin: auto; height: 100%; aspect-ratio: 1; }
+  /* Under the picture the conversation needs no rule over it: the picture's own edge parts them. */
+  .product-head > .ask { padding-top: 0; border-top: 0; }
 }
+/* With Ask Rip's column open beside the page, its first rows are these same questions about this product, so the
+   rail does not repeat them: the name is followed by the price, which then shows on the first screen. */
+@media (min-width: 80rem) { html.rip-side .product-intro .ask-strip { display: none; } }
 
 .buybox {
   --buybox-pad: var(--card-pad);   /* the same inner edge as every other card */
@@ -2093,7 +2106,7 @@ a, button, summary, select, input, label { touch-action: manipulation; }
 .ask-strip__chip:disabled { opacity: var(--opacity-waiting); cursor: progress; }
 @media (min-width: 48rem) { .ask-strip__chips { flex-wrap: wrap; overflow-x: visible; } }
 
-/* Ask Rip: a chat with Rip in the price box (web/askrip.py), under a rule of its own. Rip speaks in a bubble beside
+/* Ask Rip: a chat with Rip after the price box (web/askrip.py), under a rule of its own. Rip speaks in a bubble beside
    him, the question sits in its own bubble on the right, and each new line fades in, as feedback that it came. The
    owner, 11 Nov 2026: "ask rip in its current location is pointless I want it incorporated in a more visible place". */
 .ask { display: grid; gap: var(--space-3); padding-top: var(--space-4); border-top: 1px solid var(--color-line); scroll-margin-top: var(--space-6); }

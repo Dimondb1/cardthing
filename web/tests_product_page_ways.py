@@ -6,6 +6,7 @@ ebay sellers, reviewed sites and we twelll you about good prices"."""
 
 import re
 from pathlib import Path
+from unittest import mock
 
 from django.conf import settings
 from django.core.cache import cache
@@ -81,15 +82,47 @@ class JumpTests(Base):
                       "{ scroll-margin-top: calc(var(--sticky-top, 0px) + var(--space-3)); }", CSS)
 
 
-class PictureTests(TestCase):
-    def test_on_a_desktop_the_picture_is_a_square_that_never_follows_the_column_beside_it(self):
-        desk = CSS[CSS.index("@media (min-width: 60rem) {\n  .product-head {"):]
-        desk = desk[:desk.index("\n}\n")]
-        self.assertIn(".product-media { align-self: start; aspect-ratio: 1; }", desk)
-        self.assertNotIn("align-self: stretch", desk)
-        # The smaller share of the width is the picture's: the name and the price box are what the page is for.
-        self.assertIn("grid-template-columns: minmax(0, var(--split-minor)) minmax(0, var(--split-major));", desk)
-        self.assertIn('grid-template-areas: "media intro" "media buy";', desk)
+class DesktopLayoutTests(Base):
+    """The owner, 27 Nov 2026, with an eBay product page beside ours: "still looks unbalnced, look an ebay product page
+    it is all in far better proprotion. Please ensure design skill is used to lay out the destop product page more
+    ffectively"."""
+
+    def desk(self):
+        block = CSS[CSS.index("@media (min-width: 60rem) {\n  /* A golden split: the picture takes the larger share"):]
+        return block[:block.index("\n}\n")]
+
+    def test_the_picture_takes_the_larger_share_and_the_name_and_price_box_are_a_narrow_rail(self):
+        desk = self.desk()
+        self.assertIn(".product-media, .product-head > .ask { float: left; clear: left; "
+                      "width: calc(var(--split-major-share) - var(--split-gap) / 2); }", desk)
+        self.assertIn(".product-intro, .buybox { float: right; clear: right; "
+                      "width: calc(var(--split-minor-share) - var(--split-gap) / 2); }", desk)
+        self.assertIn(".product-head { display: flow-root; }", desk)
+
+    def test_the_picture_fits_the_first_screen_and_never_follows_the_rail(self):
+        desk = self.desk()
+        self.assertIn(".product-media { aspect-ratio: 1; max-height: var(--product-media-desk); }", desk)
+        self.assertNotIn("stretch", desk)
+        tokens = (Path(settings.BASE_DIR) / "web" / "static" / "css" / "tokens.css").read_text()
+        self.assertIn("--product-media-desk: clamp(20rem, 100vh - 14rem, 42rem);", tokens)
+
+    def test_ask_rips_conversation_is_the_last_part_of_the_head_not_part_of_the_price_box(self):
+        # Under the price box on a phone, under the picture on a desktop: so the rail stays short and the two
+        # columns end near each other.
+        with mock.patch("web.askrip.closed_reason", return_value=""):
+            html = self.page()
+        head = html[html.index('<div class="product-head'):html.index('<nav class="chips"')]
+        buybox = head[head.index('<section class="buybox'):]
+        buybox = buybox[:buybox.index("</section>") + len("</section>")]
+        self.assertNotIn('id="ask"', buybox)
+        self.assertEqual(head.count('<section class="ask" id="ask"'), 1)
+        self.assertLess(head.index('<section class="buybox'), head.index('<section class="ask" id="ask"'))
+        self.assertIn('.product-head { display: grid; grid-template-columns: minmax(0, 1fr); '
+                      'grid-template-areas: "intro" "media" "buy" "ask";', CSS)
+        self.assertIn(".product-head > .ask { grid-area: ask; min-width: 0; }", CSS)
+
+    def test_the_rail_does_not_repeat_the_questions_ask_rips_open_column_already_gives(self):
+        self.assertIn("@media (min-width: 80rem) { html.rip-side .product-intro .ask-strip { display: none; } }", CSS)
 
 
 class PromiseTests(Base):

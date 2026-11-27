@@ -3248,11 +3248,13 @@ class GoldenLayoutTests(PageTestCase):
         tokens = self.css("tokens.css")
         self.assertIn("--rhythm-home: calc(1.25rem * var(--density));", tokens)
         self.assertIn("--rhythm-home: calc(1.5rem * var(--density));", tokens)
-        # Side by side columns use the golden split. On a product page the smaller share is the picture's (the owner,
-        # 27 Nov 2026: "the image doesnt need to be this big").
+        # Side by side columns use the golden split. A product page's two columns are independent, so they take the
+        # same split as shares of the width (web/tests_product_page_ways.py).
         self.assertEqual(css.count("minmax(0, var(--split-major)) minmax(0, var(--split-minor))"), 2)
-        self.assertIn("grid-template-columns: minmax(0, var(--split-minor)) minmax(0, var(--split-major)); "
-                      "grid-template-rows: auto 1fr;", css)
+        self.assertIn("width: calc(var(--split-major-share) - var(--split-gap) / 2);", css)
+        self.assertIn("width: calc(var(--split-minor-share) - var(--split-gap) / 2);", css)
+        self.assertIn("--split-major-share: 61.8%;", tokens)
+        self.assertIn("--split-minor-share: 38.2%;", tokens)
 
     def test_a_long_recent_search_wraps_inside_the_screen(self):
         # 24 Oct 2026: "30th Celebration Premium Deck Set Espeon & Umbreon ex" ran off a phone's screen.

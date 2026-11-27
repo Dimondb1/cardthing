@@ -1,7 +1,7 @@
 {% load sitecopy %}{# The RipRaptor promise: what the site does for a buyer, in four short points. The owner, 27 Nov 2026: "we should have the ripraptor promise easily available to read, like a seal of approval, trusted ebay sellers, reviewed sites and we tell you about good prices. We're here to get a good deal for you, this is the problem that we made this site to solve". Each point says only what the site does (views.promise_points); the wording is in the registry. On the how it works page, linked from every footer, and on product pages. Takes promise and title_class (the heading class of the page it is on). #}<section{% if block %} class="block"{% endif %} aria-labelledby="promise-title" id="promise">
   <h2 id="promise-title"{% if title_class %} class="{{ title_class }}"{% endif %} tabindex="-1">{% copy "about.promise.title" %}</h2>
   <p class="prose">{% copy "about.promise.lead" %}</p>
-  <dl class="why">{% for point in promise %}
-    <div class="why__point"><dt>{{ point.title }}</dt><dd>{{ point.body }}</dd></div>{% endfor %}
+  <dl class="why why--marked">{% for point in promise %}
+    <div class="why__point"><dt><span class="why__mark" aria-hidden="true">{% include point.icon %}</span>{{ point.title }}</dt><dd>{{ point.body }}</dd></div>{% endfor %}
   </dl>
 </section>

@@ -6,7 +6,7 @@ from django.template.loader import render_to_string
 from django.utils import timezone
 from django.utils.formats import date_format
 from django.utils.html import conditional_escape, format_html
-from django.utils.safestring import mark_safe
+from django.utils.safestring import SafeData, mark_safe
 
 from catalogue import images
 from content import service
@@ -39,6 +39,25 @@ def _money(value):
         return Decimal(str(value)).quantize(PENNY, rounding=ROUND_HALF_UP)
     except (InvalidOperation, ValueError):
         return None
+
+
+FIRST_PARAGRAPH = re.compile(r"\A(\s*<p>.*?</p>)(.*)\Z", re.S)
+
+
+@register.filter
+def first_paragraph(html):
+    """The first <p> of wording rendered as paragraphs (content.service.render), so a picture can sit after it."""
+    found = FIRST_PARAGRAPH.match(str(html or ""))
+    part = found.group(1) if found else str(html or "")
+    return mark_safe(part) if isinstance(html, SafeData) else conditional_escape(part)
+
+
+@register.filter
+def after_first_paragraph(html):
+    """Everything after first_paragraph's part: "" when there is one paragraph or none."""
+    found = FIRST_PARAGRAPH.match(str(html or ""))
+    part = found.group(2).strip() if found else ""
+    return mark_safe(part) if isinstance(html, SafeData) else conditional_escape(part)
 
 
 @register.filter

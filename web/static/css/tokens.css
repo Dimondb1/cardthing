@@ -265,6 +265,9 @@
   --product-media-note: 1.25rem;
   --product-media-rip: 4rem;        /* Ask Rip's questions under the name, given up by the picture on a phone */
   --product-media-least: 5rem;      /* the picture on a phone is never shorter */
+  --why-mark: 2.5rem;               /* the soft orange circle beside each point of the promise and Why RipRaptor */
+  --why-mark-icon: 1.375rem;        /* the icon inside it */
+  --explain-figure-max: 30rem;      /* a picture on the how it works page: never wider than this */
   --product-media-desk: clamp(20rem, 100vh - 14rem, 42rem);   /* the picture's well on a desktop screen: never taller than this, so it fits the first screen under the header */
   --askrip-question-col: 12rem;     /* the Ask Rip page: the question chips' column from a tablet up */
   --partner-logo: 7.5rem;           /* a partner's logo on the home page: 120px, over 31mm wide, past the 17mm brands usually ask for */

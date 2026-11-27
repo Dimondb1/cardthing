@@ -6,14 +6,15 @@
   <h1 class="page-title">{% copy "about.title" %}</h1>
   <div class="prose prose--lead">{% copy "about.introduction" %}</div>
   <p class="page-intro">{% copy "about.scale" shops=shops_compared %}</p>
+  {% if figure_intro %}{% include "web/includes/explain_figure.html" with figure=figure_intro %}{% endif %}
 
   {% include "web/includes/promise.html" %}
 
   <section aria-labelledby="why-title">
     <h2 id="why-title">{% copy "about.why.title" %}</h2>
     {% copy "about.why.intro" as why_intro %}{% if why_intro %}<p>{{ why_intro }}</p>{% endif %}
-    <dl class="why">{% for point in why %}
-      <div class="why__point"><dt>{{ point.title }}</dt><dd>{{ point.body }}</dd></div>{% endfor %}
+    <dl class="why why--marked why--pictures">{% for point in why %}
+      <div class="why__point"><dt><span class="why__mark" aria-hidden="true">{% include point.icon %}</span>{{ point.title }}</dt><dd>{{ point.body }}{% if point.figure %}{% include "web/includes/explain_figure.html" with figure=point.figure %}{% endif %}</dd></div>{% endfor %}
     </dl>
   </section>
 
@@ -32,7 +33,10 @@
 
   <section aria-labelledby="money-title">
     <h2 id="money-title">{% copy "about.money.title" %}</h2>
-    <div class="prose">{% copy "about.money.body" %}</div>
+    {# The picture goes after the first paragraph, which it shows (you pay the same price either way). #}
+    {% copy "about.money.body" as money %}<div class="prose">{{ money|first_paragraph }}</div>
+    {% if figure_money %}{% include "web/includes/explain_figure.html" with figure=figure_money %}{% endif %}
+    {% with rest=money|after_first_paragraph %}{% if rest %}<div class="prose">{{ rest }}</div>{% endif %}{% endwith %}
   </section>
 
   <section aria-labelledby="retailers-title">

@@ -2400,6 +2400,8 @@ def about(request):
             "shops_compared": pricing.shops_compared(),
             "why": why_points(request),
             "promise": promise_points(request),
+            "figure_intro": figure("intro", copy.for_request(request)),
+            "figure_money": figure("money", copy.for_request(request)),
             "faq": faq,
             "contact_email": settings.RIPRAPTOR_CONTACT_EMAIL,
             "stale_hours": settings.RIPRAPTOR_STALE_AFTER_HOURS,
@@ -2433,13 +2435,49 @@ def about_values():
 # The RipRaptor promise (web/includes/promise.html): each point is something the site does, never a hope.
 PROMISE_POINTS = ("price", "honest", "shops", "ebay")
 
+# The how it works page's pictures and list icons, from the marketing team's drawings (the owner, 27 Nov 2026: "Can
+# we update the how it works page to use these graphics"). Each picture is a file in web/static/about/, a 360-wide
+# drawing with the text it shows in it, so it holds nothing that goes out of date: no prices, shops or shop counts.
+# Its alt text is in the registry (about.figure.<key>.alt). The icons are web/includes/icons/why/<name>.svg, beside
+# each point's heading; the heading says what each is, so they are hidden from screen readers.
+PROMISE_ICONS = {"price": "delivery", "honest": "price-check", "shops": "shield-check", "ebay": "seller-rating"}
+WHY_ICONS = {"price": "delivery", "stock": "box-check", "trust": "checked", "deals": "history", "usual": "average",
+             "askrip": "ask", "newbuyers": "guides", "shops": "shop", "alerts": "bell", "independent": "scale"}
+# key: (file, width, height)
+FIGURES = {
+    "intro": ("hiw-1-how-it-works.svg", 360, 236),
+    "price": ("hiw-2-delivered-price.svg", 360, 266),
+    "stock": ("hiw-4-stock-you-can-buy.svg", 360, 306),
+    "trust": ("hiw-5-checked-every-hour.svg", 360, 196),
+    "usual": ("hiw-3-price-check.svg", 360, 262),
+    "alerts": ("hiw-7-alerts.svg", 360, 214),
+    "money": ("hiw-6-how-we-make-money.svg", 360, 300),
+}
+# The prices picture draws a price stopping counting at 72 hours: shown only while that is the setting, so it never
+# disagrees with the page's own words, which follow RIPRAPTOR_STALE_AFTER_HOURS.
+FIGURE_HOURS = 72
+
+
+def icon_for(name):
+    return f"web/includes/icons/why/{name}.svg"
+
+
+def figure(key, store, **values):
+    """A picture for the how it works page: {src, width, height, alt}, or None when it would not be true today."""
+    if key == "trust" and settings.RIPRAPTOR_STALE_AFTER_HOURS != FIGURE_HOURS:
+        return None
+    name, width, height = FIGURES[key]
+    return {"src": static(f"about/{name}"), "width": width, "height": height,
+            "alt": copy.get(f"about.figure.{key}.alt", store=store, **values)}
+
 
 def promise_points(request):
     """The RipRaptor promise as (title, text) points, for the how it works page and product pages. The owner, 27 Nov
     2026: "we should have the ripraptor promise easily available to read". From the request's own copy: no query."""
     store = copy.for_request(request)
     return [{"title": copy.get(f"about.promise.{key}.title", store=store),
-             "body": copy.get(f"about.promise.{key}.body", store=store)} for key in PROMISE_POINTS]
+             "body": copy.get(f"about.promise.{key}.body", store=store),
+             "icon": icon_for(PROMISE_ICONS[key])} for key in PROMISE_POINTS]
 
 
 def why_points(request):
@@ -2448,7 +2486,9 @@ def why_points(request):
     store = copy.for_request(request)
     values = about_values()
     return [{"title": copy.get(f"about.why.{key}.title", store=store),
-             "body": copy.get(f"about.why.{key}.body", store=store, **values)} for key in said_now(WHY_POINTS)]
+             "body": copy.get(f"about.why.{key}.body", store=store, **values),
+             "icon": icon_for(WHY_ICONS[key]),
+             "figure": figure(key, store, **values) if key in FIGURES else None} for key in said_now(WHY_POINTS)]
 
 
 def about_faq(request):

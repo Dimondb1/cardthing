@@ -131,7 +131,8 @@ class PromiseTests(Base):
     def points(self, html):
         block = html[html.index('id="promise"'):]
         block = block[:block.index("</section>")]
-        return block, re.findall(r'<div class="why__point"><dt>([^<]+)</dt><dd>([^<]+)</dd></div>', block)
+        return block, re.findall(r'<div class="why__point"><dt><span class="why__mark" aria-hidden="true"><svg [^>]*>.*?</svg>'
+                                 r'</span>([^<]+)</dt><dd>([^<]+)</dd></div>', block, re.S)
 
     def test_the_product_page_carries_the_promise(self):
         block, points = self.points(self.page())

@@ -2269,7 +2269,20 @@ a, button, summary, select, input, label { touch-action: manipulation; }
 .why { display: grid; gap: var(--space-4); margin: var(--space-4) 0 0; }
 .why__point dt { font-weight: var(--weight-strong); color: var(--color-ink); }
 .why__point dd { margin: var(--space-1) 0 0; color: var(--color-ink-muted); }
+/* An icon beside each point of the promise and Why RipRaptor, in a soft orange circle, from the marketing team's
+   drawings (the owner, 27 Nov 2026: "Can we update the how it works page to use these graphics"). The heading says
+   what each is, so the icon is hidden from screen readers. */
+.why--marked .why__point { position: relative; min-height: var(--why-mark); padding-left: calc(var(--why-mark) + var(--space-3)); }
+.why__mark { position: absolute; top: 0; left: 0; display: flex; align-items: center; justify-content: center; width: var(--why-mark); height: var(--why-mark); border-radius: var(--radius-pill); background: var(--color-brand-soft); color: var(--color-brand-text); }
+.why__icon { width: var(--why-mark-icon); height: var(--why-mark-icon); }
+/* A picture that explains part of the how it works page (explain_figure.html): its own grey card is in the drawing. */
+.explain-figure { margin: var(--space-3) 0 var(--space-5); padding: 0; }
+.explain-figure img { display: block; width: 100%; max-width: var(--explain-figure-max); height: auto; }
+/* Under a point with an icon, the picture takes the full width, back past the icon's column, as the drawings were laid out. */
+.why--marked .explain-figure { margin-left: calc(-1 * (var(--why-mark) + var(--space-3))); }
 @media (min-width: 48rem) { .why { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-5); } }
+/* A list with pictures stays one column on a wide screen, so each picture shows at its own size and its words stay readable. */
+@media (min-width: 48rem) { .why--pictures { grid-template-columns: minmax(0, 1fr); } }
 /* Two buttons side by side that wrap on a narrow screen: List your shop and Remove my shop. */
 .button-row { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 .retailer-list { list-style: none; margin-top: var(--space-4); border-top: 1px solid var(--color-line); }

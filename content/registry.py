@@ -3043,6 +3043,36 @@ ENTRIES = [
           "On eBay we only show sellers whose feedback meets our minimum, and we show you that feedback.",
           "A point's text in the RipRaptor promise. True while the eBay settings hold a least feedback and a least "
           "number of ratings.", legal=True),
+    Entry("about.figure.intro.alt", T, "How it works picture: what it shows",
+          "UK shops are checked every hour for price, delivery and stock, and every list shows the cheapest delivered "
+          "price first.",
+          "Read out in place of the picture under the opening lines of the how it works page, for people using a "
+          "screen reader. Say what the picture shows."),
+    Entry("about.figure.price.alt", T, "Delivered price picture: what it shows",
+          "Three shops. Shop B has the higher item price but free delivery, so it is the cheapest delivered and listed "
+          "first. Shop A has a lower item price but costs more once delivery is added. Shop C has no known delivery "
+          "charge, so its price says plus delivery and it never counts as the cheapest.",
+          "Read out in place of the picture under The price you will pay on the how it works page."),
+    Entry("about.figure.stock.alt", T, "Stock picture: what it shows",
+          "Raffles and draws, members only stock, collection only stock, single cards, graded cards and used items "
+          "are left out. Sealed products in stock or open for pre-order are shown.",
+          "Read out in place of the picture under Only stock you can buy on the how it works page."),
+    Entry("about.figure.trust.alt", T, "Checked prices picture: what it shows",
+          "A price checked within the last hour counts. One we have not been able to check for {hours} hours stops "
+          "counting as the cheapest.",
+          "Read out in place of the picture under Prices you can trust on the how it works page. The picture is shown "
+          "only while a price stops counting after 72 hours.", placeholders=("hours",)),
+    Entry("about.figure.usual.alt", T, "Price check picture: what it shows",
+          "The Price check: from Lowest yet through Good price, Fair price and Above average to High price, measured "
+          "against the usual UK price.",
+          "Read out in place of the picture under The usual UK price on the how it works page."),
+    Entry("about.figure.alerts.alt", T, "Alerts picture: what it shows",
+          "Alerts for back in stock, a drop to your price and pre-orders opening. No account is needed.",
+          "Read out in place of the picture under Alerts that do the waiting on the how it works page."),
+    Entry("about.figure.money.alt", T, "Money picture: what it shows",
+          "You compare prices on RipRaptor and buy at the shop. The shop may pay RipRaptor a commission. You pay the "
+          "same price either way, and shops cannot pay to change the order of prices.",
+          "Read out in place of the picture in How RipRaptor makes money on the how it works page."),
     Entry("about.why.title", H, "Why RipRaptor heading", "Why RipRaptor",
           "Heading of the section on the how it works page that sums up what RipRaptor does that a plain price list "
           "does not. The same points are in llms.txt for AI assistants."),

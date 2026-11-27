@@ -75,7 +75,8 @@ class WhyRipRaptorTests(TestCase):
         self.assertIn('<h2 id="why-title">Why RipRaptor</h2>', html)
         for point in ("The price you will pay", "Only stock you can buy", "Prices you can trust", "Honest about deals",
                       "UK shops side by side", "Alerts that do the waiting", "Independent"):
-            self.assertIn(f"<dt>{point}</dt>", html)
+            # Each heading follows its icon (web/tests_about_graphics.py).
+            self.assertRegex(html, rf'<dt><span class="why__mark" aria-hidden="true"><svg [^>]*>.*?</svg></span>{point}</dt>')
         self.assertIn("We compare 5 UK shops, each named beside its price", html)
         self.assertIn("one we have not been able to check for 72 hours stops counting", html)
         self.assertIn("A shop running a draw or raffle is not shown as in stock", html)

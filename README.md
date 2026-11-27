@@ -651,6 +651,24 @@ easily available to read").
   every footer) and on product pages. The wording is in the registry
   (`about.promise.*`); change a point only if the site still does it.
 
+**How it works pictures** (the owner, 27 Nov 2026: "Can we update the how
+it works page to use these graphics"). The marketing team's drawings:
+seven pictures on `/about/` (`web/static/about/hiw-*.svg`, placed by
+`views.FIGURES`, drawn by `web/includes/explain_figure.html`) and an icon
+in a soft orange circle beside every point of the promise and Why RipRaptor
+(`web/includes/icons/why/`, chosen by `views.PROMISE_ICONS` and
+`WHY_ICONS`; on product pages too, where the promise is). The page's words
+are unchanged. Each picture's alt text is in the registry
+(`about.figure.<key>.alt`); the icons are hidden from screen readers, as
+the heading beside each says what it is. The pictures hold no prices,
+shops or shop counts, so nothing in them goes out of date, except the
+prices picture, which draws 72 hours: it shows only while
+`RIPRAPTOR_STALE_AFTER_HOURS` is 72. On a wide screen the list with
+pictures stays one column, so each picture shows at its own size. To
+change a picture, replace its SVG with a new drawing at the same size;
+the drawings carry their own font, so a hand edit to their words would not
+match.
+
 **Discount codes** (Admin, a shop's page, Discount code: `discount_code`,
 `discount_terms`, `discount_ends`; `Retailer.discount`): a code a shop gives
 for RipRaptor shoppers is shown beside its prices in the price list, in the

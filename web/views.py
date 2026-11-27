@@ -2408,7 +2408,7 @@ def about(request):
 
 WHY_POINTS = ("price", "stock", "trust", "deals", "usual", "askrip", "newbuyers", "shops", "alerts", "independent")
 # The questions people put to search engines and AI assistants, answered on the how it works page.
-ABOUT_FAQ = ("compare", "assistant", "usual", "fair", "offered", "newbuyers", "languages", "fresh", "sells")
+ABOUT_FAQ = ("compare", "assistant", "usual", "fair", "offered", "newbuyers", "languages", "fresh", "stock", "sells")
 # Said only while a guide is published: the guides and the Fair Price Checker are open then, and not before.
 NEED_GUIDES = ("newbuyers", "offered")
 

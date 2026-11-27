@@ -2698,6 +2698,11 @@ ENTRIES = [
           "Under the price list when too many reports came in the last hour."),
     Entry("product.report.reason_missing", T, "Report reason missing", "Choose what is wrong, then send it again.",
           "On the report form when it was sent without a reason."),
+    Entry("product.compare.only_buyable", T, "Under the price list: only stock you can buy",
+          "Only stock anyone can buy online counts. Raffles and members-only, invite-only or collection-only listings "
+          "are never shown as in stock.",
+          "One line under the price list, over the small print: what the comparison leaves out, and why a shop's own "
+          "listing may show as not available here."),
     Entry(
         "product.small_print", T, "Small print under the price list",
         "Affiliate links. Prices can change before you pay.",
@@ -2976,7 +2981,7 @@ ENTRIES = [
     Entry("about.why.stock.title", T, "Why RipRaptor: Only stock you can buy", "Only stock you can buy",
           "A point's heading in the Why RipRaptor section of the how it works page."),
     Entry("about.why.stock.body", T, "Why RipRaptor: Only stock you can buy text",
-          "A shop running a draw or raffle is not shown as in stock, and nor is a product kept for members or VIPs. Pre-orders are spotted from the shop's own wording. Single cards, graded cards and used items are left out, so you only see sealed products.",
+          "A shop running a draw or raffle is not shown as in stock, and nor is a product kept for members, VIPs or invited customers, or sold for collection only. Pre-orders are spotted from the shop's own wording. Single cards, graded cards and used items are left out, so you only see sealed products.",
           "A point's text in the Why RipRaptor section of the how it works page and in llms.txt."),
     Entry("about.why.trust.title", T, "Why RipRaptor: Prices you can trust", "Prices you can trust",
           "A point's heading in the Why RipRaptor section of the how it works page."),
@@ -3068,6 +3073,13 @@ ENTRIES = [
     Entry("about.faq.fresh.a", T, "Answer: up to date",
           "Every price says when we last checked it. One we have not been able to check for {hours} hours stops "
           "counting as the cheapest.", "Its answer.", placeholders=("hours",)),
+    Entry("about.faq.stock.q", T, "Question: stock you cannot buy",
+          "Does RipRaptor show raffle, members-only or invite-only stock as a deal?",
+          "A question on the how it works page."),
+    Entry("about.faq.stock.a", T, "Answer: stock you cannot buy",
+          "No. A product sold by a raffle or draw, or kept for a shop's members, VIPs or invited customers, or for "
+          "collection only, is never shown as in stock or as a deal, even when the shop's own button still says "
+          "available. RipRaptor reads each shop's own wording to tell.", "Its answer."),
     Entry("about.faq.sells.q", T, "Question: does it sell cards", "Does RipRaptor sell cards?",
           "A question on the how it works page."),
     Entry("about.faq.sells.a", T, "Answer: does it sell cards",

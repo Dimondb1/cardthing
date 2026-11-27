@@ -2208,9 +2208,20 @@ collect only` (an underscore or hyphen joins words as a space does), or
 words such as "collection in store only", "in-store pick-up only", "not
 available for delivery" or "cannot be posted", make the listing out of
 stock, as a VIP-only description does; "Premium Collection" as a kind of
-box never counts. The reason is kept on the listing (`Listing.closed_why`)
-and its row says "Shop members only", "Collection only" or "Draw closed" in
-place of "Out of stock". The first read to find it takes that price out of
+box never counts. **Invite only** is its own reason (the owner, 27 Nov 2026,
+of another site showing invite-only boxes as deals): words such as "invite
+only", "by invitation", "only available to invited customers" or "an invite
+is required", a tag such as `invite_only`, or "(Invite Only)" in the title,
+make the listing out of stock; "not invite only", "invite your friends" and
+"invitation to the hobby" do not (`importers.INVITE_ONLY`). The reason is
+kept on the listing (`Listing.closed_why`) and its row says "Shop members
+only", "Invite only", "Collection only" or "Draw closed" in place of "Out of
+stock". The site says so where people and machines look: one line under
+every product page's prices (`product.compare.only_buyable`), a question and
+answer on the how it works page that goes into its FAQPage and llms.txt
+(`about.faq.stock`), the Only stock you can buy point, and Rip, who is told
+the rule and which shops a product's comparison leaves out and why
+(`askrip.facts` `left_out_of_the_comparison`), without their prices. The first read to find it takes that price out of
 the daily record (`pricing.forget_low`: its past days removed, today worked
 out again from what anyone can buy), so no "Lowest yet" or chart rests on
 a price no visitor could pay; the probe reads tags and title too. TCG

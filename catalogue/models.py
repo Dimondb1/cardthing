@@ -939,6 +939,7 @@ class Listing(models.Model):
         """Why the shop's own words say it cannot be bought online now (importers.closed_reason): the listing is out
         of stock, and its row says this in place of "Out of stock"."""
         MEMBERS = "members", "Shop members only"
+        INVITE = "invite", "Invite only"
         COLLECTION = "collection", "Collection only"
         CLOSED = "closed", "Draw closed"
 

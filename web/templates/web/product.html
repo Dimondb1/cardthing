@@ -167,6 +167,8 @@
     {% if restocks.band %}{% copy "product.restock.hours" start=restocks.band.0 end=restocks.band.1 %}{% endif %}
   </p>
   {% endif %}
+  {# What the comparison leaves out, so a shop's own "in stock" box that shows as not available here makes sense (the owner, 27 Nov 2026: "ripraptor does [know when it's invite only] we should be telling everyone this"). #}
+  {% if has_listings %}<p class="small-print">{% copy "product.compare.only_buyable" %}</p>{% endif %}
   <p class="small-print">{% copy "product.small_print" %} <a href="{% url 'web:terms' %}">{% copy "site.nav.terms" %}</a></p>
 </section>
 {% endif %}

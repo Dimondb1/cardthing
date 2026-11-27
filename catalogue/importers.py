@@ -110,8 +110,8 @@ class Offer:
         # An open draw is not stock, from whichever source the offer came.
         if self.availability in Listing.BUYABLE and says_lottery(self.title, self.tags):
             self.availability = Listing.Availability.LOTTERY
-        # A draw that has closed, or a product kept for the shop's members or sold only for collection, cannot be
-        # bought online today whatever the shop's button says (closed_reason); a page that calls the product a
+        # A draw that has closed, or a product kept for the shop's members, sold only to those it invites or only for
+        # collection, cannot be bought online today whatever the shop's button says (closed_reason); a page that calls the product a
         # pre-order is one, whatever its flag.
         if self.availability in (*Listing.BUYABLE, Listing.Availability.LOTTERY):
             self.closed = closed_reason(self.description, self.tags, self.title)
@@ -663,6 +663,17 @@ MEMBERS_ONLY = re.compile(
     r"|\b(?:will\s+)?not\s+be\s+available\s+(?:to|for)\s+purchase\b",
     re.I,
 )
+# Sold only to people the shop invites, by its own words: "invite only", "by invitation", "only available to invited
+# customers". The owner, 27 Nov 2026, of another site listing such boxes as deals: "doesn't know when it's invite only".
+# Its button still says available, so the site would otherwise count a box nobody can simply buy. "Not invite only"
+# says the opposite.
+INVITE_ONLY = re.compile(
+    r"(?<!not )(?<!not-)\binvit(?:e|ation)[\s-]*only\b"
+    r"|\bby\s+invit(?:e|ation)\b"
+    r"|\b(?:exclusive(?:ly)?|only)\s+(?:available\s+)?(?:to|for)\s+(?:\S+\s+){0,3}?invit(?:ed|ees?)\b"
+    r"|\binvit(?:e|ation)s?\s+(?:is\s+|are\s+)?(?:required|needed)\b",
+    re.I,
+)
 # Sold only for collection at the shop, never posted: the shop's description or title says so. "Premium Collection"
 # is a kind of box, so the word counts only beside "only", "in store" or a refusal to post.
 COLLECTION_ONLY = re.compile(
@@ -679,13 +690,14 @@ COLLECTION_ONLY = re.compile(
 # Tags join words with "_" or "-" as often as spaces ("tier1_only_pokemon"), so a word ends at any of them.
 _START, _END = r"(?:^|[^a-z0-9])", r"(?=$|[^a-z0-9])"
 RESTRICTED_TAG = re.compile(
-    rf"{_START}tier[\s_-]*\d+[\s_-]*only{_END}|{_START}(?:vip|members?)[\s_-]*only{_END}"
+    rf"{_START}tier[\s_-]*\d+[\s_-]*only{_END}|{_START}(?:vip|members?|invite|invitation)[\s_-]*only{_END}"
     rf"|{_START}(?:collection|collect|pick[\s_-]*up|in[\s_-]*store|instore|local[\s_-]*pick[\s_-]*up)[\s_-]*only{_END}"
     rf"|{_START}click[\s_-]*(?:and|&|n)?[\s_-]*collect[\s_-]*only{_END}",
     re.I,
 )
 COLLECT_WORD = re.compile(r"collect|pick|store", re.I)
-CLOSED, MEMBERS, COLLECTION = "closed", "members", "collection"
+INVITE_WORD = re.compile(r"invit", re.I)
+CLOSED, MEMBERS, INVITE, COLLECTION = "closed", "members", "invite", "collection"
 # A description that says the product itself is a pre-order, for a shop whose stock flag says in stock while its
 # page says pre-order. Only the product's own standing: "pre-order bonus" or "pre-order now" in passing is not it.
 PREORDER_TEXT = re.compile(r"\b(?:this|it)\s+is\s+an?\s+pre[\s-]?order\b|\bpre[\s-]?order\s+(?:product|item|listing)\b", re.I)
@@ -693,11 +705,14 @@ PREORDER_TEXT = re.compile(r"\b(?:this|it)\s+is\s+an?\s+pre[\s-]?order\b|\bpre[\
 
 def closed_reason(description, tags=(), title=""):
     """Why a shop's own words say its product cannot be bought online today, or "": CLOSED for a draw that has ended,
-    MEMBERS for a product kept for the shop's members, COLLECTION for one sold only for collection at the shop. Read
-    on the description, then the shop's tags, then the title."""
+    INVITE for a product sold only to those the shop invites, MEMBERS for one kept for the shop's members,
+    COLLECTION for one sold only for collection at the shop. Read on the description, then the shop's tags, then the
+    title."""
     if description:
         if CLOSED_DRAW.search(description):
             return CLOSED
+        if INVITE_ONLY.search(description):
+            return INVITE
         if MEMBERS_ONLY.search(description):
             return MEMBERS
         if COLLECTION_ONLY.search(description):
@@ -705,7 +720,10 @@ def closed_reason(description, tags=(), title=""):
     for tag in tags or ():
         found = RESTRICTED_TAG.search(str(tag))
         if found:
-            return COLLECTION if COLLECT_WORD.search(found.group(0)) else MEMBERS
+            word = found.group(0)
+            return COLLECTION if COLLECT_WORD.search(word) else INVITE if INVITE_WORD.search(word) else MEMBERS
+    if title and INVITE_ONLY.search(title):
+        return INVITE
     if title and COLLECTION_ONLY.search(title):
         return COLLECTION
     return ""

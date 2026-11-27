@@ -160,6 +160,47 @@ class CollectionOnlyTests(TestCase):
         self.assertEqual(closed_reason("", (), "Delta Reign Premium Collection"), "")
 
 
+class InviteOnlyTests(TestCase):
+    """A box sold only to those the shop invites. The owner, 27 Nov 2026, of another site showing such boxes as deals:
+    "doesn't know when it's invite only ripraptor does". The shop's button still says available; its own words say
+    nobody can simply buy it, so it is out of stock here, and its row says why."""
+
+    def test_the_shops_words_say_invite_only(self):
+        for text in ("This box is invite only. Invites are sent by email.", "Invite-only release: check your inbox.",
+                     "Available by invitation to our loyal customers.", "Sold by invitation only.",
+                     "Only available to invited customers this week.", "Exclusively for invitees.",
+                     "An invite is required to purchase.", "Invitations are needed to buy this product."):
+            with self.subTest(text=text):
+                self.assertEqual(closed_reason(text), "invite")
+        for text in ("This is not invite only, anyone can buy.", "Invite your friends to our Discord.",
+                     "A great invitation to the hobby. In stock now.", "", None,
+                     "We invited the community to vote on our next stream."):
+            with self.subTest(text=text):
+                self.assertEqual(closed_reason(text), "")
+
+    def test_a_tag_or_the_title_can_say_it(self):
+        for tags in (("invite_only_pokemon",), ("Invite Only",), ("invitation-only",)):
+            with self.subTest(tags=tags):
+                self.assertEqual(closed_reason("", tags), "invite")
+        self.assertEqual(closed_reason("", (), "30th Celebration Sylveon ex Collection Box (Invite Only)"), "invite")
+        self.assertEqual(closed_reason("", ("invites",), "Delta Reign Booster Box"), "")
+        # Its own reason, not the members' one: the row says "Invite only".
+        self.assertEqual(Listing.Closed("invite").label, "Invite only")
+
+    def test_an_invite_only_box_is_out_of_stock_and_its_listing_says_why(self):
+        box = make_product(make_set(make_game(), name="Delta Reign", slug="delta-reign"), name="Delta Reign Booster Box",
+                           slug="delta-box", product_type="booster_box")
+        shop = make_retailer("Sleeved", delivery_cost=Decimal("0"))
+        offer = Offer(title="Delta Reign Booster Box", price=Decimal("120.00"), url="https://sleeved.example/products/delta-box",
+                      description="This release is invite only.", product_pk=box.pk)
+        self.assertEqual((offer.availability, offer.closed), (Listing.Availability.OUT_OF_STOCK, "invite"))
+        listing = make_listing(box, shop, price="120.00")
+        apply_offers(shop, [offer])
+        listing.refresh_from_db()
+        self.assertEqual((listing.availability, listing.closed_why), (Listing.Availability.OUT_OF_STOCK, "invite"))
+        self.assertFalse(listing.is_buyable)
+
+
 class CollectionReadTests(TestCase):
     def setUp(self):
         from datetime import timedelta

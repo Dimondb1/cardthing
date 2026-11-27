@@ -123,6 +123,7 @@ How to answer:
 - Whether to buy now or wait: say what the facts show today (the Price check, today's price against the lowest and the average in our record and against about 30 days ago, how many shops have it in stock, restocks) and that the choice is theirs. Never guess what will happen.
 - Whether it is right for them: say who this kind of product suits from the site's own words, what they get for the money (packs, cards, price per pack), and name a product in the same set that suits a smaller or bigger budget when the facts give one.
 - Red flags, or whether something is a scam, fake, real or a scalper's price: answer from the warning signs in the facts ("warning_signs" on an offer, "product_warning_signs"), with the shop or seller each belongs to, and say what to check before buying, such as the listing's photos and title, the seller's ratings and the RRP. Never call a shop, seller or listing a scam, a scammer, fake, a fraud or a scalper, and never say a purchase is safe or guaranteed. Start with how many warning signs were found, never with yes or no. With no warning signs ("red_flag_check"), say so in your first sentence with how many offers were checked, then give the two or three strongest reasons for confidence from its trust signs and the offers' own ("trust_signs"), and name the offer with the fewest doubts with its price. With warning signs, name them first, then that offer. End by saying to check the listing before buying. Never add warning signs or trust signs the facts do not give.
+- Only stock anyone can buy online counts on this site: a listing sold by a raffle or draw, kept for a shop's members or VIPs, invite only, or for collection only is never counted as in stock or as a deal, even when the shop's own button says available. When asked whether a deal is real, or why a shop is not counted, say so, and name any shop the facts leave out ("left_out_of_the_comparison") with its reason.
 - Past prices in the facts may be described. Never say a price will rise or fall, what the product will be worth later, what is likely to be in a pack, or the odds of any card.
 - Do not recommend products or shops that are not in the facts, and do not give links.
 - If the question is not about this product, its set or buying it, say you can only help with this product.
@@ -420,6 +421,16 @@ STOCK_WORDS = {
     Listing.Availability.PREORDER: "pre-order",
     Listing.Availability.LOTTERY: "prize draw, not for sale",
 }
+# Why a shop's listing is left out of the comparison though its own button may say available (importers.closed_reason,
+# says_lottery), in words Rip can repeat. The owner, 27 Nov 2026: Rip should say so when asked whether a deal is real
+# or why a shop is not counted.
+LEFT_OUT_WHY = {
+    Listing.Closed.MEMBERS: "kept for the shop's members or VIPs",
+    Listing.Closed.INVITE: "invite only",
+    Listing.Closed.COLLECTION: "collection from the shop only, not posted",
+    Listing.Closed.CLOSED: "a prize draw that has closed",
+}
+LOTTERY_WHY = "sold by a prize draw: entering is not buying"
 
 
 # Red flags: warning signs our own code finds in each offer and in the product, put to Rip as facts, so he never judges
@@ -661,8 +672,17 @@ def facts(product, now=None):
             offer["discount_code"] = f"{code}, {terms}, the shop's own offer; not taken off the price" if terms \
                 else f"{code}, the shop's own offer; not taken off the price"
         offers.append(offer)
+    # The shops whose listing the site leaves out, and why, without a price: none of them can simply be bought.
+    left_out = {}
+    for listing in listings:
+        if listing.sanity == Listing.Sanity.EXCLUDED or listing.retailer.name in left_out:
+            continue
+        if listing.availability == Listing.Availability.LOTTERY:
+            left_out[listing.retailer.name] = LOTTERY_WHY
+        elif listing.closed_why in LEFT_OUT_WHY:
+            left_out[listing.retailer.name] = LEFT_OUT_WHY[listing.closed_why]
     others = sorted({listing.retailer.name for listing in listings if not listing.is_buyable
-                     and listing.sanity != Listing.Sanity.EXCLUDED} - {offer["shop"] for offer in offers})
+                     and listing.sanity != Listing.Sanity.EXCLUDED} - {offer["shop"] for offer in offers} - set(left_out))
     found = {
         "product": product.name, "game": product.game.name, "type": product.type_name,
         "language": product.language_name or "English", "today": date_format(today, "j M Y"),
@@ -719,6 +739,9 @@ def facts(product, now=None):
         found["rrp"] = money(rrp[0])
     if others:
         found["not_for_sale_now_at"] = others[:OTHERS_SENT]
+    if left_out:
+        found["left_out_of_the_comparison"] = [{"shop": shop, "why": why}
+                                               for shop, why in sorted(left_out.items())[:OTHERS_SENT]]
     if current and product.packs_inside and product.packs_inside > 1 and current[0].delivery_known:
         found["cheapest_per_pack"] = money((current[0].delivered_price / product.packs_inside).quantize(Decimal("0.01")))
     days = settings.RIPRAPTOR_HISTORY_DAYS

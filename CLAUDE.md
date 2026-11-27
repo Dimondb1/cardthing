@@ -87,6 +87,12 @@ design: "why is it different than everything else".
 - A product is only shown through a shared part listed in `web/design.py`
   (a row, a card, a table row and so on). Need something a part does not
   show? Add one line or one modifier to the part, for every page to share.
+- A list that sells an event (Black Friday; the owner, 27 Nov 2026: "just a
+  load of ... text and tiny products") leads with the seasonal banner as its
+  head, holding the heading and the page's real figures, then shortcuts as
+  chips, then its rows as picture tiles (`crows--tiles`) with a green badge.
+  The words that explain it come after the products. Every other list keeps
+  its rows.
 - Ask the owner before adding a new part, a new page kind, a new breakpoint
   or a new kind of heading. Then add it to `web/design.py` in the same change.
 - One main heading a page. Headings, sections and notes use the classes the

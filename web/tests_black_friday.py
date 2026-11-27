@@ -251,7 +251,7 @@ class HubTests(PageCase):
             self.assertIn(f'href="{product.get_absolute_url()}"', html)
         for tag in re.findall(r'<a[^>]+href="/go/[^>]+>', html):
             self.assertIn('rel="sponsored nofollow noopener"', tag)
-        self.assertIn("10% under 30-day average", html)
+        self.assertIn("£10.00 under 30-day average", html)
 
     def test_the_figures_are_a_table_and_the_two_kinds_of_saving_are_told_apart(self):
         html = self.html("/black-friday/")
@@ -331,8 +331,9 @@ class GamePageTests(PageCase):
         self.assertIn('<h1 class="browse-head__title">Black Friday 2026 Pokémon deals in the UK</h1>', html)
         self.assertIn('<link rel="canonical" href="http://testserver/black-friday/pokemon/">', html)
         self.assertNotIn('name="robots"', html)
-        self.assertIn("Real Black Friday deals. Not inflated discounts. Pokémon booster boxes, Elite Trainer Boxes and "
-                      "booster bundles at least 5% under their own 30-day average at a UK shop today.", html)
+        self.assertIn("Real Black Friday deals. Not inflated discounts.", html)
+        self.assertIn('<p class="browse-head__intro">Pokémon booster boxes, Elite Trainer Boxes and booster bundles at '
+                      "least 5% under their own 30-day average at a UK shop today.", html)
 
     def test_a_game_with_too_few_is_not_indexed(self):
         Listing.objects.filter(product=self.bundle).delete()
@@ -428,7 +429,8 @@ class LookTests(PageCase):
                 self.assertIn('class="cx-status"', html)           # the status line
                 self.assertEqual(html.count('<li class="crow">'), 3)   # each product a compact row
                 self.assertNotIn('class="card"', html)
-                self.assertIn('<span class="crow__note">10% under 30-day average</span>', html)
+                self.assertIn('<span class="crow__badge">\u221210%</span>', html)
+                self.assertIn('<span class="crow__note">£10.00 under 30-day average</span>', html)
                 # The types as the look's tiles, each keeping the page.
                 self.assertIn('class="feed-tile__link" href="?type=booster_box"', html)
                 self.assertNotIn('class="chips quick"', html)
@@ -440,7 +442,7 @@ class LookTests(PageCase):
         self.assertNotIn('class="feed-dock"', html)
         self.assertEqual(html.count('<li class="card">'), 3)       # each product the usual card
         self.assertNotIn('class="crow"', html)
-        self.assertIn('<p class="card__deal card__deal--saving">10% under 30-day average</p>', html)
+        self.assertIn('<p class="card__deal card__deal--saving">£10.00 under 30-day average</p>', html)
         self.assertIn('class="chips quick"', html)
         self.assertIn("Delivered prices checked ", html)            # the compact look's status line says it there
 
@@ -460,6 +462,7 @@ class LookTests(PageCase):
         self.wear(compact=True)
         html = self.html("/black-friday/", type="tin")
         self.assertIn(f'href="{tin.get_absolute_url()}"', html)
+        self.assertIn('<span class="crow__badge">Lowest yet</span>', html)
         self.assertIn('<span class="crow__note">Lowest recorded price</span>', html)
 
     def test_no_styles_of_its_own(self):
@@ -468,8 +471,202 @@ class LookTests(PageCase):
         css = (Path(__file__).resolve().parent / "static/css/site.css").read_text()
         self.assertNotIn(".bf-deal", css)
         self.assertNotIn(".bf__", css)
+        # The one part named for Black Friday is the seasonal banner, which the home, Deals and game pages show too:
+        # here it is the page's own head.
         template = (Path(__file__).resolve().parent / "templates/web/black_friday.html").read_text()
-        self.assertEqual(re.findall(r'class="bf[-_ "]', template), [])
+        self.assertEqual(re.findall(r'class="bf(?!-banner[_ "-])[-_ "]', template), [])
+
+
+class SellingTests(PageCase):
+    """The page sells (the owner, 27 Nov 2026, of a head that was a paragraph and a line of links over small rows:
+    "doesnt make me feel like buying anything ... just a load of ... text and tiny products"): the banner as its head
+    with its real figures, shortcuts as chips, the products as picture tiles with a badge, and the words after them."""
+
+    wear = LookTests.wear
+
+    def head(self, html):
+        start = html.index('<div class="bf-banner bf-banner--lead">')
+        return html[start:html.index("</div>", start)]
+
+    def test_the_head_is_the_banner_with_the_pages_own_figures(self):
+        self.wear(compact=True)
+        head = self.head(self.html("/black-friday/"))
+        self.assertIn('<p class="bf-banner__eyebrow">Starts Friday 27 November</p>', head)
+        self.assertIn('<h1 class="browse-head__title">Black Friday 2026 TCG deals in the UK</h1>', head)
+        # Three deals; the ETB is 12% under its average, the box £10.00 under its own: each the most on the page.
+        self.assertIn('<strong class="bf-banner__figure">3</strong> genuine price drops', head)
+        self.assertIn('<strong class="bf-banner__figure">12%</strong> biggest drop', head)
+        self.assertIn('<strong class="bf-banner__figure">£10.00</strong> biggest saving', head)
+        self.assertIn("Real Black Friday deals. Not inflated discounts. Every saving is against the product&#x27;s own "
+                      "30-day average.", head)
+
+    def test_the_line_over_the_heading_follows_the_weekend(self):
+        self.wear(compact=True)
+        for today, line in ((date(2026, 11, 28), "On now until Cyber Monday, 30 November"),
+                            (date(2026, 12, 3), "Back on Friday 26 November 2027")):
+            cache.clear()
+            with self.subTest(today=today), mock.patch("web.black_friday.local_today", return_value=today):
+                self.assertIn(f'<p class="bf-banner__eyebrow">{line}</p>', self.head(self.html("/black-friday/")))
+
+    def test_the_figures_are_the_pages_before_its_filters_and_a_game_has_its_own(self):
+        self.wear(compact=True)
+        head = self.head(self.html("/black-friday/", type="bundle"))
+        self.assertIn('<strong class="bf-banner__figure">3</strong> genuine price drops', head)
+        self.assertIn('<strong class="bf-banner__figure">12%</strong>', head)
+        magic = make_game(name="Magic: The Gathering", slug="magic")
+        final = make_set(magic, name="Final Fantasy", slug="final-fantasy")
+        for n, price in enumerate(("60.00", "61.00", "62.00")):
+            self.product(f"Final Fantasy Bundle {n}", price, others=("99.00",), history=steady("80.00"),
+                         product_set=final, kind="bundle")
+        self.bands()
+        self.wear(compact=True)
+        self.assertIn('<strong class="bf-banner__figure">6</strong> genuine price drops',
+                      self.head(self.html("/black-friday/")))
+        head = self.head(self.html("/black-friday/pokemon/"))
+        self.assertIn('<strong class="bf-banner__figure">3</strong> genuine price drops', head)
+        self.assertIn('<strong class="bf-banner__figure">£10.00</strong>', head)
+
+    def test_nothing_made_up_when_there_are_no_deals(self):
+        DailyLowestPrice.objects.all().delete()
+        Product.objects.update(price_band=None, price_basis="")
+        self.wear(compact=True)
+        html = self.html("/black-friday/")
+        head = self.head(html)
+        self.assertIn("Real Black Friday deals. Not inflated discounts.</p>", head)
+        self.assertNotIn("bf-banner__figure", head)
+        self.assertNotIn("Every saving is against", head)
+        self.assertNotIn('class="chip"', html)
+        self.assertNotIn("crow__badge", html)
+
+    def test_each_game_is_a_chip_with_its_count(self):
+        for compact in (True, False):
+            self.wear(compact=compact)
+            with self.subTest(compact=compact):
+                self.assertIn('<a class="chip" href="/black-friday/pokemon/">Pokémon deals <span class="chip__count">3'
+                              "</span></a>", self.html("/black-friday/"))
+        # A game's own page links no games: the dock and the breadcrumbs do.
+        self.assertNotIn("Black Friday deals by game", self.html("/black-friday/pokemon/"))
+
+    def test_price_bands(self):
+        self.wear(compact=True)
+        html = self.html("/black-friday/")
+        # The bundle (£27) and the ETB (£44), then the box (£90): only the bands that hold a deal.
+        self.assertIn('<a class="chip" href="?price=25-50">£25 to £50 <span class="chip__count">2</span></a>', html)
+        self.assertIn('<a class="chip" href="?price=50-100">£50 to £100 <span class="chip__count">1</span></a>', html)
+        self.assertNotIn("Under £25", html)
+        self.assertNotIn("£100 and over", html)
+        html = self.html("/black-friday/", price="25-50")
+        self.assertIn('<link rel="canonical" href="http://testserver/black-friday/">', html)
+        self.assertEqual(html.count('<li class="crow">'), 2)
+        self.assertNotIn(f'<a class="crow__link" href="{self.box.get_absolute_url()}"', html)
+        self.assertIn("2 genuine price drops", html)
+        # The chosen band is marked and leads back to every price; the types and the switches keep it.
+        self.assertIn('<a class="chip" href="/black-friday/" aria-current="true">£25 to £50', html)
+        self.assertIn('class="feed-tile__link" href="?price=25-50&amp;type=bundle"', html)
+        self.assertEqual(html.count('<input type="hidden" name="price" value="25-50">'), 2)
+
+    def test_a_band_with_the_other_choices_and_one_there_is_not(self):
+        self.wear(compact=True)
+        html = self.html("/black-friday/", price="25-50", type="bundle", sort="pounds")
+        self.assertEqual(html.count('<li class="crow">'), 1)
+        self.assertIn(f'<a class="crow__link" href="{self.bundle.get_absolute_url()}"', html)
+        self.assertIn('href="?type=bundle&amp;sort=pounds"', html)        # the chosen band, back to every price
+        html = self.html("/black-friday/", price="free")
+        self.assertEqual(html.count('<li class="crow">'), 3)
+        self.assertNotIn('name="price"', html)
+
+    def test_the_bands_count_what_the_other_choices_leave(self):
+        self.wear(compact=True)
+        # Bundles: the one at £27. Boxes: the one at £90. Each sits in one band, so there is no choice to offer.
+        self.assertNotIn("Deals by price", self.html("/black-friday/", type="bundle"))
+        cheap = self.product("Surging Sparks Mini Bundle", "18.00", others=("24.00",), history=steady("20.00"),
+                             kind="bundle")
+        self.bands()
+        self.wear(compact=True)
+        html = self.html("/black-friday/", type="bundle")
+        self.assertIn('<a class="chip" href="?type=bundle&amp;price=under-25">Under £25 <span class="chip__count">1'
+                      "</span></a>", html)
+        self.assertIn('<a class="chip" href="?type=bundle&amp;price=25-50">£25 to £50 <span class="chip__count">1'
+                      "</span></a>", html)
+        self.assertNotIn("£50 to £100", html)
+        self.assertIn(f'<a class="crow__link" href="{cheap.get_absolute_url()}"',
+                      self.html("/black-friday/", type="bundle", price="under-25"))
+        # A band chosen that the type has nothing in still shows, marked, so it can be cleared.
+        html = self.html("/black-friday/", type="booster_box", price="under-25")
+        self.assertIn('<a class="chip" href="?type=booster_box" aria-current="true">Under £25 '
+                      '<span class="chip__count">0</span></a>', html)
+        self.assertEqual(html.count('<li class="crow">'), 0)
+
+    def test_one_band_is_no_choice(self):
+        Listing.objects.filter(product=self.box).delete()
+        self.bands()
+        cache.clear()
+        self.wear(compact=True)
+        self.assertNotIn("Deals by price", self.html("/black-friday/"))
+
+    def test_the_products_are_picture_tiles_with_the_words_after_them(self):
+        self.wear(compact=True)
+        html = self.html("/black-friday/")
+        self.assertIn('<ul class="crows crows--tiles" aria-labelledby="bf-list-title">', html)
+        self.assertIn('<span class="crow__badge">\u221212%</span>', html)
+        self.assertIn('<span class="crow__note">£6.00 under 30-day average</span>', html)
+        tiles = html.index('<ul class="crows crows--tiles"')
+        about = html.index("How these deals are chosen")
+        self.assertLess(html.index("</h1>"), tiles)
+        self.assertLess(tiles, about)
+        self.assertLess(about, html.index("Booster boxes, Elite Trainer Boxes, booster bundles and other sealed"))
+        self.assertLess(about, html.index("Black Friday 2026 is on Friday 27 November and Cyber Monday on Monday 30"))
+        self.assertLess(about, html.index("Black Friday questions"))
+        # Nothing but the banner, the shortcuts and the switches stands between the heading and the products.
+        self.assertNotIn("browse-head__intro", html[:tiles])
+        self.assertIn("3 genuine price drops", html[html.index("</h1>"):tiles])
+        self.assertIn("Biggest % saving first.", html[html.index("</h1>"):tiles])
+
+    def test_showing_the_top_is_said_under_the_list(self):
+        self.wear(compact=True)
+        with mock.patch.dict(black_friday.SHOWN, {None: 2}):
+            html = self.html("/black-friday/")
+        self.assertEqual(html.count('<li class="crow">'), 2)
+        self.assertIn('<p class="section-head__note">Showing the top 2 of 3.</p>', html)
+        self.assertLess(html.index("</ul>", html.index('<ul class="crows crows--tiles"')),
+                        html.index("Showing the top 2 of 3."))
+
+    def test_the_tiles_pictures_and_their_styles(self):
+        from catalogue import images
+
+        self.assertEqual(images.SLOTS["crow_tile"][1], "(min-width: 64rem) 12rem, 8.5rem")
+        self.assertEqual(images.SLOTS["crow_lead"][1], "(min-width: 64rem) 12rem, (min-width: 40rem) 8.5rem, 12.5rem")
+        row = (Path(__file__).resolve().parent / "templates/web/includes/compact_row.html").read_text()
+        self.assertIn('{% if tiles and forloop.first %}{% product_image product "crow_lead" %}{% elif tiles %}'
+                      '{% product_image product "crow_tile" %}{% else %}{% product_image product "crow" %}{% endif %}', row)
+        css = (Path(__file__).resolve().parent / "static/css/site.css").read_text()
+        tokens = (Path(__file__).resolve().parent / "static/css/tokens.css").read_text()
+        self.assertIn("--tile-well: 8.5rem;", tokens)
+        self.assertIn("--tile-lead-well: 12.5rem;", tokens)
+        # Two across a phone, the first the width of the screen; three across a tablet; rows again with List chosen.
+        self.assertIn("html:not(.view-list) .crows--tiles { grid-template-columns: repeat(2, minmax(0, 1fr));", css)
+        self.assertIn("html:not(.view-list) .crows--tiles > .crow:first-child { grid-column: 1 / -1; }", css)
+        self.assertIn("@media (min-width: 40rem) { html:not(.view-list) .crows--tiles { grid-template-columns: "
+                      "repeat(3, minmax(0, 1fr)); } }", css)
+        # A saving, so the price green; on a tile it sits on the picture.
+        self.assertIn(".crow__badge { justify-self: start;", css)
+        badge = css[css.index(".crow__badge {"):css.index("}", css.index(".crow__badge {"))]
+        self.assertIn("background: var(--color-price); color: var(--color-price-ink);", badge)
+        self.assertIn("html:not(.view-list) .crows--tiles .crow__badge { position: absolute;", css)
+
+    def test_the_queries_are_no_more_than_a_filtered_page(self):
+        self.wear(compact=True)
+        self.html("/black-friday/")                       # the look's own kept numbers and games
+        cache.clear()
+        from web import look
+        look.remember()
+        with CaptureQueriesContext(connection) as kind:
+            self.html("/black-friday/", type="bundle")
+        cache.clear()
+        look.remember()
+        with CaptureQueriesContext(connection) as band:
+            self.html("/black-friday/", price="25-50")
+        self.assertEqual(len(band), len(kind))
 
 
 class DesktopTests(PageCase):

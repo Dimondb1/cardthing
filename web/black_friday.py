@@ -25,17 +25,22 @@ cheapest against the next shop's, offers.summarise), which is never called a red
 A game's page is published (indexed, in the sitemap, linked from the hub) when it has PUBLISH_LEAST deals now; below
 that it still answers, for a visitor who follows a link, but asks search engines not to index it.
 
-How it is drawn. It is a list page like a game's or a search's, and is built from the same parts, nothing of its own
-(the owner, 25 Nov 2026, of its first design: "why is it different than everything else"): the look the site is in
-(web/look.py), with the search box and games at the foot in the feed and compact looks, the status line, the
-breadcrumbs, heading and one short line, the product types as tiles (chips in the classic look), switches, then each
-product as the look's own row or card (compact_row.html, product_card.html) with one line saying how far under its
-30-day average it is. The figures behind each (the 30-day average, the 7 and 30-day changes, the lowest recorded, the
-next shop, shops in stock, when checked) are a table like the UK prices pages' (price-table), under the questions.
+How it is drawn. It is a list page like a game's or a search's, built from the shared parts (the owner, 25 Nov 2026,
+of its first design: "why is it different than everything else"), and made to sell (the owner, 27 Nov 2026, of a head
+that was a paragraph and a line of links over small rows: "doesnt make me feel like buying anything ... just a load of
+... text and tiny products"). The look the site is in (web/look.py), with the search box and games at the foot in the
+feed and compact looks, and the status line; the seasonal banner as the page's own head, with the heading and the
+page's real figures (headline: how many drops, the biggest in percent and in pounds, never made up); shortcuts as
+chips (each game's page on the hub, and price bands, BANDS) either side of the product types as tiles (chips in the
+classic look); switches; then each product as a picture tile (compact_row.html in a crows--tiles list; product_card.html
+in the classic look) with a badge saying how far under its 30-day average it is in percent and one line saying it in
+pounds. The words come after the products: how the deals are chosen (the introduction and the dates), the questions,
+and the figures behind each (the 30-day average, the 7 and 30-day changes, the lowest recorded, the next shop, shops
+in stock, when checked) as a table like the UK prices pages' (price-table).
 
 Queries: the deals (one, plus one for the shops' offers of those shown, one for the cheapest shop of each, and one for
-the questions' booster box figures) and the look's own (its numbers and games, kept). Pages are kept like any list
-page (web.pagecache).
+the questions' booster box figures) and the look's own (its numbers and games, kept). The head's figures, the games
+and the price bands are counted from the deals already read. Pages are kept like any list page (web.pagecache).
 """
 
 from dataclasses import dataclass
@@ -75,6 +80,9 @@ ON_RECORD = (fair_price.RECORD, fair_price.BOTH)
 
 POUNDS = "pounds"                          # ?sort=pounds: biggest saving in pounds first; else biggest % first
 LOWEST = "lowest"                          # ?lowest=on: only the products at the lowest price we have recorded
+# ?price=under-25: today's delivered price in a band, for a buyer with a budget. (code, from, under) in pounds: a
+# price belongs to the band it is at least ``from`` and under ``under``.
+BANDS = (("under-25", None, 25), ("25-50", 25, 50), ("50-100", 50, 100), ("over-100", 100, None))
 
 
 def black_friday(year):
@@ -146,12 +154,22 @@ def week_day(when):
     return date_format(when, "l j F")
 
 
-def deal_rows(game=None, kind="", sort="", lowest=False, today=None):
+def band_of(code):
+    """(from, under) of the price band ``code``, or None when there is no such band."""
+    return next(((low, high) for each, low, high in BANDS if each == code), None)
+
+
+def in_band(price, low, high):
+    return (low is None or price >= low) and (high is None or price < high)
+
+
+def deal_rows(game=None, kind="", sort="", lowest=False, today=None, band=None):
     """The genuine price drops now (see the module's notes), each with ``month_average``, ``month_days``,
     ``week_price`` and ``month_price`` (the cheapest price recorded about a week and a month ago), ``low`` and
     ``low_date`` (the lowest recorded before today, and the latest day at it), ``saving`` and ``saving_ratio``
-    (today's price under the 30-day average). Narrowed to ``game`` and ``kind``, and with ``lowest`` to those at the
-    lowest price recorded; biggest % saving first, or with ``sort`` POUNDS the biggest in pounds. One query."""
+    (today's price under the 30-day average). Narrowed to ``game`` and ``kind``, with ``lowest`` to those at the
+    lowest price recorded and with ``band`` (from, under) to today's prices in it; biggest % saving first, or with
+    ``sort`` POUNDS the biggest in pounds. One query."""
     today = today or timezone.localdate()
     money = DecimalField(max_digits=12, decimal_places=4)
 
@@ -207,6 +225,12 @@ def deal_rows(game=None, kind="", sort="", lowest=False, today=None):
     )
     if lowest:
         products = products.filter(lowest_known__lte=F("low"))
+    if band is not None:
+        low, high = band
+        if low is not None:
+            products = products.filter(lowest_known__gte=low)
+        if high is not None:
+            products = products.filter(lowest_known__lt=high)
     order = ("-saving", "-saving_ratio") if sort == POUNDS else ("-saving_ratio", "-saving")
     return products.order_by(*order, "name")
 
@@ -240,13 +264,20 @@ def change(today_price, then, days):
     return Change(days, abs(gap), percent(abs(gap), then), direction)
 
 
+def saved(product):
+    """(pounds, whole percent) today's price is under the product's 30-day average, as its row and the page's
+    headline figures give it: never less than nothing."""
+    average = pounds(product.month_average)
+    money = max(pounds(product.saving), Decimal("0.00"))
+    return money, percent(money, average)
+
+
 def finished(product, lead_shops=None):
     """A deal ready to show: its figures to the penny and in whole percent, its changes, its lowest recorded, and
     the between-shops saving (offers.summarise, from ``product.offers``)."""
     today_price = product.lowest_known
     product.average = pounds(product.month_average)
-    product.saving_money = max(pounds(product.saving), Decimal("0.00"))
-    product.saving_percent = percent(product.saving_money, product.average)
+    product.saving_money, product.saving_percent = saved(product)
     product.week_change = change(today_price, product.week_price, WEEK)
     product.month_change = change(today_price, product.month_price, MONTH)
     product.changes = [moved for moved in (product.week_change, product.month_change) if moved is not None]
@@ -383,6 +414,15 @@ def season_line(words, when):
                  monday=week_day(when.monday))
 
 
+def hero_line(words, when):
+    """The short line over the heading: whether the weekend is on, coming or over."""
+    if when.state == "after":
+        return words("blackfriday.hero.after", next_friday=day(when.next_friday))
+    if when.state == "on":
+        return words("blackfriday.hero.on", monday=short_day(when.monday))
+    return words("blackfriday.hero.before", friday=week_day(when.friday))
+
+
 def ready(products):
     """``products`` with their shops' offers attached and finished. One query, none when all are already."""
     from django.db.models import prefetch_related_objects
@@ -420,6 +460,56 @@ def type_tiles(request, path, every, kinds, chosen, all_label):
     return tiles[:feed.TILES_SHOWN + 1]
 
 
+@dataclass
+class Shortcut:
+    """One link in a row of shortcuts above the deals (chips): a game's own page, or a price band."""
+    label: str
+    url: str
+    count: int = 0
+    current: bool = False
+
+
+def band_label(words, low, high):
+    if low is None:
+        return words("blackfriday.band.under", high=high)
+    if high is None:
+        return words("blackfriday.band.over", low=low)
+    return words("blackfriday.band.between", low=low, high=high)
+
+
+def band_links(request, path, rows, chosen, words):
+    """The price bands that hold one of ``rows`` (the page's deals of the type chosen), each a link to this page with
+    the band chosen (the chosen one leads back to every price), keeping the other choices. None when they sit in one
+    band and none is chosen. No query."""
+    def link(code):
+        params = request.GET.copy()
+        for name in ("page", "price"):
+            params.pop(name, None)
+        if code:
+            params["price"] = code
+        return "?" + params.urlencode() if params else path
+
+    found = []
+    for code, low, high in BANDS:
+        count = sum(1 for row in rows if in_band(row.lowest_known, low, high))
+        if count or code == chosen:
+            found.append(Shortcut(band_label(words, low, high), link("" if code == chosen else code), count,
+                                  code == chosen))
+    return found if len(found) > 1 or chosen else []
+
+
+def headline(every):
+    """The page's headline figures, from its deals before its own filters: the furthest any is under its 30-day
+    average, in whole percent, and the most any saves in pounds. None of each when there are no deals or none is
+    clearly under its average. No query."""
+    if not every:
+        return None, None
+    most_percent = max(saved(row)[1] for row in every)
+    most_pounds = max(saved(row)[0] for row in every)
+    return (most_percent if most_percent >= int(DROP * 100) else None,
+            most_pounds if most_pounds >= LEAST_SAVING else None)
+
+
 def page(request, game=None):
     """The hub (``game`` None) or a game's page."""
     from . import compact, look
@@ -431,16 +521,26 @@ def page(request, game=None):
     kind = request.GET.get("type", "")
     sort = POUNDS if request.GET.get("sort") == POUNDS else ""
     lowest = bool(request.GET.get(LOWEST))
+    price = request.GET.get("price", "")
+    band = band_of(price)
+    price = price if band is not None else ""
     every = list(deal_rows(game=game))              # the page's deals before its own filters, biggest % first
     kinds = kinds_in(every, game.slug if game else "")
     kind = kind if kind in dict(kinds) else ""
-    chosen = every if not (kind or sort or lowest) else list(deal_rows(game=game, kind=kind, sort=sort, lowest=lowest))
+    chosen = every if not (kind or sort or lowest or band) else list(
+        deal_rows(game=game, kind=kind, sort=sort, lowest=lowest, band=band))
     limit = SHOWN["game" if game else None]
     shown = ready(chosen[:limit])
     for product in shown:
-        # A product here for being at its lowest recorded, not for a clear fall on the month, says that.
-        product.row_note = (words("blackfriday.row.note", percent=product.saving_percent)
-                            if product.saving_percent >= int(DROP * 100) else words("blackfriday.row.note_low"))
+        # Its badge and its one line: how far under its 30-day average, in percent and in pounds. A product here for
+        # being at its lowest recorded, not for a clear fall on the month, says that.
+        if product.saving_percent >= int(DROP * 100):
+            product.row_badge = words("blackfriday.row.badge", percent=product.saving_percent)
+            product.row_note = words("blackfriday.row.note", percent=product.saving_percent,
+                                     amount=hubs.money(product.saving_money))
+        else:
+            product.row_badge = words("blackfriday.row.badge_low")
+            product.row_note = words("blackfriday.row.note_low")
     checked = max((row.best.last_checked for row in shown if row.best is not None), default=None)
     # The questions: about the page's game, or on the hub about Pokémon, with its biggest drop now.
     asked = game or next((row.game for row in every if row.game.slug == QUESTION_GAME), None) \
@@ -486,7 +586,14 @@ def page(request, game=None):
         structured.append(faq_json(url, questions))
     mode = look.mode(request)
     drawn = mode != look.CLASSIC      # the feed and compact looks: the search box and games at the foot, tiles
-    keep = [(name, value) for name, value in (("type", kind), ("sort", sort), (LOWEST, "on" if lowest else "")) if value]
+    keep = [(name, value) for name, value in (("type", kind), ("sort", sort), (LOWEST, "on" if lowest else ""),
+                                              ("price", price)) if value]
+    most_percent, most_pounds = headline(every)
+    # The price bands count the deals the other choices leave, so none leads to an empty list.
+    narrowed = [row for row in every if (not kind or row.product_type == kind)
+                and (not lowest or (row.low is not None and row.lowest_known <= row.low))]
+    games = [Shortcut(each.display_short, reverse("web:black_friday_game", args=[each.slug]), n)
+             for each, n in by_game(every).items()] if game is None else []
     return render(request, "web/black_friday.html", {
         "look": mode, "compact": mode == look.COMPACT,
         "dock": compact.dock(request, game) if drawn else None,
@@ -494,8 +601,9 @@ def page(request, game=None):
         "tiles": type_tiles(request, path, every, kinds, kind, words("compact.types.all")) if drawn else [],
         "game": game, "when": when, "rows": [(product, product.summary) for product in shown],
         "count": len(chosen), "every": len(every), "shown_limit": limit,
-        "kinds": kinds, "kind": kind, "pounds_on": sort == POUNDS, "lowest_on": lowest, "keep": keep,
-        "checked": checked, "games": by_game(every) if game is None else {},
+        "kinds": kinds, "kind": kind, "pounds_on": sort == POUNDS, "lowest_on": lowest, "keep": keep, "price": price,
+        "checked": checked, "games": games, "bands": band_links(request, path, narrowed, price, words),
+        "most_percent": most_percent, "most_pounds": most_pounds, "hero_line": hero_line(words, when),
         "questions": questions, "season_line": season_line(words, when), "heading": heading, "intro": intro,
         "path": path, "crumbs": crumbs,
         "meta_title": title, "meta_description": hubs.fit_description(description),

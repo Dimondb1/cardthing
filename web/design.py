@@ -18,6 +18,11 @@ The rules, each with its test:
    of bordered buttons the width of the page, the less popular behind More (web/feed.py DESK_BAR). From 80rem Ask
    Rip sits beside the page as a column that is part of it (questions, the box, Quick insights), never a card over
    it, and its questions are neutral rows: orange is for what sends and what is chosen.
+   A list that sells an event (the Black Friday pages; the owner, 27 Nov 2026, of a head that was a paragraph and a
+   line of links over small rows: "just a load of ... text and tiny products") leads with the seasonal banner as
+   its head (bf-banner--lead: the heading and the page's real figures), has its shortcuts as chips, and draws the
+   same compact rows as picture tiles (crows--tiles: two across a phone, a badge on the picture). Its words come
+   after its products. These are modifiers of shared parts, for any such list to use: still no design of its own.
 3. A product is only ever shown through one of the shared parts in PRODUCT_PARTS (a row, a card, a table row...), or
    named in a sentence (PROSE). A new way to show a product is a new entry here, which the owner agrees first.
 4. Every page has exactly one main heading.
@@ -68,7 +73,7 @@ LIST_LATER = {"deals", "drops", "prices_game", "watchlist", "shopping_list"}
 # The shared parts a product may be shown through, by the class on the part: the link to a product's page sits
 # inside one of these on every page, in every look.
 PRODUCT_PARTS = {
-    "crow",             # a compact row (compact_row.html)
+    "crow",             # a compact row (compact_row.html); a picture tile in a crows--tiles list
     "card",             # a product card (product_card.html)
     "feed-card",        # a card on the feed's rails (feed_card.html)
     "cx-deal",          # a deal in the compact strip (compact_strip.html)

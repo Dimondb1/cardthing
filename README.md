@@ -4458,17 +4458,38 @@ of each product's cheapest delivered price (`DailyLowestPrice`):
 - the fall is under 70%: a larger one is a wrong product link, as on the
   Deals page.
 
-The pages are list pages like a game's, built from the same shared parts and
-none of their own (see Layout rules): the look the site is in, the status
-line, the heading with one short line under it, the product types as tiles
-(chips in the classic look), two switches, then each product as the look's
-own compact row or card, with one green line saying how far under its 30-day
-average it is ("16% under 30-day average", or "Lowest recorded price" for one
-listed for that alone). The switches are plain forms: Biggest £ saving first
-(`?sort=pounds`; the list is biggest % first without it) and Lowest recorded
-only (`?lowest=on`). A type is `?type=`. A filtered address keeps the page's
-own canonical. The hub shows the top 60, a game's page the top 120, and the
-hub links each published game's page under its heading.
+The pages are list pages like a game's, built from the shared parts (see
+Layout rules), and made to sell (the owner, 27 Nov 2026, of a page that led
+with a paragraph, a line of links and small rows: "just a load of ... text
+and tiny products"). From the top:
+
+- the look the site is in and its status line;
+- the seasonal banner as the page's own head (`bf-banner--lead`): a short
+  line saying whether the weekend is on, the heading, and the page's real
+  figures as three blocks: how many genuine drops, the biggest drop in
+  percent and the biggest saving in pounds, each against the product's own
+  30-day average (`black_friday.headline`, from the deals before the page's
+  filters; no query, and none shown when there are no deals);
+- shortcuts as chips: each published game's own page with its count (the
+  hub only), the product types as tiles (chips in the classic look), then
+  price bands for a budget (`?price=under-25`, `25-50`, `50-100`,
+  `over-100`; only the bands that hold a deal, each with its count);
+- two switches, plain forms: Biggest £ saving first (`?sort=pounds`; the
+  list is biggest % first without it) and Lowest recorded only
+  (`?lowest=on`). A type is `?type=`. A filtered address keeps the page's
+  own canonical;
+- the products as picture tiles (`crows crows--tiles`: the shared compact
+  row, drawn two across a phone with the first the width of the screen,
+  three across a tablet, the desktop grid's cards from 64rem, and rows again
+  with List chosen). Each has a green badge on its picture ("−16%", or
+  "Lowest yet" for one listed for that alone) and one green line with the
+  saving in pounds ("£5.83 under 30-day average"). The classic look shows
+  the usual cards;
+- then the words: How these deals are chosen (the introduction and the
+  dates), the questions and the figures.
+
+The hub shows the top 60, a game's page the top 120, and says so under the
+list when there are more.
 
 Under the questions, the figures behind each drop are a table like the UK
 prices pages' (`price-table`, with `price-table--wide` so it stays labelled

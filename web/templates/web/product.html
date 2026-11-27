@@ -50,7 +50,7 @@
       </a>
       {% with code=cheapest.retailer.discount %}{% if code %}<p class="buybox__code">{% include "web/includes/discount_code.html" %}</p>{% endif %}{% endwith %}
       {% if cheapest.seller_name or cheapest.seller_feedback is not None %}<p class="buybox__seller">{% include "web/includes/ebay_seller.html" with listing=cheapest %}{% if cheapest.seller_note %}<span aria-hidden="true"> · </span><span class="visually-hidden">, </span>{{ cheapest.get_seller_note_display }}{% endif %}</p>{% endif %}
-      {% if cheapest.retailer.shop_mark %}<p class="buybox__seller">{% include "web/includes/shop_trust.html" with retailer=cheapest.retailer %}</p>{% endif %}
+      {% if cheapest.retailer.shop_mark %}<p class="buybox__seller">{% include "web/includes/shop_trust.html" with retailer=cheapest.retailer place="buy" %}</p>{% endif %}
       </div>
     {% elif has_listings %}
       <p class="buybox__none">{% copy "product.out_of_stock.message" %}</p>

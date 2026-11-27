@@ -4,6 +4,9 @@ price on a product page and under Buy now, with the owner's reason and a link to
 showing the labels: "build it". The rule that keeps a shop marked Caution out of the deals is tested where the deals
 are (catalogue/tests_shop_trust.py, tests_black_friday.py, tests_story_deals.py, tests_askrip.py)."""
 
+from pathlib import Path
+
+from django.conf import settings
 from django.core.cache import cache
 from django.db import connection
 from django.test import TestCase
@@ -42,19 +45,30 @@ class ProductPageTests(TestCase):
         shop_check.confirm(self.kestrel, "new", "Too few public reviews for us to say yet.", REVIEWS)
         html = self.page()
         # (The promise lower down the page names the labels in a sentence: only the labels themselves are looked for.)
-        for words in ("<strong>Shop checked</strong>", "<strong>Caution</strong>", "offer__trust", "How we label shops",
+        for words in ("shop-badge", "<strong>Caution</strong>", "offer__trust", "offer__mark", "How we label shops",
                       REVIEWS, "Too few public reviews"):
             self.assertNotIn(words, html)
 
-    def test_a_checked_shop_says_so_on_its_row_and_under_buy_now_with_its_reviews(self):
+    BADGE = ('<span class="shop-badge"><svg class="shop-badge__tick" viewBox="0 0 16 16" aria-hidden="true" '
+             'focusable="false"><path d="M3.5 8.5l3 3 6-7" fill="none" stroke="currentColor" stroke-width="2" '
+             'stroke-linecap="round" stroke-linejoin="round"/></svg>Shop checked</span>')
+
+    def test_a_checked_shop_has_a_badge_beside_its_name_and_under_buy_now_with_its_reviews(self):
+        """The owner, 27 Nov 2026: "Could the shop checked be more visible?", choosing an outlined badge with a tick
+        beside the shop's name, and under Buy now a line saying what it means."""
         shop_check.confirm(self.harbour, "checked", "Mostly positive public reviews over several years.", REVIEWS)
         html = self.page()
         link = (f'<a href="{REVIEWS}" target="_blank" rel="nofollow noopener noreferrer">Reviews'
                 '<span class="visually-hidden"> of Harbour Games (opens in a new tab)</span></a>')
-        mark = ('<strong>Shop checked</strong><span aria-hidden="true"> · </span><span class="visually-hidden">. </span>'
-                + link)
-        self.assertIn(f'<span class="offer__trust">{mark}</span>', self.row(html, self.harbour))
-        self.assertIn(f'<p class="buybox__seller">{mark}</p>', html)         # Harbour Games is the cheapest
+        then = '<span aria-hidden="true"> · </span><span class="visually-hidden">. </span>' + link
+        row = self.row(html, self.harbour)
+        # Beside the name and the Cheapest flag, on the same line: not a line of small text of its own.
+        self.assertIn(f'<span class="offer__mark">{self.BADGE}{then}</span>', row)
+        self.assertLess(row.index('class="offer__flag"'), row.index('class="offer__mark"'))
+        self.assertNotIn("offer__trust", row)
+        # Under Buy now (Harbour Games is the cheapest), with what it means.
+        self.assertIn(f'<p class="buybox__seller">{self.BADGE} <span class="visually-hidden">: </span>'
+                      f"We&#x27;ve read its public reviews{then}</p>", html)
         # The reason he gave is his own record of a good shop: only a Caution's is shown.
         self.assertNotIn("Mostly positive public reviews", html)
         # What the labels mean, once, with the way to the terms.
@@ -62,14 +76,23 @@ class ProductPageTests(TestCase):
         self.assertIn(f'<p class="restock-note">{NOTE} <a href="/terms/#terms-shops">How we label shops</a></p>', html)
         # The other shops' rows are as they were.
         for shop in (self.kestrel, self.moor):
-            self.assertNotIn("offer__trust", self.row(html, shop))
+            self.assertNotIn("shop-badge", self.row(html, shop))
         # A review site is not a shop we send buyers to: its link is never a counted or a sponsored one.
         self.assertNotIn("sponsored", link)
 
-    def test_a_checked_shop_with_no_link_shows_the_mark_alone(self):
+    def test_the_badge_is_outlined_and_neutral_so_green_stays_for_prices(self):
+        css = (Path(settings.BASE_DIR) / "web" / "static" / "css" / "site.css").read_text()
+        rule = css[css.index(".shop-badge {"):]
+        rule = rule[:rule.index("}")]
+        self.assertIn("border: var(--border-width) solid var(--color-ink-muted);", rule)
+        self.assertIn("color: var(--color-ink);", rule)
+        self.assertNotIn("--color-price", rule)
+        self.assertNotIn("background", rule)
+
+    def test_a_checked_shop_with_no_link_shows_the_badge_alone(self):
         shop_check.confirm(self.kestrel, "checked", "Long-established shop with no pattern of complaints.", "")
         row = self.row(self.page(), self.kestrel)
-        self.assertIn('<span class="offer__trust"><strong>Shop checked</strong></span>', row)
+        self.assertIn(f'<span class="offer__mark">{self.BADGE}</span>', row)
         self.assertNotIn("Reviews", row)
 
     def test_a_caution_shows_the_owners_reason_and_the_reviews(self):
@@ -111,7 +134,7 @@ class ProductPageTests(TestCase):
         shop_check.confirm(self.kestrel, "caution", "Mostly negative public reviews.", REVIEWS)
         with CaptureQueriesContext(connection) as labelled:
             html = self.page()
-        self.assertIn("Shop checked", html)
+        self.assertIn("shop-badge", html)
         self.assertEqual(len(labelled), len(plain))
 
 

@@ -2568,6 +2568,8 @@ ENTRIES = [
     Entry("product.shop.checked", T, "Shop label: checked", "Shop checked",
           "Beside a shop's price on a product page, and under Buy now when it is the cheapest, for a shop you "
           "confirmed as Checked at Admin, Shop check. Worded apart from the price's own \"checked 2 hours ago\"."),
+    Entry("product.shop.checked_line", T, "Shop label: checked, what it means", "We've read its public reviews",
+          "Under Buy now, after the Shop checked badge, when the cheapest shop is one you confirmed as Checked."),
     Entry("product.shop.caution", T, "Shop label: caution", "Caution",
           "Beside a shop's price on a product page for a shop you confirmed as Caution at Admin, Shop check. Your own "
           "reason for it follows."),

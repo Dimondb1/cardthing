@@ -3432,6 +3432,12 @@ li + li > .checker__option { border-top: var(--border-width) solid var(--color-l
    picture in a well the width of the tile, the badge on its corner, then the name, the list's line, the shop and
    the price. On a phone the first tile is the width of the screen, its picture larger: the list's best. On a desktop
    screen they are the desktop grid's cards, as every list's rows are; with List chosen they are rows again. */
+/* A badge and a line that name no saving are plain: green is for a saving (a product in a shop's own sale that our
+   price record does not confirm, on the Black Friday pages). And a list whose every product is checked shows the
+   Price check on a phone too (crows--checked), where a list keeps it for Best for ripping. */
+.crow__badge--plain { background: var(--color-shelf); color: var(--color-ink-muted); font-weight: var(--weight-strong); box-shadow: inset 0 0 0 var(--border-width) var(--color-line-strong); }
+.crow__note--plain { font-weight: var(--weight-body); color: var(--color-ink-muted); }
+.crows--checked .crow__check--desk { display: flex; }
 html:not(.view-list) .crows--tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); margin-top: var(--space-2); }
 html:not(.view-list) .crows--tiles .crow { position: relative; min-width: 0; }
 html:not(.view-list) .crows--tiles .crow__link { display: flex; flex-direction: column; align-items: stretch; gap: 0; height: 100%; padding: 0; overflow: hidden; }

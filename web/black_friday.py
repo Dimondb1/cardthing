@@ -38,6 +38,12 @@ pounds. The words come after the products: how the deals are chosen (the introdu
 and the figures behind each (the 30-day average, the 7 and 30-day changes, the lowest recorded, the next shop, shops
 in stock, when checked) as a table like the UK prices pages' (price-table).
 
+Shops' own sales. On the sale's days the readers note which products a shop has put in its own Black Friday sale
+(catalogue/sale_days.py, importers.sale_handles and says_sale, Listing.shop_sale). The page lists them in a section
+of their own under the deals, each with what the price record says of it (sale_verdict): a real drop, cheaper at
+another shop, no real drop, or too new to check. A shop's label is never taken for a saving, and green is only for a
+real drop. The owner, 27 Nov 2026: "New section, each one checked".
+
 Queries: the deals (one, plus one for the shops' offers of those shown, one for the cheapest shop of each, and one for
 the questions' booster box figures) and the look's own (its numbers and games, kept). The head's figures, the games
 and the price bands are counted from the deals already read. Pages are kept like any list page (web.pagecache), and
@@ -60,7 +66,8 @@ from django.utils.formats import date_format
 from django.views.decorators.http import require_GET
 
 from catalogue import fair_price, offers
-from catalogue.models import DailyLowestPrice, Game, Product, Retailer
+from catalogue.sale_days import SEASON_FROM, black_friday, cyber_monday
+from catalogue.models import DailyLowestPrice, Game, Listing, Product, Retailer
 from catalogue.pricing import MARKETPLACES, doubtful_low
 from catalogue.types import DEFAULT as DEFAULT_TYPES, GAME_TYPES, plural_words, type_label
 
@@ -73,7 +80,6 @@ DROP = fair_price.GOOD                     # 5%: under the 30-day average by at 
 LEAST_SAVING = Decimal("0.50")             # and by at least this much money
 PUBLISH_LEAST = 3                          # deals a game's page needs to be indexed
 SHOWN = {None: 60, "game": 120}            # rows the hub and a game's page show
-SEASON_FROM = 14                           # the banner and the prominent links show this many days before
 BOX = "booster_box"
 QUESTION_GAME = "pokemon"                  # the hub's questions name this game, as the brief does
 TOP_SHOPS = 3
@@ -81,22 +87,17 @@ PENCE = Decimal("0.01")
 GOOD_BANDS = (fair_price.GOOD_PRICE, fair_price.LOWEST)
 ON_RECORD = (fair_price.RECORD, fair_price.BOTH)
 
+SALE_MOST = 300                            # products in shops' own sales read for a page, beyond its genuine drops
+SALE_SHOWN = 24                            # and how many of them it shows
+# What the price record says of a product a shop has put in its own Black Friday sale (sale_verdict).
+REAL, ELSEWHERE, LEVEL, UNKNOWN = "real", "elsewhere", "level", "unknown"
+SALE_ORDER = (REAL, ELSEWHERE, LEVEL, UNKNOWN)
+
 POUNDS = "pounds"                          # ?sort=pounds: biggest saving in pounds first; else biggest % first
 LOWEST = "lowest"                          # ?lowest=on: only the products at the lowest price we have recorded
 # ?price=under-25: today's delivered price in a band, for a buyer with a budget. (code, from, under) in pounds: a
 # price belongs to the band it is at least ``from`` and under ``under``.
 BANDS = (("under-25", None, 25), ("25-50", 25, 50), ("50-100", 50, 100), ("over-100", 100, None))
-
-
-def black_friday(year):
-    """Black Friday of ``year``: the day after the fourth Thursday of November."""
-    first = date(year, 11, 1)
-    thursday = first + timedelta(days=(3 - first.weekday()) % 7)
-    return thursday + timedelta(weeks=3, days=1)
-
-
-def cyber_monday(year):
-    return black_friday(year) + timedelta(days=3)
 
 
 @dataclass
@@ -245,15 +246,99 @@ def chosen_rows(every, kind="", sort="", lowest=False, band=None):
     return rows
 
 
+@dataclass
+class SaleItem:
+    """A product a shop has put in its own Black Friday sale, and what our price record says of it."""
+    product: Product          # with its buyable offers (``offers``)
+    shop: str                 # the shop whose sale it is in: the cheapest of them, when several
+    price: Decimal            # that shop's delivered price
+    verdict: str              # REAL, ELSEWHERE, LEVEL or UNKNOWN
+    percent: int = 0          # how far today's price is under the 30-day average, in whole percent (under is positive)
+    saving: Decimal | None = None    # REAL: the same in pounds
+    lowest: bool = False      # REAL: listed for being at its lowest recorded, not for a clear fall on the month
+    gap: Decimal | None = None       # ELSEWHERE: how much less the cheapest shop charges
+
+
+def sale_verdict(product, offer, drop, average):
+    """A SaleItem for ``product``, in ``offer``'s shop's sale. ``drop`` is the product's row among the page's genuine
+    drops, or None; ``average`` its 30-day average with enough days behind it, or None.
+
+    - ELSEWHERE: another shop has it in stock for less, delivered. The sale price is not the price to pay.
+    - REAL: the sale price is today's cheapest and the product is a genuine drop by the page's own rules.
+    - LEVEL: today's cheapest, but no genuine drop: about its 30-day average, over it, or under it without the Price
+      check calling it a good price (a price raised and then cut).
+    - UNKNOWN: too few days of prices to say."""
+    best = product.offers[0]
+    item = SaleItem(product, offer.retailer.name, offer.delivered_price, UNKNOWN)
+    if best.delivery_known and best.availability == Listing.Availability.IN_STOCK \
+            and best.delivered_price < offer.delivered_price:
+        item.verdict, item.gap = ELSEWHERE, offer.delivered_price - best.delivered_price
+    elif drop is not None and drop.lowest_known == offer.delivered_price:
+        item.verdict = REAL
+        item.saving, item.percent = saved(drop)
+        item.lowest = item.percent < int(DROP * 100)
+    elif average:
+        item.verdict = LEVEL
+        gap = pounds(average) - offer.delivered_price
+        item.percent = percent(abs(gap), pounds(average)) * (1 if gap >= 0 else -1)
+    return item
+
+
+def sale_items(game, every, now=None, today=None):
+    """([SaleItem], how many products are in a sale) for the products a UK shop has put in its own Black Friday sale
+    and has in stock now (the readers mark them: Listing.shop_sale, importers.sale_handles), each with what the
+    price record says of it; the real drops first, biggest first, then those cheaper elsewhere, then the rest.
+    ``every`` is the page's genuine drops. A shop's label is never taken for a saving: the owner, 27 Nov 2026, chose
+    "each one checked". Every product in a sale that is a genuine drop is read, so the count of real drops is whole,
+    and up to SALE_MOST of the others (a shop may put its whole range in its sale). Four queries; one when no shop
+    has such a sale."""
+    now = now or timezone.now()
+    today = today or timezone.localdate()
+    marked = (Product.objects.for_lists().in_stock()
+              .filter(listings__shop_sale=Listing.Sale.BLACK_FRIDAY,
+                      listings__shop_sale_at__gt=now - Listing.SALE_FRESH,
+                      listings__is_active=True, listings__availability=Listing.Availability.IN_STOCK))
+    if game is not None:
+        marked = marked.filter(game=game)
+    ids = [pk for pk, _name in marked.order_by("name").values_list("pk", "name").distinct()]
+    if not ids:
+        return [], 0
+    drops = {row.pk: row for row in every}
+    others = [pk for pk in ids if pk not in drops][:SALE_MOST]
+    products = list(Product.objects.for_lists().filter(pk__in=[pk for pk in ids if pk in drops] + others)
+                    .prefetch_related(offers.buyable_prefetch()))
+    month = (DailyLowestPrice.objects.order_by()
+             .filter(product__in=[product.pk for product in products], date__lt=today,
+                     date__gte=today - timedelta(days=MONTH))
+             .values("product").annotate(average=Avg("price"), days=Count("pk")))
+    averages = {row["product"]: row["average"] for row in month if row["days"] >= MONTH_LEAST}
+    found = []
+    for product in products:
+        # The shop's own offer, in stock at a delivered price we know; the cheapest when two shops have it in a sale.
+        offer = next((each for each in product.offers if each.in_sale(now) and each.delivery_known
+                      and each.availability == Listing.Availability.IN_STOCK
+                      and each.sanity != Listing.Sanity.DOUBTFUL), None)
+        if offer is not None:
+            found.append(sale_verdict(product, offer, drops.get(product.pk), averages.get(product.pk)))
+    found.sort(key=lambda item: (SALE_ORDER.index(item.verdict), -item.percent if item.verdict == REAL else 0,
+                                 -(item.gap or 0), item.product.name))
+    return found, len(ids)
+
+
 def gathered(game=None):
     """What every view of a page shares, whatever is chosen on it: its deals (``every``), the game its questions are
-    about, the shops with the most of its deals and that game's booster box figures. Four queries."""
+    about, the shops with the most of its deals, that game's booster box figures, and while the season shows the
+    products in shops' own Black Friday sales (``sales``: the first SALE_SHOWN, how many there are and how many are
+    real drops). Four queries, and up to four for the sales."""
     every = list(deal_rows(game=game))              # the page's deals before its own filters, biggest % first
     # The questions: about the page's game, or on the hub about Pokémon.
     asked = game or next((row.game for row in every if row.game.slug == QUESTION_GAME), None) \
         or Game.objects.filter(slug=QUESTION_GAME, is_active=True).first()
+    items, marked = sale_items(game, every, today=local_today()) if season().showing else ([], 0)
     return {"every": every, "asked": asked, "shops": top_shops(every),
-            "boxes": box_figures(asked) if asked is not None else None}
+            "boxes": box_figures(asked) if asked is not None else None,
+            "sales": {"items": items[:SALE_SHOWN], "count": marked,
+                      "real": sum(1 for item in items if item.verdict == REAL)}}
 
 
 def shared(game=None, fresh=False):
@@ -455,6 +540,33 @@ def season_line(words, when):
                  monday=week_day(when.monday))
 
 
+def sale_rows(words, sales):
+    """The products in shops' own sales, ready to show: each with its badge and its one line saying whose sale it is
+    in and what the price record says of it. Green only for a real drop; every other verdict is plain."""
+    rows = []
+    for item in sales["items"]:
+        product = item.product
+        product.summary = offers.summarise(product)
+        product.row_plain = item.verdict != REAL
+        if item.verdict == REAL:
+            product.row_badge = (words("blackfriday.row.badge_low") if item.lowest
+                                 else words("blackfriday.row.badge", percent=item.percent))
+            product.row_note = words("blackfriday.sale.real", shop=item.shop)
+        elif item.verdict == ELSEWHERE:
+            product.row_badge = words("blackfriday.sale.badge_elsewhere")
+            product.row_note = words("blackfriday.sale.elsewhere", shop=item.shop, price=hubs.money(item.price))
+        elif item.verdict == LEVEL:
+            product.row_badge = words("blackfriday.sale.badge_level")
+            key = ("blackfriday.sale.under" if item.percent >= int(DROP * 100)
+                   else "blackfriday.sale.over" if item.percent <= -int(DROP * 100) else "blackfriday.sale.level")
+            product.row_note = words(key, shop=item.shop)
+        else:
+            product.row_badge = words("blackfriday.sale.badge_unknown")
+            product.row_note = words("blackfriday.sale.unknown", shop=item.shop)
+        rows.append((product, product.summary))
+    return rows
+
+
 def hero_line(words, when):
     """The short line over the heading: whether the weekend is on, coming or over."""
     if when.state == "after":
@@ -645,6 +757,8 @@ def page(request, game=None):
         "kinds": kinds, "kind": kind, "pounds_on": sort == POUNDS, "lowest_on": lowest, "keep": keep, "price": price,
         "checked": checked, "games": games, "bands": band_links(request, path, narrowed, price, words),
         "most_percent": most_percent, "most_pounds": most_pounds, "hero_line": hero_line(words, when),
+        "sale_rows": sale_rows(words, held["sales"]), "sale_count": held["sales"]["count"],
+        "sale_real": held["sales"]["real"],
         "questions": questions, "season_line": season_line(words, when), "heading": heading, "intro": intro,
         "path": path, "crumbs": crumbs,
         "meta_title": title, "meta_description": hubs.fit_description(description),

@@ -799,6 +799,248 @@ class FastChoiceTests(PageCase):
         self.assertEqual(pagecache.event_paths(), [])          # pages not kept: nothing to warm
 
 
+class ShopSaleTests(PageCase):
+    """What shops themselves call Black Friday deals, each checked. The owner, 27 Nov 2026: "Can also the crawlers look
+    for any black Friday deals in their searches that could show up here in best offers from retailers", and of how to
+    show them: "New section, each one checked". The readers mark a listing in its shop's own sale
+    (catalogue/tests_shop_sale.py); here each is set against the price record, and a shop's label is never taken for a
+    saving."""
+
+    wear = LookTests.wear
+
+    def mark(self, product, shop, at=None):
+        Listing.objects.filter(product=product, retailer=shop).update(
+            shop_sale=Listing.Sale.BLACK_FRIDAY, shop_sale_at=at or timezone.now())
+
+    def items(self, game=None):
+        return black_friday.sale_items(game, self.deals())[0]
+
+    def test_a_real_drop_in_the_sale_of_the_shop_that_is_cheapest(self):
+        self.mark(self.box, self.harbour)
+        (item,) = self.items()
+        self.assertEqual((item.product, item.shop, item.price), (self.box, "Harbour Games", Decimal("90.00")))
+        self.assertEqual((item.verdict, item.percent, item.saving, item.lowest),
+                         (black_friday.REAL, 10, Decimal("10.00"), False))
+
+    def test_a_sale_price_another_shop_beats_is_cheaper_elsewhere_whatever_the_drop(self):
+        self.mark(self.box, self.kestrel)                # Kestrel's £110, in its sale; Harbour has it for £90
+        (item,) = self.items()
+        self.assertEqual((item.shop, item.price), ("Kestrel Cards", Decimal("110.00")))
+        self.assertEqual((item.verdict, item.gap), (black_friday.ELSEWHERE, Decimal("20.00")))
+
+    def test_the_cheapest_price_that_is_no_drop_is_level_over_or_under_its_average(self):
+        level = self.product("Journey Together Booster Box", "100.00", history=steady("100.00"))
+        over = self.product("Paldean Fates Booster Bundle", "33.00", others=("40.00",), history=steady("30.00"),
+                            kind="bundle")
+        # Under its month's average, but the Price check does not call it a good price: raised, then cut.
+        cut = self.product("Temporal Forces Booster Box", "92.00", history=steady("100.00"))
+        self.bands()
+        Product.objects.filter(pk=cut.pk).update(price_band=fair_price.FAIR)
+        for product in (level, over, cut):
+            self.mark(product, self.harbour)
+        found = {item.product: item for item in self.items()}
+        self.assertEqual({item.verdict for item in found.values()}, {black_friday.LEVEL})
+        self.assertEqual((found[level].percent, found[over].percent, found[cut].percent), (0, -10, 8))
+        self.assertNotIn(cut, self.deals())
+
+    def test_too_few_days_of_prices_is_not_judged(self):
+        new = self.product("Destined Rivals Booster Box", "120.00", others=("135.00",),
+                           history=steady("130.00", days=5))
+        self.bands()
+        self.mark(new, self.harbour)
+        (item,) = self.items()
+        self.assertEqual((item.verdict, item.percent), (black_friday.UNKNOWN, 0))
+
+    def test_only_a_mark_found_lately_on_stock_anyone_can_buy_counts(self):
+        self.mark(self.box, self.harbour, timezone.now() - Listing.SALE_FRESH - timedelta(minutes=1))
+        self.assertEqual(self.items(), [])                                   # stale: the shop took it out of its sale
+        self.mark(self.box, self.harbour)
+        self.assertEqual(len(self.items()), 1)
+        Listing.objects.filter(product=self.box, retailer=self.harbour).update(sanity=Listing.Sanity.DOUBTFUL)
+        self.assertEqual(self.items(), [])                                   # a doubtful price may not be this product
+        Listing.objects.filter(product=self.box, retailer=self.harbour).update(
+            sanity=Listing.Sanity.OK, availability=Listing.Availability.OUT_OF_STOCK)
+        self.assertEqual(self.items(), [])                                   # sold out in that shop
+        self.mark(self.etb, self.harbour)
+        lorcana = make_game(name="Disney Lorcana", slug="lorcana")
+        self.assertEqual([item.product for item in self.items(self.pokemon)], [self.etb])
+        self.assertEqual(self.items(lorcana), [])
+
+    def test_real_drops_come_first_biggest_first_then_cheaper_elsewhere_then_the_rest(self):
+        level = self.product("Journey Together Booster Box", "100.00", history=steady("100.00"))
+        new = self.product("Destined Rivals Booster Box", "120.00", others=("135.00",),
+                           history=steady("130.00", days=5))
+        self.bands()
+        self.mark(self.bundle, self.kestrel)             # £33 against Harbour's £27
+        for product in (new, level, self.box, self.etb):
+            self.mark(product, self.harbour)
+        self.assertEqual([(item.product, item.verdict) for item in self.items()], [
+            (self.etb, black_friday.REAL), (self.box, black_friday.REAL), (self.bundle, black_friday.ELSEWHERE),
+            (level, black_friday.LEVEL), (new, black_friday.UNKNOWN)])
+
+    def test_the_section_lists_each_with_its_verdict_and_green_only_for_a_real_drop(self):
+        level = self.product("Journey Together Booster Box", "100.00", history=steady("100.00"))
+        self.bands()
+        self.mark(self.box, self.harbour)
+        self.mark(self.bundle, self.kestrel)
+        self.mark(level, self.harbour)
+        self.wear(compact=True)
+        html = self.html("/black-friday/")
+        start = html.index('<section id="bf-sales" class="cx-section" aria-labelledby="bf-sales-title">')
+        section = html[start:html.index("</section>", start)]
+        self.assertIn('<h2 id="bf-sales-title" class="cx-section__title">In shops&#x27; own Black Friday sales</h2>',
+                      section)
+        self.assertIn("Products a shop has put in its own Black Friday sale, each checked against our price record. A "
+                      "sale label alone is not a saving. In a shop&#x27;s sale now: 3. Confirmed as a real drop by our "
+                      "price record: 1.", section)
+        self.assertIn('<ul class="crows crows--tiles crows--checked" aria-labelledby="bf-sales-title">', section)
+        self.assertEqual(section.count('<li class="crow">'), 3)
+        # A real drop: the page's own green badge, and whose sale it is in.
+        self.assertIn('<span class="crow__badge">\u221210%</span>', section)
+        self.assertIn('<span class="crow__note">A real drop, in the sale at Harbour Games</span>', section)
+        # Every other verdict is plain: no green where there is no saving.
+        self.assertIn('<span class="crow__badge crow__badge--plain">Cheaper elsewhere</span>', section)
+        self.assertIn('<span class="crow__note crow__note--plain">The sale price at Kestrel Cards is £33.00 delivered</span>',
+                      section)
+        self.assertIn('<span class="crow__badge crow__badge--plain">No real drop</span>', section)
+        self.assertIn('<span class="crow__note crow__note--plain">In the sale at Harbour Games, at about its 30-day '
+                      "average</span>", section)
+        self.assertNotIn("Showing", section)
+        # The tile of the one that is cheaper elsewhere shows the cheaper shop's price, as every tile does.
+        tile = section[section.index(self.bundle.get_absolute_url()):]
+        tile = tile[:tile.index("</li>")]
+        self.assertIn("£27.00", tile)
+        self.assertIn("Harbour Games", tile)
+        # It comes after the deals and before the words, and the head links to it.
+        self.assertLess(html.index('<ul class="crows crows--tiles" aria-labelledby="bf-list-title">'), start)
+        self.assertLess(start, html.index("How these deals are chosen"))
+        self.assertIn('<a href="#bf-sales">See what is in shops&#x27; own sales (3)</a>', html[:start])
+        # The page's own list is still its three deals: a shop's label adds none.
+        self.assertIn("3 genuine price drops", html)
+        self.assertNotIn("bf-sales", html[html.index("<div data-browse>"):start])
+
+    def test_the_other_verdicts_words(self):
+        over = self.product("Paldean Fates Booster Bundle", "33.00", others=("40.00",), history=steady("30.00"),
+                            kind="bundle")
+        cut = self.product("Temporal Forces Booster Box", "92.00", history=steady("100.00"))
+        new = self.product("Destined Rivals Booster Box", "120.00", others=("135.00",),
+                           history=steady("130.00", days=5))
+        self.bands()
+        Product.objects.filter(pk=cut.pk).update(price_band=fair_price.FAIR)
+        tin = self.product("Surging Sparks Tin", "54.00", others=("58.00",), kind="tin",
+                           history={**steady("55.00", days=30), **steady("62.00", days=60, start=31), 45: "54.00"})
+        self.bands()
+        Product.objects.filter(pk=cut.pk).update(price_band=fair_price.FAIR)
+        for product in (over, cut, new, tin):
+            self.mark(product, self.harbour)
+        self.wear(compact=True)
+        html = self.html("/black-friday/")
+        for words in ('<span class="crow__note crow__note--plain">In the sale at Harbour Games, above its 30-day average</span>',
+                      '<span class="crow__note crow__note--plain">In the sale at Harbour Games. Under its 30-day average, '
+                      "but not a good price on our Price check</span>",
+                      '<span class="crow__badge crow__badge--plain">Too new to check</span>',
+                      '<span class="crow__note crow__note--plain">In the sale at Harbour Games. Too few days on our record '
+                      "to check</span>",
+                      # At its lowest recorded, with no clear fall on the month: a real one, said as the page says it.
+                      '<span class="crow__badge">Lowest yet</span>'):
+            with self.subTest(words=words):
+                self.assertIn(words, html)
+
+    def test_no_section_without_a_sale_or_out_of_season_and_a_game_has_its_own(self):
+        self.wear(compact=True)
+        self.assertNotIn("bf-sales", self.html("/black-friday/"))
+        self.mark(self.box, self.harbour)
+        cache.clear()
+        self.wear(compact=True)
+        self.assertIn('id="bf-sales"', self.html("/black-friday/"))
+        self.assertIn('id="bf-sales"', self.html("/black-friday/pokemon/"))
+        lorcana = make_game(name="Disney Lorcana", slug="lorcana")
+        make_set(lorcana, name="Fabled", slug="fabled")
+        self.assertNotIn("bf-sales", self.html("/black-friday/lorcana/"))
+        cache.clear()
+        self.wear(compact=True)
+        with mock.patch("web.black_friday.local_today", return_value=date(2026, 12, 3)), \
+                mock.patch.object(black_friday, "sale_items") as asked:
+            self.assertNotIn("bf-sales", self.html("/black-friday/"))
+        asked.assert_not_called()
+
+    def test_every_real_drop_is_read_however_many_others_a_shop_puts_in_its_sale(self):
+        level = self.product("Journey Together Booster Box", "100.00", history=steady("100.00"))
+        other = self.product("Paldean Fates Booster Box", "100.00", history=steady("100.00"))
+        self.bands()
+        for product in (level, other, self.box, self.etb):
+            self.mark(product, self.harbour)
+        with mock.patch.object(black_friday, "SALE_MOST", 1):
+            items, marked = black_friday.sale_items(None, self.deals())
+        self.assertEqual(marked, 4)                                 # how many are in a sale, whatever is read
+        self.assertEqual([item.product for item in items if item.verdict == black_friday.REAL], [self.etb, self.box])
+        self.assertEqual(len(items), 3)                             # both real drops, and one of the others
+        self.assertEqual(black_friday.sale_items(make_game(name="Disney Lorcana", slug="lorcana"), []), ([], 0))
+
+    def test_more_than_the_page_shows_is_said(self):
+        self.mark(self.box, self.harbour)
+        self.mark(self.etb, self.harbour)
+        self.mark(self.bundle, self.harbour)
+        self.wear(compact=True)
+        with mock.patch.object(black_friday, "SALE_SHOWN", 2):
+            html = self.html("/black-friday/")
+        section = html[html.index('<section id="bf-sales"'):]
+        section = section[:section.index("</section>")]
+        self.assertEqual(section.count('<li class="crow">'), 2)
+        self.assertIn("In a shop&#x27;s sale now: 3. Confirmed as a real drop by our price record: 3.", section)
+        self.assertIn('<p class="section-head__note">Showing 2 of 3.</p>', section)
+
+    def test_the_classic_look_shows_them_as_cards(self):
+        self.mark(self.box, self.kestrel)
+        self.wear()
+        html = self.html("/black-friday/")
+        section = html[html.index('<section id="bf-sales" class="block"'):]
+        section = section[:section.index("</section>")]
+        self.assertEqual(section.count('<li class="card">'), 1)
+        self.assertIn("The sale price at Kestrel Cards is £110.00 delivered", section)
+
+    @override_settings(RIPRAPTOR_PAGE_CACHE_SECONDS=300)
+    def test_kept_with_the_pages_deals_so_a_choice_reads_none_of_it_again(self):
+        self.mark(self.box, self.harbour)
+        self.wear(compact=True)
+        self.html("/black-friday/")
+        with CaptureQueriesContext(connection) as found:
+            html = self.html("/black-friday/", sort="pounds")
+        self.assertIn('<span class="crow__note">A real drop, in the sale at Harbour Games</span>', html)
+        self.assertEqual([q["sql"] for q in found if "shop_sale" in q["sql"] and "WHERE" in q["sql"]
+                          and '"catalogue_product"' in q["sql"].split("FROM")[1].split("WHERE")[0]], [])
+        self.assertLessEqual(len(found), 4)
+
+    def test_the_queries_do_not_grow_with_the_sale(self):
+        self.wear(compact=True)
+        self.mark(self.box, self.harbour)
+
+        def queries():
+            from web import look
+
+            cache.clear()
+            look.remember()
+            with CaptureQueriesContext(connection) as found:
+                self.html("/black-friday/")
+            return len(found)
+
+        one = queries()
+        self.mark(self.etb, self.harbour)
+        self.mark(self.bundle, self.kestrel)
+        self.assertEqual(queries(), one)
+
+    def test_plain_badges_and_lines_and_the_price_check_on_a_checked_list(self):
+        css = (Path(__file__).resolve().parent / "static/css/site.css").read_text()
+        plain = css[css.index(".crow__badge--plain {"):css.index("}", css.index(".crow__badge--plain {"))]
+        self.assertIn("background: var(--color-shelf); color: var(--color-ink-muted);", plain)
+        self.assertNotIn("--color-price", plain)
+        self.assertIn(".crow__note--plain { font-weight: var(--weight-body); color: var(--color-ink-muted); }", css)
+        self.assertIn(".crows--checked .crow__check--desk { display: flex; }", css)
+        row = (Path(__file__).resolve().parent / "templates/web/includes/compact_row.html").read_text()
+        self.assertIn('class="crow__badge{% if product.row_plain %} crow__badge--plain{% endif %}"', row)
+        self.assertIn('class="crow__note{% if product.row_plain %} crow__note--plain{% endif %}"', row)
+
+
 class DesktopTests(PageCase):
     """On a desktop screen (the owner's brief of 26 Nov 2026): the same steps as a game's list, numbered for the steps it
     has, and the questions as folds, sent open so a phone, a search engine and a page without script read every answer."""

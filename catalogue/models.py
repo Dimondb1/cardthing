@@ -943,6 +943,14 @@ class Listing(models.Model):
         COLLECTION = "collection", "Collection only"
         CLOSED = "closed", "Draw closed"
 
+    class Sale(models.TextChoices):
+        """A sale of the shop's own that a listing is in (catalogue/sale_days.py)."""
+        BLACK_FRIDAY = "black_friday", "Black Friday"
+
+    # A mark found by a read this long ago or longer is stale: the shop has taken the product out of its sale, or the
+    # sale is over. Shops are read at least hourly and a mark is stamped again every importers.SALE_STAMP.
+    SALE_FRESH = timedelta(hours=24)
+
     class Sanity(models.TextChoices):
         OK = "ok", "OK"
         DOUBTFUL = "doubtful", "Doubtful"
@@ -1053,6 +1061,16 @@ class Listing(models.Model):
         help_text="What the shop charges for the multi-buy quantity together, read from the shop.",
     )
 
+    # The shop's own sale this listing is in, as the shop itself marks it (its Black Friday collection, a tag or the
+    # product's name: importers.sale_handles, says_sale), and when a read last found it there. Looked for only on the
+    # days of that sale (catalogue/sale_days.py); a mark not found again lately is stale and counts for nothing
+    # (in_sale). It says the shop calls it a deal, never that it is one: the Black Friday pages check each against the
+    # price record. The owner, 27 Nov 2026: "Can also the crawlers look for any black Friday deals".
+    shop_sale = models.CharField(
+        "shop's own sale", max_length=20, blank=True, default="", choices=Sale.choices, editable=False,
+        help_text="The sale the shop itself has put this in, read from the shop.")
+    shop_sale_at = models.DateTimeField("last seen in the shop's sale", null=True, blank=True, editable=False)
+
     # The RRP or before-sale price the shop gives beside its price (Shopify's compare-at price, a schema.org
     # ListPrice, MSRP or SRP), from each read that carries it. Products take theirs from it (Product.shop_rrp).
     list_price = models.DecimalField(
@@ -1068,6 +1086,12 @@ class Listing(models.Model):
     )
 
     objects = ListingManager()
+
+    def in_sale(self, now=None):
+        """The shop's own sale this listing is in now (Sale), or "": a mark a read has found again lately."""
+        if not self.shop_sale or self.shop_sale_at is None:
+            return ""
+        return self.shop_sale if (now or timezone.now()) - self.shop_sale_at < self.SALE_FRESH else ""
 
     class Meta:
         ordering = ["delivered_price"]

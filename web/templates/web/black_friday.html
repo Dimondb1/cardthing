@@ -22,7 +22,7 @@
       {% if most_percent %}<li><strong class="bf-banner__figure">{{ most_percent }}%</strong> {% copy "blackfriday.hero.percent" %}</li>{% endif %}
       {% if most_pounds %}<li><strong class="bf-banner__figure">{{ most_pounds|gbp }}</strong> {% copy "blackfriday.hero.pounds" %}</li>{% endif %}
     </ul>{% endif %}
-    <p class="bf-banner__text">{% copy "blackfriday.slogan" %}{% if every %} {% copy "blackfriday.hero.basis" %}{% endif %}</p>
+    <p class="bf-banner__text">{% copy "blackfriday.slogan" %}{% if every %} {% copy "blackfriday.hero.basis" %}{% endif %}{% if sale_rows %} <a href="#bf-sales">{% copy "blackfriday.sale.jump" count=sale_count %}</a>{% endif %}</p>
   </div>
 </div>
 
@@ -83,6 +83,18 @@
 <p class="cx-empty">{% copy "blackfriday.empty" %}</p>
 {% endif %}
 </div>
+
+{% if sale_rows %}
+{# What shops themselves call Black Friday deals (the readers mark them: Listing.shop_sale), each with what our price record says of it. The same tiles, with the Price check on each; green only for a real drop. No choice above changes it. #}
+<section id="bf-sales" class="{% if compact %}cx-section{% else %}block{% endif %}" aria-labelledby="bf-sales-title">
+  <h2 id="bf-sales-title" class="{% if compact %}cx-section__title{% else %}section-title{% endif %}">{% copy "blackfriday.sale.title" %}</h2>
+  <p class="section-head__note">{% copy "blackfriday.sale.intro" %} {% copy "blackfriday.sale.count" count=sale_count real=sale_real %}</p>
+  <ul class="{% if compact %}crows crows--tiles crows--checked{% else %}cards{% endif %}" aria-labelledby="bf-sales-title">
+    {% for product, summary in sale_rows %}{% if compact %}{% include "web/includes/compact_row.html" with tiles=True %}{% else %}{% include "web/includes/product_card.html" with heading_tag="h3" %}{% endif %}{% endfor %}
+  </ul>
+  {% if sale_count > sale_rows|length %}<p class="section-head__note">{% copy "blackfriday.sale.shown" shown=sale_rows|length count=sale_count %}</p>{% endif %}
+</section>
+{% endif %}
 
 {# What the page is, in words, after the products: how the deals are chosen and when the weekend is. #}
 <section class="{% if compact %}cx-section{% else %}block{% endif %}" aria-labelledby="bf-about-title">

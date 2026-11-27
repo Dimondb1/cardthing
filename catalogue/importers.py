@@ -40,7 +40,7 @@ from django.db.models import Case, F, Q, Value, When
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
-from . import languages, pricing, sports
+from . import languages, pricing, sale_days, sports
 from .classify import GAMES, classify, find_game, game_word, variant_differs
 from .matching import (
     AUTO_LINK, SUGGEST, VARIANT_WORDS, best_match, chinese_code, code_key, contradiction, covers, match_key, names_something,
@@ -105,6 +105,10 @@ class Offer:
     seller: tuple | None = None
     # Why the shop's description says it cannot be bought today (closed_reason), or "": set on reading.
     closed: str = ""
+    # The shop's own sale it is in (sale_days.BLACK_FRIDAY): "" when the read looked and it is in none, None when the
+    # read could not tell, which leaves the listing's mark as it was. Set on reading from the name and tags, on the
+    # days such sales are looked for; a Shopify read adds the shop's sale collections (sale_handles).
+    sale: str | None = None
 
     def __post_init__(self):
         # An open draw is not stock, from whichever source the offer came.
@@ -123,6 +127,8 @@ class Offer:
         # description and tags are read here for what a product page's own text is read for (not_sealed_reason).
         if not self.not_sealed:
             self.not_sealed = feed_not_sealed(self.title, self.description, self.tags)
+        if self.sale is None and sale_days.on() and says_sale(self.title, self.tags):
+            self.sale = sale_days.BLACK_FRIDAY
 
 
 NO_DEAL = (None, None)
@@ -621,6 +627,37 @@ def deal_handles(base, listed, fetch=fetch):
     return deals
 
 
+# A shop's own Black Friday sale, as the shop names it: in a collection's name, a product's tag or its name. "BF" alone
+# is too little to go on; with "deals", "sale" or the year it is not.
+SALE_WORDS = re.compile(r"black[\s_-]*friday|cyber[\s_-]*(?:monday|week(?:end)?)|\bbfcm\b|black[\s_-]*week"
+                        r"|\bbf[\s_-]*(?:deals?|sale|offers?|20\d\d)\b", re.I)
+# A listing found in the sale again is stamped again once its stamp is this old, so a sale's listings cost a write a
+# few times a day and not one a read (Listing.SALE_FRESH is how long a stamp counts).
+SALE_STAMP = timedelta(hours=6)
+
+
+def says_sale(title, tags=()):
+    """Whether the shop's own name for a product, or one of its tags, puts it in its Black Friday sale."""
+    return bool(SALE_WORDS.search(str(title or "")) or any(SALE_WORDS.search(str(tag)) for tag in tags or ()))
+
+
+def sale_handles(base, listed, fetch=fetch):
+    """Handles of the products in the shop's collections named for Black Friday or Cyber Monday, on the days such
+    sales are looked for (sale_days.on); None when not known: out of those days, or the shop's collections or one
+    of its sale collections could not be read, which leaves each listing's mark to its name and tags."""
+    if listed is None or not sale_days.on():
+        return None
+    handles = set()
+    for collection in listed:
+        if not SALE_WORDS.search(f"{collection.get('handle') or ''} {collection.get('title') or ''}"):
+            continue
+        found = collection_handles(base, collection.get("handle", ""), fetch=fetch)
+        if found is None:
+            return None
+        handles |= found
+    return handles
+
+
 def offer_deal(offer, terms):
     """The deal an offer carries: NO_DEAL unless the multi-buy really costs less than buying singly."""
     if not terms:
@@ -997,12 +1034,17 @@ def shopify_offers(retailer, fetch=fetch, pause=0.0, short=None):
     # Multi-buys ("2 for £50") are read from the shop's collections of that name, so one that starts or ends
     # needs nothing from the owner.
     deals = deal_handles(base, listed, fetch=fetch)
+    # So is the shop's own Black Friday sale, on its days: its sale collections, with each product's tags and name.
+    sales = sale_handles(base, listed, fetch=fetch)
 
     def offers_of(product):
         handle = product.get("handle")
         for offer in product_offers(base, product, preorder=handle in preorders):
             if deals is not None:
                 offer.deal = offer_deal(offer, deals.get(handle))
+            if sales is not None:
+                # The read knows: in the sale by its collection, its tags or its name, or in none.
+                offer.sale = sale_days.BLACK_FRIDAY if (offer.sale or handle in sales) else ""
             yield offer
 
     own = bool((retailer.collection or "").strip())
@@ -2213,6 +2255,17 @@ def apply_offers(retailer, offers, checked_at=None, run=None, complete=True, sho
                 listing.changed_at = checked_at
                 fields.append("changed_at")
             listing.save(update_fields=fields)
+        # The shop's own sale: a read that found the listing in it marks it and stamps it again every SALE_STAMP; one
+        # that looked and did not takes the mark off; one that could not tell leaves it. Never a marketplace's: a
+        # seller's "Black Friday" in a title is no shop's sale. Not a change on the page.
+        if offer.sale is not None and not marketplace:
+            stamped = listing.shop_sale_at
+            if offer.sale and (listing.shop_sale != offer.sale or stamped is None or checked_at - stamped >= SALE_STAMP):
+                listing.shop_sale, listing.shop_sale_at = offer.sale, checked_at
+                listing.save(update_fields=["shop_sale", "shop_sale_at"])
+            elif not offer.sale and listing.shop_sale:
+                listing.shop_sale, listing.shop_sale_at = "", None
+                listing.save(update_fields=["shop_sale", "shop_sale_at"])
         image = web_image(offer.image)   # a picture is kept only as a web address, never a file or other kind
         if image and getattr(settings, "RIPRAPTOR_USE_FEED_IMAGES", True):
             images_by_product.setdefault(product_pk, []).append(image)

@@ -73,7 +73,8 @@ LIST_LATER = {"deals", "drops", "prices_game", "watchlist", "shopping_list"}
 # The shared parts a product may be shown through, by the class on the part: the link to a product's page sits
 # inside one of these on every page, in every look.
 PRODUCT_PARTS = {
-    "crow",             # a compact row (compact_row.html); a picture tile in a crows--tiles list
+    "crow",             # a compact row (compact_row.html); a picture tile in a crows--tiles list. Its badge and
+                        # line are green for a saving and plain for anything else (row_plain)
     "card",             # a product card (product_card.html)
     "feed-card",        # a card on the feed's rails (feed_card.html)
     "cx-deal",          # a deal in the compact strip (compact_strip.html)

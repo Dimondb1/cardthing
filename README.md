@@ -4491,6 +4491,51 @@ and tiny products"). From the top:
 The hub shows the top 60, a game's page the top 120, and says so under the
 list when there are more.
 
+**In shops' own Black Friday sales** (the owner, 27 Nov 2026: "Can also the
+crawlers look for any black Friday deals in their searches that could show
+up here", and of how to show them: "New section, each one checked"). The
+readers already check every product's price at every shop at least hourly,
+so a real cut reaches the list above by itself. What they add on the sale's
+days (`catalogue/sale_days.py`: from two weeks before Black Friday to Cyber
+Monday, the days the banner shows) is a note of which products a shop has
+put in its own sale:
+
+- a Shopify shop's collections named for Black Friday or Cyber Monday
+  (`importers.sale_handles`: "black-friday-deals", "Cyber Monday", "BFCM"),
+  read from the list of collections every read already fetches, so a shop
+  with no such collection costs nothing more;
+- any shop's product whose tags or own name say so (`importers.says_sale`).
+
+The listing is marked (`Listing.shop_sale`, `shop_sale_at`), stamped again
+every 6 hours while a read still finds it there, and unmarked when a read
+that could tell finds it gone. A mark not found again for 24 hours is stale
+and counts for nothing (`Listing.in_sale`), so an old one never returns next
+year. A marketplace listing is never marked. The mark says the shop calls it
+a deal, never that it is one.
+
+The page lists them in their own section under the deals, as the same
+picture tiles with the Price check on each (`crows--checked`), with what our
+price record says (`black_friday.sale_verdict`):
+
+- **a real drop**: the shop's sale price is today's cheapest and the product
+  is a genuine drop by the page's own rules. The page's green badge, and
+  "A real drop, in the sale at Harbour Games";
+- **Cheaper elsewhere**: another shop has it in stock for less, delivered.
+  The tile shows the cheaper shop and price, and the line gives the sale
+  price;
+- **No real drop**: today's cheapest, but about its 30-day average, above
+  it, or under it without the Price check calling it a good price (a price
+  raised and then cut);
+- **Too new to check**: too few days of prices on our record.
+
+Green is only for a real drop: every other badge and line is plain
+(`crow__badge--plain`, `crow__note--plain`). The line over the tiles counts
+how many products are in a sale and how many are confirmed. Real drops come
+first, biggest first; the page shows 24 and says when there are more. The
+head links to the section. It is read with the page's deals and kept with
+them, so a switch reads none of it again; out of season nothing is read and
+there is no section.
+
 **Choosing is quick and the page stays put** (the owner, 27 Nov 2026, of the
 switches: "It moves the page up and takes ages to respond"). A switch, a
 type or a price band loads in place: `browse.js` fetches the page it names

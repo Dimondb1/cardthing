@@ -3,13 +3,16 @@ his own label. The owner, 27 Nov 2026: "use that to propose our own label per sh
 confirm each one in Admin". Nothing is set by a program, and nothing here reaches a visitor."""
 
 import json
+import re
+from pathlib import Path
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from django.core.cache import cache
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import connection
-from django.test import TestCase, override_settings
+from django.test import Client, TestCase, override_settings
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
@@ -85,6 +88,48 @@ class AccessTests(Base):
         self.assertEqual(ShopCheck.objects.count(), 0)
 
 
+class BrowserTests(Base):
+    """What a real browser sends. The owner, 27 Nov 2026, on the live site: "fail;s to let me upload or paste in the
+    json file", with the security check's error. The page carried a page-wide "no-referrer" policy, under which a
+    browser sends a form's Origin as "null"; over https the CSRF check refuses that, so no form on the page worked.
+    The test client sends no Origin of its own, which is why the other tests never saw it."""
+
+    def browser(self):
+        client = Client(enforce_csrf_checks=True)
+        client.force_login(get_user_model().objects.get(username="boss"))
+        page = client.get(URL, secure=True)
+        token = re.search(r'name="csrfmiddlewaretoken" value="([^"]+)"', page.content.decode()).group(1)
+        return client, token, page.content.decode()
+
+    def test_no_page_wide_policy_turns_a_forms_origin_into_null(self):
+        _client, _token, html = self.browser()
+        self.assertNotIn('name="referrer"', html)
+        # Nor on any other page of ours with a form: the policy is only ever given link by link.
+        root = Path(settings.BASE_DIR)
+        for template in [*root.glob("web/templates/**/*.html"), *root.glob("*/templates/**/*.html")]:
+            self.assertNotIn('content="no-referrer"', template.read_text(), template.name)
+
+    def test_the_file_loads_and_a_label_confirms_as_a_browser_sends_them_over_https(self):
+        client, token, _html = self.browser()
+        sent = {"HTTP_ORIGIN": "https://testserver", "HTTP_REFERER": f"https://testserver{URL}"}
+        upload = SimpleUploadedFile("shop-findings.json", json.dumps(self.findings()).encode(), "application/json")
+        response = client.post(URL, {"action": "load", "csrfmiddlewaretoken": token, "file": upload}, secure=True, **sent)
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(ShopCheck.objects.count(), 3)
+        response = client.post(URL, {"action": "confirm", "csrfmiddlewaretoken": token, "shop": self.harbour.pk,
+                                     "label": "checked", "note": "Mostly positive public reviews."}, secure=True, **sent)
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(self.trust(self.harbour), "checked")
+
+    def test_an_origin_of_null_is_what_the_security_check_refuses(self):
+        # The fault itself, kept so the reason for the rule above stays plain.
+        client, token, _html = self.browser()
+        response = client.post(URL, {"action": "load", "csrfmiddlewaretoken": token,
+                                     "findings": json.dumps(self.findings())}, secure=True, HTTP_ORIGIN="null")
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(ShopCheck.objects.count(), 0)
+
+
 class LoadTests(Base):
     def test_pasted_findings_are_loaded_and_set_no_label(self):
         html = self.load().content.decode()
@@ -130,7 +175,7 @@ class PageTests(Base):
         self.assertIn("<strong>Complaints found:</strong> Several reviewers say orders never arrived.", card)
         # The links open away from Admin without saying where they came from.
         self.assertIn('<a href="https://forum.example/t/1" target="_blank" rel="noopener noreferrer nofollow">', card)
-        self.assertIn('<meta name="referrer" content="no-referrer">', html)
+        self.assertIn('<a href="https://harbourgames.example/" target="_blank" rel="noopener noreferrer">', html)
         # The form starts from the proposal: his to change.
         self.assertIn('<option value="caution" selected>Caution</option>', card)
         self.assertIn('name="note" value="Mostly negative public reviews, including orders not arriving."', card)

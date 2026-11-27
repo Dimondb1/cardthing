@@ -1,6 +1,7 @@
 {% extends "admin/base_site.html" %}
 {% block title %}Shop check | {{ site_title }}{% endblock %}
-{% block extrahead %}{{ block.super }}<meta name="robots" content="noindex, nofollow"><meta name="referrer" content="no-referrer">{% endblock %}
+{# No page-wide referrer policy here: "no-referrer" makes a browser send a form's Origin as "null", which the CSRF check refuses over https, so nothing on the page could be loaded or confirmed (the owner, 27 Nov 2026: "fail;s to let me upload or paste in the json file"). Each link out carries rel="noreferrer" itself. #}
+{% block extrahead %}{{ block.super }}<meta name="robots" content="noindex, nofollow">{% endblock %}
 {% block extrastyle %}{{ block.super }}<style>
   .shop-check { display: grid; gap: 24px; max-width: 60rem; }
   .shop-check h2 { margin: 0 0 4px; }

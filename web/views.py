@@ -1833,12 +1833,14 @@ MARKET_SEARCHES = {"amazon": amazon_search_url, "ebay": ebay_search_url}
 
 
 def amazon_offer(rows):
-    """The product's Amazon price to show on its own row, or None: in stock or on pre-order, and checked within
-    RIPRAPTOR_AMAZON_SHOW_HOURS, as Amazon's rules ask. It never joins the comparison (models.fresh)."""
+    """The product's Amazon price to show on its own row, or None: in stock or on pre-order, or sold by invitation
+    only (its row then says Invite only, as Amazon's page does), and checked within RIPRAPTOR_AMAZON_SHOW_HOURS, as
+    Amazon's rules ask. One that can be bought comes first. It never joins the comparison (models.fresh)."""
     since = timezone.now() - timedelta(hours=settings.RIPRAPTOR_AMAZON_SHOW_HOURS)
-    shown = [row for row in rows if row.availability in Listing.BUYABLE and row.last_checked >= since
-             and row.sanity != Listing.Sanity.EXCLUDED]
-    return min(shown, key=lambda row: row.delivered_price, default=None)
+    shown = [row for row in rows
+             if (row.availability in Listing.BUYABLE or row.closed_why == Listing.Closed.INVITE)
+             and row.last_checked >= since and row.sanity != Listing.Sanity.EXCLUDED]
+    return min(shown, key=lambda row: (row.availability not in Listing.BUYABLE, row.delivered_price), default=None)
 
 
 def search_link(product, market, tracked, button=None):

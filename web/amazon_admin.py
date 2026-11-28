@@ -48,7 +48,7 @@ def status():
 def log_text(now, found, keys_set, from_settings):
     """Everything about Amazon's reading as plain text: the keys (set or not, never their values), the shop's row, the
     prices shown and the products found, the day's calls and a run's share, the last runs with the end of each one's
-    log, and the reader's own lines about Amazon (catalogue/worklog.py). Four queries."""
+    log, and the reader's own lines about Amazon (catalogue/worklog.py). Five queries."""
     def at(moment):
         if moment is None:
             return "none"
@@ -71,6 +71,9 @@ def log_text(now, found, keys_set, from_settings):
                 f"failed tries in a row: {shop.error_streak}, waiting until: {at(shop.backoff_until)}",
                 f"last error: {shop.last_error or 'none'}",
                 f"prices shown on product pages now: {found['shown']}, Amazon listings found: {found['known']}"]
+        invited = list(Listing.objects.filter(retailer=shop, is_active=True, closed_why=Listing.Closed.INVITE)
+                       .order_by("product__name").values_list("product__name", flat=True)[:20])
+        out.append(f"sold by invitation only now: {len(invited)}" + (f" ({', '.join(invited)})" if invited else ""))
     products = Product.objects.active()
     out += [f"products found on Amazon: {products.exclude(amazon_asin='').count()}, never looked up: "
             f"{products.filter(amazon_asin='', amazon_checked_at__isnull=True).count()}",

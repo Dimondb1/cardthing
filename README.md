@@ -964,6 +964,18 @@ each run spending its hour's share of `RIPRAPTOR_AMAZON_DAILY_LIMIT` calls. To s
 untick Active on Amazon's shop page. RipRaptor still has price tracking and
 alerts for the UK shops, so ask Amazon Associates to confirm in writing
 that this is allowed (the Amazon page says so too).
+
+**Sold by invitation only.** Amazon sells some products only to those it
+invites ("Available by invitation", with a Request invite button). The
+reader reads Amazon's own words on each offer's stock (`amazon.invite_only`,
+the same invite wording the shops' descriptions are read for, and nothing
+else: Amazon's messages about Prime members are no members-only stock).
+Such an offer is out of stock, whatever its stock type says, and keeps its
+row with Amazon's price: the row says Invite only and its button, and the
+price box's Amazon button, say Request invite on Amazon (the owner, 28 Nov
+2026: "Can we tell if invitation only"). An offer Amazon sells outright
+comes first. Admin, Amazon's log lists the products sold by invitation now.
+Rip is still told nothing of Amazon.
 **Waiting for Amazon** (the owner, 25 Nov 2026: "Amazon still failing what's going
 on?"). Amazon shares its prices through the Creators API only with an Associates
 account that has 10 qualified sales in the last 30 days (Amazon's Creators API

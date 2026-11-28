@@ -29,9 +29,9 @@ NO_KEYS = {**KEYS, "RIPRAPTOR_AMAZON_CREDENTIAL_ID": "", "RIPRAPTOR_AMAZON_CREDE
 
 
 def api_item(asin, title, price="89.99", ean="0820650853500", stock="IN_STOCK", condition="New", seller="Amazon.co.uk",
-             currency="GBP"):
-    """One item as the Creators API gives it (offersV2)."""
-    return {
+             currency="GBP", message=None):
+    """One item as the Creators API gives it (offersV2), with Amazon's own words on its stock when ``message``."""
+    item = {
         "asin": asin,
         "detailPageURL": f"https://www.amazon.co.uk/dp/{asin}?tag=ripraptor-21&linkCode=ogi",
         "itemInfo": {
@@ -46,6 +46,9 @@ def api_item(asin, title, price="89.99", ean="0820650853500", stock="IN_STOCK", 
             "isBuyBoxWinner": True,
         }]},
     }
+    if message is not None:
+        item["offersV2"]["listings"][0]["availability"]["message"] = message
+    return item
 
 
 class FakeAmazon:
@@ -134,6 +137,26 @@ class ItemTests(TestCase):
                                ("UNAVAILABLE", Listing.Availability.OUT_OF_STOCK)):
             with self.subTest(kind=kind):
                 self.assertEqual(amazon.item_offer(api_item("B0TEST", "Box", stock=kind), Offer).availability, expected)
+
+    def test_an_item_amazon_sells_by_invitation_is_invite_only_whatever_its_type(self):
+        """The owner, 28 Nov 2026, with Amazon's page for the 30th Celebration Booster Bundle ("Available by
+        invitation", a Request invite button): "Can we tell if invitation only"."""
+        for kind in ("IN_STOCK", "UNAVAILABLE", "OUT_OF_STOCK"):
+            for message in ("Available by invitation.", "Available by invitation", "Invitation only",
+                            "Request invite: invitation required"):
+                with self.subTest(kind=kind, message=message):
+                    offer = amazon.item_offer(api_item("B0INV", "Box", stock=kind, message=message), Offer)
+                    self.assertEqual((offer.closed, offer.availability),
+                                     (Listing.Closed.INVITE, Listing.Availability.OUT_OF_STOCK))
+                    self.assertEqual(offer.price, Decimal("89.99"))       # its price is still Amazon's to show
+
+    def test_amazons_other_words_on_stock_change_nothing(self):
+        # Prime members are no members-only stock: only the invite wording is read on Amazon's messages.
+        for message in ("In Stock", "Only 2 left in stock.", "Usually dispatched within 1 to 2 months.",
+                        "Exclusively for Prime members", "", None):
+            with self.subTest(message=message):
+                offer = amazon.item_offer(api_item("B0TEST", "Box", message=message), Offer)
+                self.assertEqual((offer.closed, offer.availability), ("", Listing.Availability.IN_STOCK))
 
     def test_another_seller_used_another_currency_or_no_offer_is_skipped(self):
         """Another seller's delivery charge is not given, so it would be a guess."""
@@ -281,6 +304,22 @@ class ImportTests(TestCase):
         self.assertEqual(listing.url, "https://www.amazon.co.uk/dp/B0ETB?tag=ripraptor-21&linkCode=ogi")
         self.assertEqual(listing.price, Decimal("89.99"))
         self.assertEqual(listing.delivered_price, Decimal("89.99"))   # free over £35
+
+    def test_a_read_marks_an_item_sold_by_invitation_and_a_later_one_clears_it(self):
+        answer = {"searchResult": {"items": [api_item("B0ETB", "Prismatic Evolutions Elite Trainer Box",
+                                                      message="Available by invitation.")]}}
+        with mock.patch.object(amazon, "call", return_value=answer), mock.patch.object(amazon, "PAUSE", 0):
+            run_import(self.retailer)
+        listing = Listing.objects.get(retailer=self.retailer, product=self.etb)
+        self.assertEqual((listing.closed_why, listing.availability),
+                         (Listing.Closed.INVITE, Listing.Availability.OUT_OF_STOCK))
+        ImportRun.objects.update(finished_at=timezone.now() - datetime.timedelta(hours=2))
+        answer = {"itemsResult": {"items": [api_item("B0ETB", "Prismatic Evolutions Elite Trainer Box",
+                                                     message="In Stock")]}}
+        with mock.patch.object(amazon, "call", return_value=answer), mock.patch.object(amazon, "PAUSE", 0):
+            run_import(self.retailer)
+        listing.refresh_from_db()
+        self.assertEqual((listing.closed_why, listing.availability), ("", Listing.Availability.IN_STOCK))
 
     def test_import_runs_every_hour_and_a_read_asked_again_sooner_spends_nothing(self):
         """The owner, 24 Nov 2026: "all stores must update at least every hour". It was every six."""
@@ -489,6 +528,56 @@ class NeverComparedTests(TestCase):
         self.assertNotContains(page, "offer--amazon-priced")
         self.assertContains(page, "Price not tracked")
 
+    def invite_only(self):
+        Listing.objects.filter(pk=self.on_amazon.pk).update(availability=Listing.Availability.OUT_OF_STOCK,
+                                                             closed_why=Listing.Closed.INVITE)
+
+    def test_one_sold_by_invitation_keeps_its_row_saying_invite_only(self):
+        """The owner, 28 Nov 2026: "Can we tell if invitation only. Also can the amazon be in the list of prices as
+        well as keeping the shiny amazon button"."""
+        self.invite_only()
+        page = self.client.get(self.box.get_absolute_url())
+        self.assertEqual(page.context["amazon_offer"], self.on_amazon)
+        html = page.content.decode()
+        row = html[html.index("offer--amazon-priced"):]
+        row = row[:row.index("</li>")]
+        self.assertIn('<span class="stock-inline stock-inline--out_of_stock">Invite only</span>', row)
+        self.assertNotIn("In stock", row)
+        self.assertIn("£120.00", row)
+        self.assertIn("Request invite on Amazon", row)
+        self.assertIn("Product prices and availability are accurate as of the date/time indicated", row)
+        # The shiny button in the price box says the same, and what it means.
+        cta = html[html.index('class="amazon-cta"'):]
+        cta = cta[:cta.index("</a>")]
+        self.assertIn('<span class="amazon-cta__label">Request invite on Amazon</span>', cta)
+        self.assertContains(page, "Amazon sells this by invitation only. Its price is in the list below.")
+        # Never the cheapest, never in stock anywhere on the page: the shop is.
+        self.assertEqual(page.context["cheapest"].retailer, self.shop)
+
+    def test_one_amazon_sells_outright_comes_before_one_by_invitation(self):
+        from web.views import amazon_offer
+
+        self.invite_only()
+        self.on_amazon.refresh_from_db()
+        from .testing import make_listing
+
+        other = make_product(self.box.product_set, name="Surging Sparks Booster Bundle", slug="surging-bundle")
+        sold = make_listing(other, self.amazon, price="130.00", delivery="0.00",
+                            url="https://www.amazon.co.uk/dp/B0BUNDLE?tag=ripraptor-21")
+        self.assertEqual(amazon_offer([self.on_amazon, sold]), sold)
+        self.assertEqual(amazon_offer([self.on_amazon]), self.on_amazon)
+        # Plain out of stock is still no row of its own: the search row comes back.
+        Listing.objects.filter(pk=self.on_amazon.pk).update(closed_why="")
+        self.on_amazon.refresh_from_db()
+        self.assertIsNone(amazon_offer([self.on_amazon]))
+
+    def test_rip_is_never_told_it_even_by_invitation(self):
+        from web import askrip
+
+        self.invite_only()
+        found, _amounts, _checked = askrip.facts(self.box)
+        self.assertNotIn("Amazon", str(found))
+
     def test_rip_is_never_told_it(self):
         from web import askrip
 
@@ -597,6 +686,7 @@ class KeysPageTests(TestCase):
         self.assertIn("READER LOG: LINES ABOUT AMAZON", text)
         self.assertIn("INFO Amazon: 40 known products refreshed, 5 looked up, 12 offers", text)
         self.assertIn("about 83 a read, every 1 h", text)
+        self.assertIn("sold by invitation only now: 0", text)
         for secret in ("amzn1.secret-id-123456", "very-secret-value-99"):
             self.assertNotIn(secret, page)
         self.assertIn('data-copy-from="amazon-log"', page)

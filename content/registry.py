@@ -2605,6 +2605,12 @@ ENTRIES = [
         "product.compare.amazon_preorder", B, "Amazon priced row button, pre-order", "Pre-order on Amazon",
         "Button on the Amazon row of the price list when Amazon takes pre-orders.",
     ),
+    Entry("product.compare.amazon_invite", B, "Amazon button, invitation only", "Request invite on Amazon",
+          "The Amazon button, on its row of the price list and in the price box, when Amazon sells the product by "
+          "invitation only: Amazon's page then asks for an invite instead of selling it."),
+    Entry("product.amazon.note_invite", T, "Amazon note, invitation only",
+          "Amazon sells this by invitation only. Its price is in the list below.",
+          "Under the Amazon button in a product page's price box when Amazon sells the product by invitation only."),
     Entry(
         "product.amazon.price_at", T, "Amazon price time", "Amazon's price and stock at {when}.",
         "Under Amazon's price on its row, before Amazon's disclaimer. Amazon requires the time.", placeholders=("when",),

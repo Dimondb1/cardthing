@@ -67,7 +67,7 @@ RESOURCES = [
 # instead of co.uk".
 UK_HOSTS = {"www.amazon.co.uk", "amazon.co.uk"}
 # Amazon's availability types: in stock, or on pre-order; anything else (out of stock, unavailable, a lead time,
-# unknown) is out of stock here.
+# unknown) is out of stock here. Its message is read too, for an item sold by invitation only (invite_only).
 IN_STOCK = {"IN_STOCK", "IN_STOCK_SCARCE"}
 PREORDER = {"PREORDER", "AVAILABLE_DATE"}
 _token = {"value": "", "until": 0.0, "for": ""}
@@ -257,8 +257,24 @@ def item_offer(item, Offer):
     eans = (((item.get("itemInfo") or {}).get("externalIds") or {}).get("eans") or {}).get("displayValues") or []
     # No picture: Amazon's policies forbid storing its images, and the site keeps a product's picture for good.
     # Delivery is left to the shop's rules: Amazon's published rates for what it sells itself.
-    return Offer(title=title, url=url, price=amount, ean=eans[0] if eans else "", availability=availability,
-                 delivery=None, image="", tags=(asin,))
+    offer = Offer(title=title, url=url, price=amount, ean=eans[0] if eans else "", availability=availability,
+                  delivery=None, image="", tags=(asin,))
+    if invite_only(listing):
+        offer.closed = Listing.Closed.INVITE
+        offer.availability = Listing.Availability.OUT_OF_STOCK
+    return offer
+
+
+def invite_only(listing):
+    """True when Amazon's own words on an offer's stock say it sells the item only to those it invites ("Available by
+    invitation", with a Request invite button): it cannot be bought, whatever the stock type says, and its row says
+    Invite only. The owner, 28 Nov 2026, with Amazon's page for one: "Can we tell if invitation only". Only the invite
+    wording is read here, not the shops' other closed reasons: Amazon's own messages speak of Prime members, which are
+    no members-only stock."""
+    from .importers import INVITE_ONLY
+
+    message = str((listing.get("availability") or {}).get("message") or "")
+    return bool(INVITE_ONLY.search(message))
 
 
 def search_payload(keywords, tag):
@@ -399,5 +415,6 @@ def amazon_offers(retailer, limit=None, call_api=None, pause=PAUSE):
     Product.objects.filter(pk__in=checked).update(amazon_checked_at=now)
     for pk, asin in found.items():
         Product.objects.filter(pk=pk).update(amazon_asin=asin)
-    logger.info("Amazon: %d known products refreshed, %d looked up, %d offers", len(known), len(checked), len(offers))
+    logger.info("Amazon: %d known products refreshed, %d looked up, %d offers, %d of them by invitation only",
+                len(known), len(checked), len(offers), sum(1 for offer in offers if offer.closed == Listing.Closed.INVITE))
     return offers

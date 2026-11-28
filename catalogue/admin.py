@@ -165,7 +165,7 @@ class ProductAdmin(admin.ModelAdmin):
     list_display = ("name", "game", "product_set", "product_type", "ean", "has_image", "cheapest", "listing_count", "is_active")
     list_filter = ("game", "product_type", "is_active", "check_priority", BarcodeFilter, ImageFilter)
     list_editable = ("ean",)
-    actions = ["check_high", "check_normal", "check_low"]
+    actions = ["check_high", "check_normal", "check_low", "refuse_picture"]
     search_fields = ("name", "ean", "product_set__name", "product_set__code")
     autocomplete_fields = ("product_set",)
     prepopulated_fields = {"slug": ("name",)}
@@ -199,6 +199,28 @@ class ProductAdmin(admin.ModelAdmin):
     @admin.action(description="Stock checks: low priority (only with whole-shop reads)")
     def check_low(self, request, queryset):
         self.set_check_priority(request, queryset, ReadPriority.LOW)
+
+    @admin.action(description="Picture is no good: use another shop's")
+    def refuse_picture(self, request, queryset):
+        """The shop's picture of each product ticked is put aside for good (catalogue/pictures.py refuse): a photo of
+        the shipping carton, say. The owner, 28 Nov 2026: "I would like images to be better and bigger and not
+        crap"."""
+        from . import pictures
+
+        done = {"replaced": 0, "outline": 0, "": 0}
+        for product in queryset:
+            done[pictures.refuse(product)] += 1
+        refused = done["replaced"] + done["outline"]
+        said = f"{refused} picture{'s' if refused != 1 else ''} put aside for good."
+        if done["replaced"]:
+            said += f" {done['replaced']} now show{'s' if done['replaced'] == 1 else ''} another shop's picture."
+        if done["outline"]:
+            said += (f" {done['outline']} show{'s' if done['outline'] == 1 else ''} an outline until another shop's "
+                     "next read gives a picture, within the hour.")
+        if done[""]:
+            said += (f" {done['']} left as {'it is' if done[''] == 1 else 'they are'}: no shop picture to refuse "
+                     "(a picture you uploaded is changed on the product's own page).")
+        self.message_user(request, said, messages.SUCCESS if refused else messages.WARNING)
 
     def get_queryset(self, request):
         return super().get_queryset(request).select_related("game", "product_set").with_prices()

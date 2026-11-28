@@ -2471,8 +2471,9 @@ def apply_offers(retailer, offers, checked_at=None, run=None, complete=True, sho
     if images_by_product:
         for product in Product.objects.filter(pk__in=images_by_product, image="", image_url=""):
             # Never the picture the picture check found gone (catalogue/pictures.py): a shop's feed can name a
-            # file it has deleted.
-            fresh = next((url for url in images_by_product[product.pk] if url[:1000] != product.image_failed), "")
+            # file it has deleted. Nor one the owner said is no good (pictures.refuse).
+            barred = product.pictures_not_to_use()
+            fresh = next((url for url in images_by_product[product.pk] if url[:1000] not in barred), "")
             if fresh:
                 product.image_url = fresh[:1000]
                 product.save(update_fields=["image_url"])

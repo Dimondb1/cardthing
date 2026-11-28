@@ -2548,6 +2548,25 @@ network is the way in for all of these.
    `picture_outlines.html`, once a page) instead of a broken picture: a small
    copy the shop cannot make falls back to the original first. The owner,
    11 Nov 2026, found broken pictures on two sets on the home page.
+   **A picture that loads but is no good** (a shop's photo of the shipping
+   carton in place of the product; the owner, 28 Nov 2026: "I would like
+   images to be better and bigger and not crap"): in Admin > Products, tick
+   the product and choose "Picture is no good: use another shop's". Its
+   address is put aside for good (`Product.image_refused`,
+   `pictures.refuse`), so no read and no picture check gives it back, and
+   the product takes another shop's picture at once when one is known,
+   else at the next read of a shop that lists it. A picture you upload
+   still wins over any shop's.
+   **The picture that stands for a set** (`web.compact.cover_rank`): a
+   product with a picture; your own upload first; not a product sold by
+   the case, the carton or the counter display (`pictures.carton_named`:
+   its picture is as often the carton) when another has one; a product
+   three or more shops list before one or two shops' own; then a booster
+   box, an Elite Trainer Box and so on, the most shops first. A type's
+   tile on a set's page passes over a case the same way
+   (`feed.set_tile_rows`). On a phone a set's picture is 6rem (4rem before)
+   and a product row's 4.5rem (3.5rem), and each asks the shop for a copy
+   sharp at that size (`catalogue/images.py`, `set_grid` and `crow`).
    Admin > Products can be filtered by image and
    by barcode, and barcodes can be edited in the list or loaded in bulk with
    `python manage.py import_barcodes barcodes.csv` (columns `ean` and `slug`

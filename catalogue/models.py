@@ -300,6 +300,9 @@ class Product(models.Model):
     # found gone, which no read puts back.
     image_checked_at = models.DateTimeField("picture checked", null=True, blank=True, editable=False)
     image_failed = models.URLField("picture found gone", max_length=1000, blank=True, editable=False)
+    # Shops' pictures of it the owner said are no good (catalogue/pictures.py refuse), an address a line: a photo of
+    # the shipping carton, say. No read and no picture check gives the product one of them again.
+    image_refused = models.TextField("pictures refused", blank=True, editable=False)
     ean = models.CharField("barcode", max_length=20, blank=True, db_index=True)
     amazon_asin = models.CharField(
         "Amazon product id", max_length=20, blank=True,
@@ -488,6 +491,11 @@ class Product(models.Model):
         if self.image:
             return self.image.url
         return self.image_url
+
+    def pictures_not_to_use(self):
+        """The shop picture addresses this product must not be given: the one found gone and those the owner
+        refused."""
+        return {self.image_failed, *self.image_refused.split()} - {""}
 
     @property
     def effective_release_date(self):

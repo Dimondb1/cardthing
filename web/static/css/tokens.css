@@ -441,10 +441,10 @@
   --feed-image-inset: 0.25rem;     /* the breath between a picture and its well's edge */
   --feed-more: 2rem;               /* the arrow at the end of a row */
   --feed-cue-max: 16rem;           /* the dock's down arrow with the next heading's name */
-  --cx-pic: 3.5rem;                /* the compact layout: a product row's picture */
+  --cx-pic: 4.5rem;                /* the compact layout: a product row's picture (3.5rem until 28 Nov 2026; the owner: "better and bigger") */
   --tile-well: 8.5rem;             /* a picture tile's well, two across a phone (site.css crows--tiles) */
   --tile-lead-well: 12.5rem;       /* the first tile's, the width of a phone */
-  --cx-set-pic: 4rem;              /* a set's picture in its row on a phone */
+  --cx-set-pic: 6rem;              /* a set's picture in its row on a phone (4rem until 28 Nov 2026) */
   --cx-sethead-pic: 7rem;          /* the well with a set's picture at the top of its page */
   --cx-deal: 15rem;                /* a card in the deals strip */
   --cx-deal-pic: 3rem;             /* its picture */

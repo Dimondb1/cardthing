@@ -94,7 +94,7 @@ class CardTests(DesktopCase):
         self.assertNotIn('<a class="button', row[:row.index('class="crow__save"')])   # never a link inside the link
         # Its picture is the phone's size on a phone and a card's from 64rem.
         self.assertIn("product-image--crow", row)
-        self.assertEqual(images.SLOTS["crow"][1], "(min-width: 64rem) 12rem, 3.5rem")
+        self.assertEqual(images.SLOTS["crow"][1], "(min-width: 64rem) 12rem, 4.5rem")
 
     def test_grid_or_list_is_remembered_before_the_first_paint(self):
         html = self.html(self.pre.get_absolute_url())

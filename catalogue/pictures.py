@@ -14,9 +14,15 @@ slow or busy shop, a refusal) is asked again a day later: only the shop saying t
 
 The browser does its part as well (site.js): a picture that will not load at all gives way to its product type's
 outline, never a broken picture.
+
+refuse() is the owner's own word on a picture that loads but is no good: a shop's photo of the shipping carton in
+place of the product. The owner, 28 Nov 2026, of such a photo standing for a whole set on the home page: "I would
+like images to be better and bigger and not crap". The address is kept with the product (Product.image_refused) and
+never given back to it, by a read or by this check, and the product takes another shop's picture as above.
 """
 
 import logging
+import re
 import time
 import urllib.error
 import urllib.request
@@ -26,6 +32,21 @@ from django.db.models import Exists, F, OuterRef
 from django.utils import timezone
 
 logger = logging.getLogger(__name__)
+
+# A product sold by the case, the carton or the counter display is pictured, as often as not, by a photo of the brown
+# carton it ships in, which says nothing of its set. The owner, 28 Nov 2026, of such a photo standing for 30th
+# Celebration under Sets people want now: "I would like images to be better and bigger and not crap". Such a product
+# pictures its set, or its type's tile, only when no other product there has a picture (web.compact.cover_rank,
+# web.feed.set_tile_rows). "Booster Display" is a booster box.
+CARTON_NAME = re.compile(r"\b(?:cases?|cartons?|pallets?)\b"
+                         r"|\b(?:blister|checklane|sleeved|counter|gravity\s+feed)\b.*\bdisplay\b"
+                         r"|\bdisplay\s+of\s+\d", re.I)
+
+
+def carton_named(name):
+    """Whether a product's name says it is sold by the case, the carton or the counter display (CARTON_NAME)."""
+    return bool(CARTON_NAME.search(name or ""))
+
 
 CHECK_EVERY = timedelta(days=7)
 # A picture whose shop did not answer plainly is asked again after this long.
@@ -77,7 +98,7 @@ def due(now, limit=PER_RUN):
         .exclude(image_checked_at__gt=now - CHECK_EVERY)
         .annotate(on_sale=Exists(on_sale))
         .order_by("-on_sale", F("image_checked_at").asc(nulls_first=True), "pk")
-        .only("pk", "image", "image_url", "image_failed", "image_checked_at")[:limit]
+        .only("pk", "image", "image_url", "image_failed", "image_refused", "image_checked_at")[:limit]
     )
 
 
@@ -87,7 +108,7 @@ def another_picture(product, look=look):
 
     from .models import ShopProduct
 
-    seen = {product.image_url, product.image_failed}
+    seen = {product.image_url, *product.pictures_not_to_use()}
     linked = ShopProduct.objects.filter(Q(product=product) | Q(suggested=product), status=ShopProduct.Status.LINKED)
     for url in (linked.exclude(image_url="")
                 .order_by("-last_seen").values_list("image_url", flat=True)[:5]):
@@ -97,6 +118,27 @@ def another_picture(product, look=look):
         if look(url) == OK:
             return url
     return ""
+
+
+# Refused addresses kept a product: far more than any product has shops, so the field never grows without end.
+REFUSED_MOST = 40
+
+
+def refuse(product, now=None, look=look):
+    """The owner says the product's picture is no good. Its address is put aside for good and the product takes
+    another shop's picture that loads (another_picture), else none: it shows its outline until the next read of a
+    shop that lists it gives it that shop's picture. Returns "replaced", "outline", or "" when there was nothing to
+    refuse (no shop picture, or the owner's own upload, which is his to change)."""
+    if product.image or not product.image_url:
+        return ""
+    kept = [*product.image_refused.split(), product.image_url[:1000]]
+    product.image_refused = "\n".join(dict.fromkeys(kept[-REFUSED_MOST:]))
+    replacement = another_picture(product, look=look)
+    product.image_url = replacement[:1000]
+    product.image_checked_at = (now or timezone.now()) if replacement else None
+    # Through save, so the product page's updated_at moves and the cached lists are cleared: its picture changed.
+    product.save(update_fields=["image_refused", "image_url", "image_checked_at"])
+    return "replaced" if replacement else "outline"
 
 
 def check(now=None, limit=PER_RUN, budget=BUDGET_SECONDS, look=look, dry_run=False, log=None):

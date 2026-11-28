@@ -23,7 +23,7 @@ from django.db.models import Count, Max
 from django.shortcuts import render
 from django.urls import reverse
 
-from catalogue import fair_price, offers, pricing, popularity
+from catalogue import fair_price, offers, pictures, pricing, popularity
 from catalogue.contents import cards_total, price_a_card, price_a_pack
 from catalogue.models import Listing, Product, ProductSet
 from catalogue.types import type_choices
@@ -38,6 +38,16 @@ DESK_GAMES = 5      # games with a tab of their own beside All
 SET_ROW = 12        # sets in a desktop screen's row of sets (compact_set_row.html), newest first
 # The product that pictures a set: a booster box first, the way a set is known, then the boxes and bundles.
 COVER_ORDER = ("booster_box", "elite_trainer_box", "bundle", "collection_box", "booster_pack", "tin", "deck")
+# A product this many shops list is pictured by a shop people buy from; one or two may be a single shop's own photo.
+COVER_SHOPS = 3
+
+
+def cover_rank(pk, name, kind, listed, image, image_url):
+    """Where a product stands as its set's picture, least first: one with a picture; the owner's own upload; not one
+    named as a case, carton or counter display (pictures.carton_named); one COVER_SHOPS shops or more list; the kind of
+    product (COVER_ORDER, a booster box first); the most shops; the oldest."""
+    return (not (image or image_url), not image, pictures.carton_named(name), (listed or 0) < COVER_SHOPS,
+            COVER_ORDER.index(kind) if kind in COVER_ORDER else len(COVER_ORDER), -(listed or 0), pk)
 
 
 def kept(key, build, fresh=False):
@@ -94,9 +104,9 @@ def set_rows(game=None):
     products = products.filter(game=game) if game is not None else products.filter(game__is_active=True)
     rows = (products.with_prices().order_by()
             .values_list("pk", "product_set_id", "product_type", "lowest_known", "in_stock_count", "preorder_count",
-                         "listing_count", "packs", "packs_found", "image", "image_url"))
+                         "listing_count", "packs", "packs_found", "image", "image_url", "name"))
     found = {}
-    for pk, set_id, kind, price, stocked, preordered, listed, owner_packs, shop_packs, image, image_url in rows:
+    for pk, set_id, kind, price, stocked, preordered, listed, owner_packs, shop_packs, image, image_url, name in rows:
         packs = owner_packs or shop_packs   # Product.packs_inside
         row = found.setdefault(set_id, {"products": 0, "in_stock": 0, "preorder": 0, "from": None, "from_preorder": None,
                                         "pack": None, "cover": None, "cover_rank": None})
@@ -112,8 +122,7 @@ def set_rows(game=None):
         each = pack_price(price, kind, packs) if stocked else None
         if each is not None and (row["pack"] is None or each < row["pack"]):
             row["pack"] = each
-        rank = (not (image or image_url), COVER_ORDER.index(kind) if kind in COVER_ORDER else len(COVER_ORDER),
-                -(listed or 0), pk)
+        rank = cover_rank(pk, name, kind, listed, image, image_url)
         if row["cover_rank"] is None or rank < row["cover_rank"]:
             row["cover"], row["cover_rank"] = pk, rank
     sets = ProductSet.objects.filter(pk__in=found).select_related("game")

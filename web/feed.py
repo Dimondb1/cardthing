@@ -115,16 +115,21 @@ def tile_picks(fresh=False):
 
 def set_tile_rows(product_set):
     """[(type, product pk, products)] for the tiles once a set is chosen: only the types the set holds, most products
-    first, each pictured by one of the set's own (one with a picture when it has one). One query."""
+    first, each pictured by one of the set's own: one with a picture when it has one, and not one sold by the case
+    or the carton (pictures.carton_named: its picture is as often the shipping carton) when another has a picture.
+    One query."""
+    from catalogue import pictures
+
     rows = (Product.objects.active().filter(product_set=product_set, product_type__in=list(TYPE_LABELS))
-            .order_by("pk").values_list("product_type", "pk", "image", "image_url"))
+            .order_by("pk").values_list("product_type", "pk", "image", "image_url", "name"))
     found = {}
-    for kind, pk, image, image_url in rows:
-        count, pick, pictured = found.get(kind, (0, pk, bool(image or image_url)))
-        if not pictured and (image or image_url):
-            pick, pictured = pk, True
-        found[kind] = (count + 1, pick, pictured)
-    return sorted(((kind, pick, count) for kind, (count, pick, _pictured) in found.items()),
+    for kind, pk, image, image_url, name in rows:
+        rank = (not (image or image_url), pictures.carton_named(name))
+        count, pick, best = found.get(kind, (0, pk, rank))
+        if rank < best:
+            pick, best = pk, rank
+        found[kind] = (count + 1, pick, best)
+    return sorted(((kind, pick, count) for kind, (count, pick, _rank) in found.items()),
                   key=lambda row: (-row[2], row[0]))
 
 

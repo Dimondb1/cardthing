@@ -17,7 +17,7 @@ from django.conf import settings
 from django.core.cache import cache
 from django.core.management import call_command
 from django.db import connection
-from django.test import TestCase, override_settings
+from django.test import SimpleTestCase, TestCase, override_settings
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
@@ -306,27 +306,51 @@ class WorkerWarmingTests(Catalogue):
     def reader(self, **kwargs):
         return worker.Worker(clock=timezone.now, sleep=lambda seconds: None, **kwargs)
 
-    def test_the_reader_builds_what_is_due_and_looks_again_after_a_forced_clear(self):
+    def test_the_reader_builds_what_is_due_and_looks_again_every_warm_check(self):
         reader = self.reader(warm=True)
         now = timezone.now()
         with mock.patch.object(warming, "warm_pages", wraps=warming.warm_pages) as warm:
             reader.keep_pages_warm(now)
-            self.assertEqual(warm.call_args_list, [mock.call()])
+            self.assertEqual(warm.call_args_list, [mock.call(patient=False)])
             self.assertEqual(warming.missing(), [])
             # Nothing cleared and looked a moment ago: a turn costs one small cache read.
             reader.keep_pages_warm(now + timedelta(seconds=5))
             self.assertEqual(len(warm.call_args_list), 1)
-            # A job's forced clear: the next turn builds them again, in place.
+            # A job's forced clear does not bring the look forward: every job ends with one, and building after
+            # each was most of the processor time the reader used.
             built = listcache.entry(signals.HOME_CACHE_KEY).built_at
             signals.clear_list_caches_now(force=True)
             self.assertEqual(warming.missing(), [])
             reader.keep_pages_warm(now + timedelta(seconds=10))
+            self.assertEqual(len(warm.call_args_list), 1)
+            # Every WARM_CHECK it looks, and builds what is due by then, in place.
+            reader.keep_pages_warm(now + worker.WARM_CHECK)
             self.assertEqual(len(warm.call_args_list), 2)
             self.assertEqual(warming.due(), [])
             self.assertGreater(listcache.entry(signals.HOME_CACHE_KEY).built_at, built)
-            # Every WARM_CHECK it looks again for ordinary clears and ageing lists.
-            reader.keep_pages_warm(now + timedelta(seconds=10) + worker.WARM_CHECK)
-            self.assertEqual(len(warm.call_args_list), 3)
+
+    def test_while_new_jobs_are_held_the_reader_builds_only_what_cannot_wait(self):
+        reader = self.reader(warm=True)
+        now = timezone.now()
+        reader.keep_pages_warm(now)
+        built = listcache.entry(signals.HOME_CACHE_KEY).built_at
+        signals.clear_list_caches_now(force=True)
+        reader.held_since = now   # the processors are over the crawler settings' hold figure
+        with mock.patch.object(warming, "warm_pages", wraps=warming.warm_pages) as warm:
+            reader.keep_pages_warm(now + worker.WARM_CHECK)
+        self.assertEqual(warm.call_args_list, [mock.call(patient=True)])
+        self.assertEqual(listcache.entry(signals.HOME_CACHE_KEY).built_at, built)   # the job's clear waits
+        reader.held_since = None
+        reader.keep_pages_warm(now + worker.WARM_CHECK * 2)
+        self.assertGreater(listcache.entry(signals.HOME_CACHE_KEY).built_at, built)
+
+    def test_the_processor_time_of_a_build_is_counted_as_page_lists(self):
+        reader = self.reader(warm=True)
+        reader.keep_pages_warm(timezone.now())
+        work = reader.take_work()
+        self.assertGreater(work[worker.LISTS], 0)
+        self.assertNotIn(worker.READS, work)
+        self.assertEqual(reader.take_work(), {})   # counted afresh after each take
 
     def test_the_reader_builds_a_missing_list_on_the_next_turn(self):
         reader = self.reader(warm=True)
@@ -551,6 +575,57 @@ class OwnerEditsTests(Catalogue):
         self.assertFalse(listcache.is_due(signals.HOME_CACHE_KEY))
         self.assertNotIn("Deal Booster Box", [p.name for p, _ in listcache.peek(signals.HOME_CACHE_KEY)[0]
                                               + listcache.peek(signals.HOME_CACHE_KEY)[2]])
+
+
+@override_settings(RIPRAPTOR_LIST_REBUILD_SECONDS=120, RIPRAPTOR_CACHE_CLEAR_SECONDS=30,
+                   RIPRAPTOR_HOME_CACHE_SECONDS=300)
+class RebuildBudgetTests(SimpleTestCase):
+    """How soon the jobs build a list again (web.listcache.entry_due). The owner, 28 Nov 2026, of a server with a
+    second processor: "here we are cpu sitting at 99 percent again"; the reader was building every list after every
+    job, over four fifths of the processor time it used."""
+
+    def due(self, age, patient=False, **marks):
+        return listcache.entry_due(listcache.Entry("rows", 1000.0), 1000.0 + age, marks, patient=patient)
+
+    def test_a_list_nothing_cleared_is_built_again_only_as_it_nears_its_cache_time(self):
+        self.assertFalse(self.due(239))
+        self.assertTrue(self.due(240))
+
+    def test_a_jobs_clear_waits_until_the_copy_is_two_minutes_old(self):
+        for marks in ({"at": 1001.0, "forced_at": 1001.0}, {"at": 1001.0}):
+            self.assertFalse(self.due(5, **marks), marks)
+            self.assertFalse(self.due(119, **marks), marks)
+            self.assertTrue(self.due(120, **marks), marks)
+
+    def test_a_clear_made_before_the_build_asks_for_nothing(self):
+        self.assertFalse(self.due(130, at=999.0, forced_at=999.0, hard_at=999.0))
+
+    def test_the_owners_own_edit_is_built_at_once(self):
+        self.assertTrue(self.due(1, at=1000.5, forced_at=1000.5, hard_at=1000.5))
+
+    def test_patient_leaves_a_jobs_clear_until_the_copy_nears_its_cache_time(self):
+        marks = {"at": 1001.0, "forced_at": 1001.0}
+        self.assertFalse(self.due(130, patient=True, **marks))
+        self.assertTrue(self.due(240, patient=True, **marks))
+        self.assertTrue(self.due(1, patient=True, hard_at=1000.5))
+
+    def test_an_ordinary_clear_still_waits_for_the_longer_of_the_two_windows(self):
+        with override_settings(RIPRAPTOR_LIST_REBUILD_SECONDS=10):
+            self.assertFalse(self.due(29, at=1001.0))
+            self.assertTrue(self.due(30, at=1001.0))
+            self.assertTrue(self.due(10, at=1001.0, forced_at=1001.0))
+
+    def test_the_live_site_waits_two_minutes_unless_told_otherwise(self):
+        import os
+        import subprocess
+        import sys
+
+        env = {key: value for key, value in os.environ.items() if key != "RIPRAPTOR_LIST_REBUILD_SECONDS"}
+        said = subprocess.run(
+            [sys.executable, "-c", "import django; from django.conf import settings; django.setup(); "
+                                   "print(settings.RIPRAPTOR_LIST_REBUILD_SECONDS)"],
+            env={**env, "DJANGO_SETTINGS_MODULE": "ripraptor.settings"}, capture_output=True, text=True, check=True)
+        self.assertEqual(said.stdout.strip(), "120")
 
 
 @override_settings(RIPRAPTOR_SERVE_STALE=True)

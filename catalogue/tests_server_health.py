@@ -4,13 +4,14 @@ The owner, 25 Nov 2026: "the server is running at 99% cpu how do we ensure that 
 admin"."""
 
 from datetime import timedelta
+from io import StringIO
 from pathlib import Path
 from unittest import mock
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from django.db import connection
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
@@ -211,6 +212,38 @@ class WorkerTests(TestCase):
         self.assertEqual((latest.cpu, latest.held, latest.jobs), (92, True, 1))
         self.assertEqual(list(ServerSample.objects.order_by("at").values_list("cpu", flat=True)), [50, 92])
 
+    def test_each_sample_says_what_the_readers_processor_time_went_on(self):
+        reader = self.reader(FakeSampler([50, 60]))
+        with reader.spent(worker.LISTS):
+            sum(i * i for i in range(200000))   # some processor time
+        with reader.spent(worker.UPKEEP):
+            pass   # none worth a line
+        reader.keep_server_sampled(self.now)
+        work = ServerSample.objects.get().reader_work
+        self.assertEqual(list(work), [worker.LISTS])
+        self.assertGreater(work[worker.LISTS], 0)
+        # Counted afresh for the next sample.
+        reader.keep_server_sampled(self.now + timedelta(minutes=1))
+        self.assertEqual(ServerSample.objects.order_by("-at").first().reader_work, {})
+
+    def test_waiting_is_not_processor_time(self):
+        import time
+
+        reader = self.reader(None)
+        with reader.spent(worker.READS):
+            time.sleep(0.05)   # a shop taking its time to answer
+        self.assertEqual(reader.take_work(), {})
+
+    def test_a_job_is_counted_under_its_kind_of_work(self):
+        reader = self.reader(None)
+        reader.executor = worker.InlineExecutor()
+        busy = lambda job: sum(i * i for i in range(200000)) > 0   # noqa: E731
+        with mock.patch.object(reader, "read_shop", busy), mock.patch.object(reader, "probe_shop", busy):
+            reader.run_job(worker.Job(worker.Task(worker.SHOP_READ, 1, "shopify", 1, "Read"), self.now, self.now))
+            self.assertEqual(list(reader.take_work()), [worker.READS])
+            reader.run_job(worker.Job(worker.Task(worker.PROBE, 1, "shopify", 1, "Check"), self.now, self.now))
+            self.assertEqual(list(reader.take_work()), [worker.CHECKS])
+
     def test_a_failing_sample_never_stops_the_reader(self):
         broken = mock.Mock()
         broken.take.side_effect = OSError("no /proc")
@@ -262,6 +295,67 @@ class PageTests(TestCase):
         self.assertContains(response, '<polyline class="line"')
         self.assertContains(response, "Each hour as a table")
         self.assertContains(response, "Log to copy")
+
+    def test_what_the_readers_share_went_on(self):
+        sample(self.now - timedelta(minutes=11), 40)   # a sample from before the reader counted: left out
+        self.assertContains(self.client.get(self.url), "Nothing counted yet")
+        for i in range(10):
+            row = sample(self.now - timedelta(minutes=i), 40)
+            row.reader_work = {worker.LISTS: 9.0, worker.READS: 3.0}
+            row.save()
+        response = self.client.get(self.url)
+        self.assertContains(response, "What the background reader's share went on")
+        page = response.content.decode()
+        self.assertLess(page.index("Building the page lists"), page.index("Reading shops"))   # the most first
+        self.assertContains(response, '<span class="share">9.0 s</span>')
+        log = response.context["log"]
+        self.assertIn("the reader's own processor time by kind of work, seconds a minute: "
+                      "Building the page lists 9.0 (75%); Reading shops 3.0 (25%)", log)
+
+    def test_the_hourly_tidys_last_run_step_by_step(self):
+        from django.core.cache import cache
+        from django.core.management import call_command
+
+        from catalogue.management.commands import tidy_all
+
+        cache.delete(tidy_all.LAST_KEY)
+        self.addCleanup(cache.delete, tidy_all.LAST_KEY)
+        sample(self.now, 40)
+        self.assertContains(self.client.get(self.url), "No run counted yet")
+        cache.set(tidy_all.LAST_KEY, {"at": (self.now - timedelta(minutes=20)).isoformat(), "seconds": 724.0, "cpu": 640.5,
+                                      "steps": [["tidy_listings", 300.2], ["sets", 0.1], ["merge_duplicates", 120.0]]})
+        response = self.client.get(self.url)
+        self.assertContains(response, "it took 12 minutes 4 seconds and 10 minutes 40 seconds of processor time")
+        page = response.content.decode()
+        self.assertLess(page.index("<span>tidy_listings</span>"), page.index("<span>merge_duplicates</span>"))
+        self.assertNotIn("<span>sets</span>", page)   # under half a second: not worth a line
+        self.assertIn("took 12 minutes 4 seconds, 640 seconds of processor time; by step, seconds: "
+                      "tidy_listings 300; merge_duplicates 120", response.context["log"])
+        # Something else under the key is no run.
+        cache.set(tidy_all.LAST_KEY, "not a run")
+        self.assertContains(self.client.get(self.url), "No run counted yet")
+        # A real run keeps its own figures, every step in the order run; a dry run keeps none.
+        cache.delete(tidy_all.LAST_KEY)
+        out = StringIO()
+        with override_settings(RIPRAPTOR_CHECK_PICTURES=False):
+            call_command("tidy_all", dry_run=True, stdout=out)
+            self.assertIsNone(tidy_all.last_run())
+            call_command("tidy_all", stdout=out)
+        kept = tidy_all.last_run()
+        names = [name for name, _seconds in kept["steps"]]
+        self.assertEqual(names[:3], ["tidy_listings", "merge_duplicates", "tidy_catalogue"])
+        self.assertEqual(names[-1], "page lists")
+        self.assertGreaterEqual(kept["cpu"], sum(seconds for _name, seconds in kept["steps"]) - 0.5)
+        self.assertRegex(out.getvalue(), r"Tidy took \d+ s, \d+ s of processor time")
+        self.assertContains(self.client.get(self.url), "Last run ended")
+
+    def test_the_log_gives_each_ten_minutes_share_by_program(self):
+        start = self.now - timedelta(minutes=30)
+        for i in range(10):
+            sample(start + timedelta(seconds=i), 80, **{READER: 26.0, WEBSITE: 7.0, JOBS: 45.0})
+        log = self.client.get(self.url).context["log"]
+        self.assertIn("then the share of the processors by program: reader %, website %, scheduled jobs %", log)
+        self.assertRegex(log, r"80\.0   80\.0 .*  26\.0    7\.0   45\.0\n")
 
     def test_busy_says_so_here_and_on_admin_home(self):
         for i in range(20):

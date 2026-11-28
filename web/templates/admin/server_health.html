@@ -86,6 +86,28 @@
     {% else %}<p class="note">Nothing in the last 15 minutes.</p>{% endif %}
   </section>
 
+  <section aria-labelledby="work-title">
+    <h2 id="work-title">What the background reader's share went on</h2>
+    <p class="note">The last 15 minutes: its own processor time by kind of work, in seconds a minute. A minute of one processor is 60.</p>
+    {% if work %}
+    <ul class="using">
+      {% for words, seconds, share in work %}<li><span>{{ words }}</span><span class="share">{{ seconds|floatformat:1 }} s</span><meter min="0" max="100" value="{{ share|floatformat:0 }}" aria-label="{{ words }}">{{ share|floatformat:0 }}%</meter></li>{% endfor %}
+    </ul>
+    {% else %}<p class="note">Nothing counted yet: it starts with the reader's next sample.</p>{% endif %}
+  </section>
+
+  <section aria-labelledby="tidy-title">
+    <h2 id="tidy-title">The hourly tidy</h2>
+    {% if tidy %}
+    <p>Last run ended {{ tidy.at }}: it took {{ tidy.took }} and {{ tidy.cpu }} of processor time. No shop is read while it runs.</p>
+    {% if tidy.steps %}
+    <ul class="using">
+      {% for name, seconds in tidy.steps %}<li><span>{{ name }}</span><span class="share">{{ seconds|floatformat:0 }} s</span><meter min="0" max="{{ tidy.cpu_seconds|floatformat:0 }}" value="{{ seconds|floatformat:0 }}" aria-label="{{ name }}">{{ seconds|floatformat:0 }} seconds</meter></li>{% endfor %}
+    </ul>
+    {% endif %}
+    {% else %}<p class="note">No run counted yet: it runs at five past each hour.</p>{% endif %}
+  </section>
+
   <section aria-labelledby="day-title" class="chart">
     <h2 id="day-title">Processors busy, last 24 hours</h2>
     <p class="note">Ten minutes a point{% if peak is not None %}, highest {{ peak|floatformat:0 }}%{% endif %}. The dashed line is {{ controls.cpu_pause_percent }}%, where new jobs are held; shaded, the times they were. Over {{ busy_percent }}% for {{ busy_minutes }} minutes, you get an email. Touch or point at a chart for each ten minutes.</p>

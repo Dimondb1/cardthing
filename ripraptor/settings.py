@@ -169,6 +169,14 @@ if TESTING:
 # expire when the window closes. Tests clear on every save.
 RIPRAPTOR_CACHE_CLEAR_SECONDS = 0 if TESTING else 30
 
+# A cached list that background work changed (a shop read, a stock check, a tidy) is built again once its copy is
+# this old, and no sooner. Building them all is several seconds of processor time, and until 28 Nov 2026 the reader did
+# it after every job and every 30 seconds between: over four fifths of all the processor time it used. The owner, of
+# a server with a second processor: "here we are cpu sitting at 99 percent again". The owner's own edits are never
+# held to this (a hard clear builds at once), and visitors are served the copy there is meanwhile. The tests build
+# at once, as they clear at once.
+RIPRAPTOR_LIST_REBUILD_SECONDS = 0 if TESTING else int(os.environ.get("RIPRAPTOR_LIST_REBUILD_SECONDS", "120"))
+
 # A clear waits for the transaction that changed the rows to commit: another
 # worker could otherwise refill the lists from the rows as they were. Django's
 # test cases never commit, so the tests clear at once unless a test turns this on.

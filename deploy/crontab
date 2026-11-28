@@ -17,9 +17,12 @@
 # Claude looks for the RRPs of products without one daily at 7:15, on its own lock (find_rrps: it spends only
 # while Let Claude act is on, within the monthly limit).
 # deploy/install.sh writes the same lines (it is the source of truth); catalogue/tests_ops.py fails when they differ.
+# Every command runs at a lower priority than the website (RIPRAPTOR_NICE below, read as each command starts), so a visitor's
+# page is served first when a scheduled job and the website both want a processor.
 # Every command runs under timeout, set to its budget plus five minutes, so a hung command cannot hold a lock for ever.
 # The snapshot, the delivery check and tidy_all put timeout inside flock, so waiting for a long import does not use up their limit.
 PYTHONUNBUFFERED=1
+RIPRAPTOR_NICE=10
 0 * * * *  cd /srv/ripraptor && set -a && . ./.env && set +a && timeout -k 60 3300 flock -w 1800 /tmp/ripraptor-import.lock .venv/bin/python manage.py import_prices --due --if-worker-dead 30 >> /var/log/ripraptor-import.log 2>&1
 5 * * * *  cd /srv/ripraptor && set -a && . ./.env && set +a && flock -n /tmp/ripraptor-tidy.lock flock -w 1800 /tmp/ripraptor-import.lock timeout -k 60 1500 .venv/bin/python manage.py tidy_all >> /var/log/ripraptor-import.log 2>&1
 15 0 * * * cd /srv/ripraptor && set -a && . ./.env && set +a && flock /tmp/ripraptor-import.lock timeout -k 60 1800 .venv/bin/python manage.py snapshot_daily_prices >> /var/log/ripraptor-import.log 2>&1

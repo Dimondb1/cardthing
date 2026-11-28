@@ -720,8 +720,53 @@ the reader is not running.
   process is not in it.
 - The reader runs with `CPUWeight=20` as well as `Nice=10`
   (`deploy/ripraptor-worker.service`): when both want the processors, the
-  website gets about five times the reader's share. With them free, the
-  reader still uses them all.
+  website gets about five times the reader's share.
+- **The reader's ceiling**: `CPUQuota=50%` in the same file. The reader can
+  never use more than half of one processor (a quarter of a server with
+  two), free or not. Reading shops is mostly waiting for them to answer, so
+  it reads as many; its heavy work between reads takes a little longer.
+  `RIPRAPTOR_WORKER_CPU_PERCENT` in `.env` (a whole number, 10 to 400,
+  percent of one processor) sets another figure at the next update.
+- **What the reader's share went on**: the reader counts its own processor
+  time by kind of work (reading shops, stock checks and other short jobs,
+  building the page lists, planning, upkeep; `Worker.spent` in
+  `catalogue/worker.py`) and each sample keeps the minute's figures
+  (`ServerSample.reader_work`). The page shows the last 15 minutes in
+  seconds a minute; a minute of one processor is 60.
+- **The hourly tidy**: `tidy_all` counts the processor time of each of its
+  steps and keeps the last run's figures in the cache; the page lists them,
+  heaviest first, with how long the run took. No shop is read while it runs.
+- **The log** gives each ten minutes' share of the processors by program
+  (reader, website, scheduled jobs) after its other figures, so a busy
+  spell can be put down to one of them after the fact.
+
+### Why the processors were busy (28 Nov 2026)
+
+The owner, with a second processor added: "here we are cpu sitting at 99
+percent again". His log showed the reader using 26% of both processors in
+a quiet quarter of an hour (half of one processor), and peaks of 97 to 99%
+in the first ten to twenty minutes of every hour, when `tidy_all` runs.
+Measured on a full-size copy (6,000 products, 139 shops, 60,000 listings):
+
+- over four fifths of the reader's processor time was building the page
+  lists, not reading shops: it built every list after every job and every
+  30 seconds between, 17 builds in 5 minutes. Now a list that background
+  work changed is built again once it is two minutes old (below, Shared
+  cache), and the reader holds even that back while the processors are
+  busy;
+- two thirds of the hourly tidy was reading every listing whole and judging
+  it against its product afresh, for an answer that could not differ. Now
+  a listing found fine is judged again only when what it was judged on
+  changes (`tidy_listings.Judged`: its address, title or barcode, its
+  product's name, game, language or barcode, or the rules in the code, so
+  the first tidy after an update still judges them all);
+- scheduled jobs ran at the website's own priority. Now each starts 10
+  lower (`RIPRAPTOR_NICE=10` at the top of the crontab, read by
+  `manage.py`), so a visitor's page is served first.
+
+On that copy the same five minutes of reading (19 jobs against 18) took 22
+seconds of processor time in place of 77, and the hourly tidy 10 in place
+of 27. The reader's ceiling (above) holds whatever else changes.
 
 ## Crawler settings
 
@@ -3964,11 +4009,15 @@ prices changed:
   all building it at once. Django's own cache cannot be the lock: its file
   cache checks and writes in two steps, so two workers could both take it;
 - the end of every import, a restock found by the stock watcher,
-  `tidy_listings` hiding eBay prices, a delivery rule change and the fixes on
-  Things to check force a clear: the jobs build the lists again on their next
-  turn. An ordinary save lets a list stay until it is 30 seconds old
-  (`RIPRAPTOR_CACHE_CLEAR_SECONDS`), so a shop read that changes a few dozen
-  prices causes one build rather than one per price;
+  `tidy_listings` hiding eBay prices, a delivery rule change and an
+  ordinary save all clear the lists, and the jobs build a cleared list
+  again once its copy is two minutes old (`RIPRAPTOR_LIST_REBUILD_SECONDS`,
+  120), not sooner. Until 28 Nov 2026 a forced clear was built at the
+  reader's next turn and an ordinary one after 30 seconds; every job ends
+  with a forced clear, so the reader built every list several times a
+  minute, over four fifths of the processor time it used. A price change
+  now shows on the lists within about two minutes; the product page itself
+  is never behind;
 - the owner's own changes clear hard: any form the owner sends while
   signed in (a save in Django Admin, a hide or a merge on Things to check)
   stops the copies built before it being served at all
@@ -3992,9 +4041,12 @@ run no background jobs they build a cleared list on the next request
 The background jobs that build the lists again (`web/warming.py`):
 
 - the background reader looks at the start of its loop (every 5 seconds)
-  for a forced clear or a missing list, and every 30 seconds for ordinary
-  clears and lists nearly `RIPRAPTOR_HOME_CACHE_SECONDS` old, and builds
-  only those;
+  for the owner's own edit or a missing list, and every 30 seconds for
+  lists that are due (cleared and two minutes old, or nearly
+  `RIPRAPTOR_HOME_CACHE_SECONDS` old), and builds only those. While it
+  holds new jobs because the processors are busy (Crawler settings), it
+  builds only what cannot wait: the owner's edits, missing lists and lists
+  nearly `RIPRAPTOR_HOME_CACHE_SECONDS` old;
 - `tidy_all`, `import_prices` and `watch_stock` build what is due when they
   finish;
 - cron runs `python manage.py warm_pages --due` every five minutes on its
@@ -4039,6 +4091,8 @@ index.
 | `RIPRAPTOR_CHECK_PICTURES`     | on      | Ask shops every hour whether product pictures are still there, and take gone ones off (off in the tests). |
 | `RIPRAPTOR_HOME_CACHE_SECONDS` | 300     | How old the cached page lists may grow before the background jobs build them again. Imports and edits mark them stale sooner. |
 | `RIPRAPTOR_PAGE_CACHE_SECONDS` | 300     | How long a built game or set page (each tab and set of filters under its own address) is served whole from the shared cache. 0 turns it off. |
+| `RIPRAPTOR_LIST_REBUILD_SECONDS` | 120 | A cached page list that background work changed (a shop read, a stock check, a tidy) is built again once its copy is this old, and no sooner. Lower shows price changes on the lists sooner and costs more processor time; the owner's own edits are never held to it. |
+| `RIPRAPTOR_WORKER_CPU_PERCENT` | 50 | The most of one processor the background reader may use, as a whole number (10 to 400). `deploy/install.sh` writes it into the reader's service as `CPUQuota` at each update. |
 | `RIPRAPTOR_LIST_MAX_STALE_SECONDS` | 600 | A cached page list is never served once its build started longer ago than this: the visitor who finds it builds it first. |
 | `RIPRAPTOR_CACHE_DIR`          | `/var/lib/ripraptor/cache` (`.cache` with `DJANGO_DEBUG` on) | The cache folder the site and every command share. Must be writable by the user the site runs as. |
 | `RIPRAPTOR_WORKER_THREADS`     | 4       | Jobs the background reader runs at once. 2 suits a server with under 1.5 GB of memory, and `deploy/install.sh` writes 2 on such a server when the setting is missing, and removes that 2 once the server has 1.5 GB or more. Restart `ripraptor-worker` after changing it. |

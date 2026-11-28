@@ -20,10 +20,31 @@ so a rule added in code is applied to data already in the database.
 
 While an uploaded spreadsheet is part made (its runner was stopped part way, by a deploy say), the products
 and the autopilot are left alone for the hour, and the runner is started to finish the file.
+
+Each step's processor time is counted and the last run's figures kept (LAST_KEY) for the Server health page, so
+an hour whose first minutes ran the processors hard can be put down to the step that did it. The owner, 28 Nov
+2026: "here we are cpu sitting at 99 percent again"; his log showed the peaks in the first ten to twenty minutes of
+each hour, when this runs, and nothing said which step.
 """
 
+import time
+
+from django.core.cache import cache
 from django.core.management import call_command
 from django.core.management.base import BaseCommand
+from django.utils import timezone
+
+# The last real run's figures: {"at": when it ended (ISO), "seconds": how long it took, "cpu": its processor
+# seconds, "steps": [[name, processor seconds], ...] in the order run}. Read by web/server_health.py.
+LAST_KEY = "tidy:last-run:v1"
+
+
+def last_run():
+    """The last real run's figures (LAST_KEY), or None when none is kept or what is kept is not one."""
+    kept = cache.get(LAST_KEY)
+    if not isinstance(kept, dict) or not isinstance(kept.get("steps"), list):
+        return None
+    return kept
 
 
 class Command(BaseCommand):
@@ -33,17 +54,48 @@ class Command(BaseCommand):
     def add_arguments(self, parser):
         parser.add_argument("--dry-run", action="store_true", help="Report what each would do and change nothing.")
 
+    def section(self, name):
+        """Say that the step ``name`` starts, and count the processor time of the step before it."""
+        self.close_section()
+        self.stdout.write(f"== {name}")
+        self.step = (name, time.process_time())
+
+    def close_section(self):
+        if getattr(self, "step", None) is not None:
+            name, started = self.step
+            self.steps.append([name, round(time.process_time() - started, 2)])
+        self.step = None
+
     def handle(self, *args, dry_run=False, **options):
+        self.steps, self.step = [], None
+        began, cpu_began = time.monotonic(), time.process_time()
+        try:
+            self.tidy(dry_run)
+        finally:
+            self.close_section()
+            if not dry_run:
+                took = {"at": timezone.now().isoformat(), "seconds": round(time.monotonic() - began, 1),
+                        "cpu": round(time.process_time() - cpu_began, 1), "steps": self.steps}
+                try:
+                    cache.set(LAST_KEY, took, 7 * 24 * 3600)
+                except Exception:  # noqa: BLE001 - only a figure for a page
+                    pass
+                heaviest = sorted(self.steps, key=lambda step: -step[1])[:3]
+                self.stdout.write(f"Tidy took {took['seconds']:.0f} s, {took['cpu']:.0f} s of processor time"
+                                  + (": " + ", ".join(f"{name} {seconds:.0f} s" for name, seconds in heaviest)
+                                     if heaviest else "") + ".")
+
+    def tidy(self, dry_run):
         tidying = not self.spreadsheet_part_made()
         if tidying:
             self.tidy_products(dry_run)
         from catalogue.importers import forget_pages
 
-        self.stdout.write("== shop pages")
+        self.section("shop pages")
         gone = forget_pages(dry_run=dry_run)
         self.stdout.write(f"{gone} shop pages {'would be forgotten' if dry_run else 'forgotten'}.")
 
-        self.stdout.write("== import records")
+        self.section("import records")
         if dry_run:
             self.stdout.write("Old import records would be cleared.")
         else:
@@ -52,7 +104,7 @@ class Command(BaseCommand):
             cleared, deleted = prune_runs()
             self.stdout.write(f"{cleared} lists of unmatched products cleared, {deleted} old runs deleted.")
 
-        self.stdout.write("== removed product addresses")
+        self.section("removed product addresses")
         if dry_run:
             self.stdout.write("Removed product addresses older than a year would be forgotten.")
         else:
@@ -60,7 +112,7 @@ class Command(BaseCommand):
 
             self.stdout.write(f"{prune_removed()} removed product addresses forgotten.")
 
-        self.stdout.write("== spreadsheets")
+        self.section("spreadsheets")
         if dry_run:
             self.stdout.write("Old spreadsheet files would be cleared.")
         else:
@@ -70,7 +122,7 @@ class Command(BaseCommand):
             self.stdout.write(f"{workbooks + uploads} old spreadsheet files cleared, {exports} downloads and "
                               f"{imports} uploads deleted.")
 
-        self.stdout.write("== shop enquiries")
+        self.section("shop enquiries")
         if dry_run:
             self.stdout.write("Shop enquiries past their keeping time would be deleted.")
         else:
@@ -80,7 +132,7 @@ class Command(BaseCommand):
 
         # Scripts that ran our pages, found visitor by visitor (catalogue/automated.py), and the addresses of the
         # visitors who have left forgotten (catalogue/online.py). The background reader does today every few minutes.
-        self.stdout.write("== visits")
+        self.section("visits")
         if dry_run:
             self.stdout.write("Automated visitors and clicks would be marked, and gone visitors' addresses deleted.")
         else:
@@ -96,7 +148,7 @@ class Command(BaseCommand):
         if settings.RIPRAPTOR_CHECK_PICTURES:
             from catalogue import pictures
 
-            self.stdout.write("== pictures")
+            self.section("pictures")
             done = pictures.check(dry_run=dry_run, log=self.stdout.write if dry_run else None)
             self.stdout.write(f"{done['checked']} product pictures checked, {done['gone']} found gone and "
                               f"{'would be ' if dry_run else ''}taken off ({done['replaced']} given another shop's "
@@ -105,13 +157,13 @@ class Command(BaseCommand):
         # Counted here, never while the Insights page waits: a big shop's list runs to thousands of lines.
         from catalogue.insights import count_left_out
 
-        self.stdout.write("== look sealed, left out")
+        self.section("look sealed, left out")
         self.stdout.write(f"{count_left_out()['count']} items shops sell look sealed but were left out.")
 
         from catalogue import autopilot
 
         if tidying and autopilot.enabled():
-            self.stdout.write("== autopilot")
+            self.section("autopilot")
             done = autopilot.run(dry_run=dry_run)
             for kind, what, why in done:
                 self.stdout.write(f"{what}: {why}.")
@@ -121,13 +173,13 @@ class Command(BaseCommand):
             # Counted here, never while the dashboard waits: duplicates() reads the whole catalogue.
             from catalogue import checks
 
-            self.stdout.write("== possible duplicates")
+            self.section("possible duplicates")
             counted = checks.note_duplicate_counts(checks.duplicates())
             self.stdout.write(f"{counted['pairs']} possible duplicate pairs wait on Things to check.")
             # The tidying cleared the cached page lists; build them now rather than on a visitor's request.
             from web.warming import warm_quietly
 
-            self.stdout.write("== page lists")
+            self.section("page lists")
             took = warm_quietly()
             self.stdout.write("The page lists could not be built; visitors build them." if took is None
                               else f"Page lists built in {took:.1f} s.")
@@ -149,14 +201,14 @@ class Command(BaseCommand):
 
     def tidy_products(self, dry_run):
         for name in ("tidy_listings", "merge_duplicates", "tidy_catalogue"):
-            self.stdout.write(f"== {name}")
+            self.section(name)
             call_command(name, dry_run=dry_run, stdout=self.stdout)
         from django.db import transaction
 
         from catalogue.releases import attach_sets, raise_name_candidates
         from catalogue.models import Game
 
-        self.stdout.write("== sets")
+        self.section("sets")
         filed = 0
         codes = []
         for game in Game.objects.all():
@@ -175,23 +227,23 @@ class Command(BaseCommand):
 
         from catalogue.languages import refresh_languages
 
-        self.stdout.write("== languages")
+        self.section("languages")
         changed = refresh_languages(dry_run=dry_run)
         self.stdout.write(f"{changed} product languages {'would change' if dry_run else 'set'}.")
 
         from catalogue.types import refresh_types
 
-        self.stdout.write("== types")
+        self.section("types")
         changed = refresh_types(dry_run=dry_run)
         self.stdout.write(f"{changed} product types {'would change' if dry_run else 'set'}.")
 
         from catalogue.contents import refresh_contents
 
-        self.stdout.write("== what is inside")
+        self.section("what is inside")
         changed = refresh_contents(dry_run=dry_run)
         self.stdout.write(f"{changed} products' packs and cards {'would change' if dry_run else 'set'} from shops' "
                           "descriptions.")
 
         if not dry_run:
-            self.stdout.write("== price checks")
+            self.section("price checks")
             call_command("refresh_price_checks", stdout=self.stdout)

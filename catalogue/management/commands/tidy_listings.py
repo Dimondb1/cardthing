@@ -11,11 +11,19 @@ against the words in its shop address and drops those that plainly
 contradict the product: another game, a language or edition word, an
 accessory or single, or a box where the product is a pack. An address that
 merely lacks words is left alone, because slugs drop and garble words.
+
+A listing judged fine is not judged again until something it was judged on changes (its address, title or
+barcode, its product's name, game, language or barcode, or the rules themselves): see Judged. Until 28 Nov 2026
+every listing was read whole and judged afresh every hour, two thirds of the hourly tidy's processor time for
+an answer that could not differ. The owner then, of the server: "here we are cpu sitting at 99 percent again".
 """
 
+import hashlib
 import re
 from contextlib import nullcontext
+from pathlib import Path
 
+from django.core.cache import cache
 from django.core.management.base import BaseCommand
 from django.db import transaction
 from django.utils import timezone
@@ -47,6 +55,7 @@ def same_language(title, product):
 
 
 MARKETPLACES = ("ebay", "amazon")
+CHUNK = 500   # listings read whole at a time
 _OWNED = {}
 
 
@@ -122,6 +131,61 @@ def fits(listing):
     return True
 
 
+class Judged:
+    """The listings fits() last found fine, each with a fingerprint of everything it was judged on, kept in the
+    shared cache between runs. fits() reads nothing but those values and the rules in the code, so a listing
+    whose fingerprint has not moved gets the same answer, and is not read or judged again.
+
+    The rules are part of it: the fingerprint of the code that decides (RULES) is kept with the listings, so the
+    first tidy after an update judges every listing afresh, as "a rule added in code is applied to data already
+    in the database" (tidy_all) asks. A cache emptied or culled only means everything is judged once more."""
+
+    KEY = "tidy:listings:fine:v1"
+    # The files whose code decides fits(): this command's own, and the rules it calls.
+    RULES = ("management/commands/tidy_listings.py", "matching.py", "classify.py", "languages.py", "importers.py")
+    # What a row carries after its id, in the order row_of gives them.
+    FIELDS = ("url", "title", "shop_ean", "retailer__source_type", "product__name", "product__game__slug",
+              "product__language", "product__ean")
+
+    def __init__(self):
+        self.rules = self.rules_now()
+        kept = cache.get(self.KEY)
+        self.fine = kept[1] if isinstance(kept, tuple) and len(kept) == 2 and kept[0] == self.rules else {}
+        self.now = {}
+
+    @classmethod
+    def rules_now(cls):
+        folder = Path(__file__).resolve().parent.parent.parent
+        digest = hashlib.blake2b(digest_size=16)
+        for name in cls.RULES:
+            digest.update((folder / name).read_bytes())
+        return digest.hexdigest()
+
+    @staticmethod
+    def fingerprint(row):
+        """One listing's values, as fits() reads them: (url, title, shop barcode, how the shop is read, product
+        name, game, language, the product's barcode when it names one product alone)."""
+        url, title, shop_ean, source, name, game, language, ean = row
+        owned = ean if ean and ean_key(ean) in owned_barcodes() else ""
+        text = "\x1f".join((url or "", title or "", shop_ean or "", "m" if source in MARKETPLACES else "",
+                             name or "", game or "", language or "", owned))
+        return hashlib.blake2b(text.encode("utf-8", "surrogatepass"), digest_size=8).digest()
+
+    def known(self, pk, mark):
+        """Whether the listing was found fine on these very values. A listing that was is kept for the next run."""
+        if self.fine.get(pk) != mark:
+            return False
+        self.now[pk] = mark
+        return True
+
+    def found_fine(self, pk, mark):
+        self.now[pk] = mark
+
+    def keep(self):
+        """Remember this run's answers (only listings that still exist and were fine)."""
+        cache.set(self.KEY, (self.rules, self.now), None)
+
+
 def names_in_full(name, title, game):
     """Whether a shop title names every identifying word of our product's name, in the words matching uses
     (plurals and set codes spelt one way), and says nothing against it."""
@@ -132,7 +196,8 @@ def names_in_full(name, title, game):
 def shared_link_misfits(rows):
     """The listings to take off where one shop's link (its variant included) is on several of our products.
 
-    ``rows`` are (listing, retailer id, link, shop title, product name, game slug). A link is one product.
+    ``rows`` are (listing or its id, retailer id, link, shop title, product name, game slug), and the first of
+    each row to take off is returned. A link is one product.
     When the shop's titles on that link name exactly one of the products in full (every word of its name,
     and nothing matching.contradiction finds), the others go: Travelling Man's Avengers Assemble variant was
     on both our Avengers Assemble and Fantastic Four decks. When they name none or several, all stay for
@@ -203,20 +268,48 @@ class Command(BaseCommand):
             # Judge every listing first, then delete. A write while the chunked read is still open would
             # find its snapshot out of date as soon as another process commits, and SQLite then reports
             # the database locked at once rather than waiting.
-            listings = list(Listing.objects.select_related("product__game", "retailer").iterator())
-            misfits = [listing for listing in listings if not fits(listing)]
-            gone = {listing.pk for listing in misfits}
-            misfits += shared_link_misfits([
-                (listing, listing.retailer_id, listing.url, listing.title, listing.product.name, listing.product.game.slug)
-                for listing in listings if listing.pk not in gone
+            # Every listing as a row of the values it is judged on, not as a whole listing: only those not yet
+            # found fine on these values (Judged) are read whole and judged.
+            judged = Judged()
+            rows = list(Listing.objects.values_list("pk", "retailer_id", *Judged.FIELDS).iterator())
+            marks = {row[0]: Judged.fingerprint(row[2:]) for row in rows}
+            to_judge = [row[0] for row in rows if not judged.known(row[0], marks[row[0]])]
+            whole = {}
+            for start in range(0, len(to_judge), CHUNK):
+                whole.update(Listing.objects.select_related("product__game", "retailer")
+                             .in_bulk(to_judge[start:start + CHUNK]))
+            gone = set()
+            for pk in to_judge:
+                listing = whole.get(pk)
+                if listing is None:
+                    continue   # deleted since the rows were read
+                if fits(listing):
+                    judged.found_fine(pk, marks[pk])
+                else:
+                    gone.add(pk)
+            misfit_pks = [pk for pk in to_judge if pk in gone]
+            shared = shared_link_misfits([
+                (pk, retailer_id, url, title, name, game)
+                for pk, retailer_id, url, title, _ean, _source, name, game, _language, _product_ean in rows
+                if pk not in gone
             ])
+            misfit_pks += shared
             # A listing whose shop description calls it a card from a product ("... is a Basic Pokemon Card from
             # the My First Battle Deck", Magic Madhouse) is a single card, whatever its title: the page reader
             # now refuses such pages (importers.not_sealed_reason), and these were linked before it did.
-            gone |= {listing.pk for listing in misfits}
+            gone |= set(shared)
             described = dict(Listing.objects.filter(description__icontains="card from").values_list("pk", "description"))
-            singles = [listing for listing in listings if listing.pk in described and listing.pk not in gone
-                       and calls_itself_a_card(listing.title or listing.product.name, described[listing.pk])]
+            single_pks = [pk for pk, _retailer, _url, title, _ean, _source, name, *_rest in rows
+                          if pk in described and pk not in gone and calls_itself_a_card(title or name, described[pk])]
+            missing = [pk for pk in misfit_pks + single_pks if pk not in whole]
+            whole.update(Listing.objects.select_related("product__game", "retailer").in_bulk(missing))
+            misfits = [whole[pk] for pk in misfit_pks if pk in whole]
+            singles = [whole[pk] for pk in single_pks if pk in whole]
+            if not dry_run:
+                # What was fine and stays: the listings taken off below are gone, and are in none of it.
+                for pk in list(shared) + single_pks:
+                    judged.now.pop(pk, None)
+                judged.keep()
             for listing in singles:
                 self.stdout.write(f"{'would remove' if dry_run else 'removed'} (a single card): {listing.product.name} <- "
                                   f"{listing.retailer.name} {listing.url}")

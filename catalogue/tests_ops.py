@@ -2,6 +2,7 @@
 
 import datetime
 import fcntl
+import os
 import re
 import shutil
 import sqlite3
@@ -386,6 +387,50 @@ class CronTests(TestCase):
         # The Discord posts every ten minutes at 8 past, a minute no other command starts on, on their own lock.
         self.assertEqual(lines["post_discord"][0], "8-58/10 * * * *")
         self.assertIn("flock -n /tmp/ripraptor-discord.lock .venv/bin/python manage.py post_discord", lines["post_discord"][1])
+
+    def test_the_reader_has_a_processor_ceiling_the_owner_can_move(self):
+        # The owner, 28 Nov 2026, with a second processor added: "here we are cpu sitting at 99 percent again".
+        unit = (DEPLOY / "ripraptor-worker.service").read_text()
+        self.assertEqual(re.findall(r"^CPUQuota=(.*)$", unit, re.M), ["50%"])
+        text = (DEPLOY / "install.sh").read_text()
+        start = text.index('WORKER_CPU="$(env_value RIPRAPTOR_WORKER_CPU_PERCENT)"')
+        block = text[start:text.index("esac\n", start) + len("esac\n")]
+        # Applied to the copy systemd reads, after it is copied and before systemd reads it again.
+        self.assertGreater(start, text.index("cp deploy/ripraptor-worker.service /etc/systemd/system/"))
+        self.assertLess(start, text.index("systemctl daemon-reload", start))
+        with tempfile.TemporaryDirectory() as folder:
+            copy = Path(folder) / "ripraptor-worker.service"
+            for value, quota in (("", "50%"), ("80", "80%"), ("400", "400%"), ("5", "50%"), ("500", "50%"),
+                                 ("half", "50%"), ("80%", "50%"), ("80; touch hacked", "50%"), ("-20", "50%")):
+                copy.write_text(unit)
+                script = ("env_value() { printf '%s' \"$VALUE\"; }\n"
+                          + block.replace("/etc/systemd/system/ripraptor-worker.service", str(copy)))
+                subprocess.run(["bash", "-c", script], cwd=folder, check=True, env={**os.environ, "VALUE": value})
+                self.assertEqual(re.findall(r"^CPUQuota=(.*)$", copy.read_text(), re.M), [quota], value)
+                self.assertEqual(sorted(path.name for path in Path(folder).iterdir()), ["ripraptor-worker.service"])
+
+    def test_scheduled_jobs_give_way_to_the_website(self):
+        import manage
+
+        for name, text in (("install.sh", install_block()), ("crontab", (DEPLOY / "crontab").read_text())):
+            with self.subTest(file=name):
+                self.assertIn("PYTHONUNBUFFERED=1\nRIPRAPTOR_NICE=10\n", text)
+        asked = []
+        self.assertEqual(manage.lower_priority({"RIPRAPTOR_NICE": "10"}, nice=asked.append), 10)
+        self.assertEqual(asked, [10])
+        # The website and a command run by hand set nothing; a bad value changes nothing and stops nothing.
+        for value in ("", "0", "20", "-5", "ten", "10; reboot"):
+            self.assertEqual(manage.lower_priority({"RIPRAPTOR_NICE": value}, nice=asked.append), 0, value)
+        self.assertEqual(manage.lower_priority({}, nice=asked.append), 0)
+        self.assertEqual(asked, [10])
+
+        def refused(by):
+            raise OSError("not permitted")
+
+        self.assertEqual(manage.lower_priority({"RIPRAPTOR_NICE": "10"}, nice=refused), 0)
+        # Neither the site's own service nor the reader's is given it: the reader has its own Nice.
+        for unit in ("ripraptor.service", "ripraptor-worker.service"):
+            self.assertNotIn("RIPRAPTOR_NICE", (DEPLOY / unit).read_text())
 
     def test_the_worker_unit_restarts_it_under_a_watchdog_and_install_starts_it(self):
         unit = (DEPLOY / "ripraptor-worker.service").read_text()

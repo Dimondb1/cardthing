@@ -2278,6 +2278,10 @@ class ServerSample(models.Model):
     memory_total_mb = models.PositiveIntegerField(default=0)
     disk_used_percent = models.PositiveSmallIntegerField(default=0)
     programs = models.JSONField(default=dict, blank=True, help_text="{program: percent of all the processors}")
+    reader_work = models.JSONField(
+        "the reader's processor time", default=dict, blank=True,
+        help_text="{kind of work: seconds of processor time the background reader spent on it in the minute} "
+                  "(catalogue/worker.py WORK).")
     held = models.BooleanField("new jobs held", default=False,
                                help_text="Whether the background reader was starting no new jobs, the processors "
                                          "being over Crawler settings' limit.")

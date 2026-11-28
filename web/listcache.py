@@ -7,9 +7,10 @@ lists; it notes the time of the clear (``mark_stale``), and any list built befor
 happens next:
 
 - a visitor who finds a list younger than RIPRAPTOR_LIST_MAX_STALE_SECONDS is served it at once, stale or not;
-- the background jobs (web.warming, run by the reader every few seconds, at the end of each import and from
-  cron every five minutes) build the stale and ageing lists again and replace them in place, so the cache is
-  never empty after the first fill;
+- the background jobs (web.warming, run by the reader, at the end of each import and from cron every five
+  minutes) build the stale and ageing lists again and replace them in place, so the cache is never empty after
+  the first fill. A list background work changed is built again once it is RIPRAPTOR_LIST_REBUILD_SECONDS old,
+  not after every job: building them is the heaviest thing the reader does (entry_due);
 - a visitor builds a list only when there is none, it is older than the maximum staleness, or the owner
   changed something since it was built (a hard clear), and then under a lock every process shares, so
   concurrent visitors wait for that one build rather than all running their own.
@@ -196,11 +197,11 @@ def cleared(cache=None):
 
 
 def mark_stale(force=False, hard=False, cache=None, now=None):
-    """Every list built before now is stale. A forced clear (the end of an import, a restock) asks the jobs to
-    build them again on their next turn; an ordinary one lets a list stay until it is at least
-    RIPRAPTOR_CACHE_CLEAR_SECONDS old, so a run of saves does not keep the reader building. A hard clear (the
-    owner's own edits: an admin save, a hide or a merge on the site) is not served at all: the next visitor
-    or job builds the list first, as when there was none.
+    """Every list built before now is stale. A forced clear (the end of an import, a restock) and an ordinary one
+    (a save) both ask the jobs to build them again once the copy is RIPRAPTOR_LIST_REBUILD_SECONDS old (entry_due),
+    so a run of jobs does not keep the reader building. A hard clear (the owner's own edits: an admin save, a hide
+    or a merge on the site) is not served at all: the next visitor or job builds the list first, as when there
+    was none.
 
     Each kind of clear keeps its own time, and a time is only ever raised, so two processes clearing at once
     never undo each other's marks."""
@@ -221,20 +222,39 @@ def is_stale(key, cache=None, marks=None):
     return found is not None and found.built_at < marks.get("at", 0)
 
 
-def is_due(key, now=None, cache=None, marks=None):
-    """Whether the jobs should build ``key`` again: missing, cleared by a forced clear, cleared by an ordinary
-    one and at least RIPRAPTOR_CACHE_CLEAR_SECONDS old, or within a minute of RIPRAPTOR_HOME_CACHE_SECONDS old."""
+def is_due(key, now=None, cache=None, marks=None, patient=False):
+    """Whether the jobs should build ``key`` again: missing, cleared by the owner's own edit, cleared by background
+    work and at least RIPRAPTOR_LIST_REBUILD_SECONDS old, or within a minute of RIPRAPTOR_HOME_CACHE_SECONDS old.
+    ``patient`` as for entry_due."""
     now = time.time() if now is None else now
     found = entry(key, cache)
-    return found is None or entry_due(found, now, cleared(cache) if marks is None else marks)
+    return found is None or entry_due(found, now, cleared(cache) if marks is None else marks, patient=patient)
 
 
-def entry_due(found, now, marks):
+def rebuild_after():
+    """How old a list that background work changed must be before the jobs build it again."""
+    return settings.RIPRAPTOR_LIST_REBUILD_SECONDS
+
+
+def entry_due(found, now, marks, patient=False):
+    """Whether the jobs should build this copy again now.
+
+    The owner's own edit (a hard clear): at once. Background work (a shop read's forced clear, a save's ordinary
+    one): once the copy is RIPRAPTOR_LIST_REBUILD_SECONDS old, so a reader that changes prices all day builds the
+    lists every couple of minutes, not after every job; an ordinary clear waits for RIPRAPTOR_CACHE_CLEAR_SECONDS
+    too, when that is longer. Nothing cleared: when it nears RIPRAPTOR_HOME_CACHE_SECONDS old.
+
+    ``patient`` (the reader, while the processors are busy and it holds new jobs) leaves background work's clears
+    to that last rule, so the lists cost nothing more until the server has room."""
     age = now - found.built_at
-    if found.built_at < max(marks.get("forced_at", 0), marks.get("hard_at", 0)):
+    if found.built_at < marks.get("hard_at", 0):
         return True
-    if found.built_at < marks.get("at", 0) and age >= settings.RIPRAPTOR_CACHE_CLEAR_SECONDS:
-        return True
+    if not patient:
+        wait = rebuild_after()
+        if found.built_at < marks.get("forced_at", 0) and age >= wait:
+            return True
+        if found.built_at < marks.get("at", 0) and age >= max(wait, settings.RIPRAPTOR_CACHE_CLEAR_SECONDS):
+            return True
     return age >= refresh_age()
 
 

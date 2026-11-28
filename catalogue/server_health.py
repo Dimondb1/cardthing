@@ -236,15 +236,16 @@ def default_disk():
         return 0
 
 
-def save(reading, now, held=False, jobs=0, shop_requests=0, pages=None):
-    """Save a sample, with what the reader was doing and ``pages`` (response_times.collect)."""
+def save(reading, now, held=False, jobs=0, shop_requests=0, pages=None, reader_work=None):
+    """Save a sample, with what the reader was doing, ``pages`` (response_times.collect) and ``reader_work``, the
+    seconds of processor time the reader spent on each kind of its work since the last sample (Worker.take_work)."""
     from .models import ServerSample
 
     pages = pages or {}
     return ServerSample.objects.create(
         at=now, cpu=reading.cpu, cpus=reading.cpus, load=reading.load, memory_used_mb=reading.memory_used_mb,
         memory_total_mb=reading.memory_total_mb, disk_used_percent=reading.disk_used_percent,
-        programs=reading.programs, held=held, jobs=jobs, shop_requests=shop_requests,
+        programs=reading.programs, held=held, jobs=jobs, shop_requests=shop_requests, reader_work=reader_work or {},
         pages=pages.get("pages", 0), page_ms=pages.get("average"), page_ms_slowest=pages.get("slowest"),
         pages_slow=pages.get("slow", 0),
     )

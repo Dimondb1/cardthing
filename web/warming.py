@@ -6,14 +6,16 @@ The home page's deals, the Deals page's savings and drops, Out now and the sets 
 reader marks them stale whenever prices change (catalogue.signals.clear_list_caches); visitors keep being
 served the stale copy, and these jobs build them again and replace them in place:
 
-- the background reader (catalogue.worker) builds whatever is due within a turn of its loop (a few seconds);
+- the background reader (catalogue.worker) looks every half minute and builds whatever is due, and at its next
+  turn after the owner's own edit;
 - tidy_all, import_prices and watch_stock build what is due when they finish;
 - cron runs ``manage.py warm_pages --due`` every five minutes, the floor for when the reader is not running;
 - ``manage.py warm_pages`` builds them all by hand, and the installer runs it after emptying the cache.
 
-A list is due when it is missing, was cleared (web.listcache.is_due), or is nearly
-RIPRAPTOR_HOME_CACHE_SECONDS old. Nothing here changes what a list holds: a list is built by the same function
-a visitor's request would call, so prices age out of it under the same stale rules.
+A list is due when it is missing, was cleared by the owner's edit, was cleared by background work and is
+RIPRAPTOR_LIST_REBUILD_SECONDS old (web.listcache.is_due), or is nearly RIPRAPTOR_HOME_CACHE_SECONDS old.
+Nothing here changes what a list holds: a list is built by the same function a visitor's request would call,
+so prices age out of it under the same stale rules.
 """
 
 import logging
@@ -55,24 +57,25 @@ def missing(games=None):
             + [f"page:{path}" for path in pagecache.warm_paths(games) if not pagecache.has(path)])
 
 
-def due(games=None):
+def due(games=None, patient=False):
     """The keys of cached_keys the jobs should build again now (web.listcache.is_due), and the game pages not
-    kept (web.pagecache): a page is due once its copy has gone."""
+    kept (web.pagecache): a page is due once its copy has gone. ``patient`` as for listcache.entry_due."""
     from web import pagecache
 
     games = active_games() if games is None else games
     now, marks = time.time(), listcache.cleared()
-    return ([key for key in cached_keys(games) if listcache.is_due(key, now=now, marks=marks)]
+    return ([key for key in cached_keys(games) if listcache.is_due(key, now=now, marks=marks, patient=patient)]
             + [f"page:{path}" for path in pagecache.warm_paths(games) if not pagecache.has(path)])
 
 
-def warm_pages(fresh=False, only=None):
+def warm_pages(fresh=False, only=None, patient=False):
     """Build the cached lists the main pages read, in place, and return {list name: seconds taken}.
 
     Without ``fresh`` only the lists that are due are built (a list already fresh costs a cache read); with
     it every list is built again. ``only`` narrows that to the keys given (warming.missing(), say). The coming
     soon sets go first: the home page's Coming soon rows are made from them. A list another process is
-    building just then is left to it.
+    building just then is left to it. ``patient`` (the reader while the processors are busy) builds only what
+    cannot wait (listcache.entry_due).
     """
     from catalogue.signals import (
         BEST_CACHE_KEY, COMING_SOON_CACHE_KEY, DEALS_CACHE_KEY, HOME_CACHE_KEY, HOME_DROPS_CACHE_KEY, NEW_CACHE_KEY,
@@ -80,7 +83,7 @@ def warm_pages(fresh=False, only=None):
     from web import feed, views
 
     games = active_games()
-    wanted = set(cached_keys(games) if fresh else due(games))
+    wanted = set(cached_keys(games) if fresh else due(games, patient=patient))
     if only is not None:
         wanted &= set(only)
     candidates = views.shared_candidates()   # the home and Deals lists pick from the same offers, read once

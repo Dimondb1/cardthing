@@ -4,7 +4,8 @@
 # cron reads the shops instead (import_prices --if-worker-dead 30). Its log: journalctl -u ripraptor-worker
 # install.sh copies this file on every update, so change nothing here by hand: the number of jobs it runs at
 # once is RIPRAPTOR_WORKER_THREADS in .env (3 unless set; install.sh writes 2 on a server with under 1.5 GB of memory
-# and takes it out again once the server is resized past that).
+# and takes it out again once the server is resized past that), and its processor ceiling is
+# RIPRAPTOR_WORKER_CPU_PERCENT there (CPUQuota below).
 [Unit]
 Description=RipRaptor background reader
 After=network.target
@@ -42,6 +43,13 @@ Nice=10
 # (the site's default weight is 100). With the processors free, the reader still uses them all. It also reads one
 # shop at a time while they are busy (catalogue/server_health.py).
 CPUWeight=20
+# And a ceiling it cannot pass even when the processors are free: half of one processor, a quarter of a server
+# with two (the percent is of one processor). The weight above only shares the processors out when both want them,
+# so a free server let the reader fill them. The owner, 28 Nov 2026, with a second processor added: "here we are cpu
+# sitting at 99 percent again". Reading shops is mostly waiting for them to answer, so it reads as many as before;
+# the heavy work between reads (the page lists, catalogue/worker.py keep_pages_warm) takes a little longer.
+# RIPRAPTOR_WORKER_CPU_PERCENT in .env sets another figure at the next update (install.sh).
+CPUQuota=50%
 KillSignal=SIGINT
 TimeoutStopSec=60
 

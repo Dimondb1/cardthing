@@ -64,6 +64,7 @@ Everything takes an injected clock, sleep and fetch, and run_once() does one pla
 calling thread, so the tests need no threads and no waiting.
 """
 
+import contextlib
 import fcntl
 import logging
 import os
@@ -180,6 +181,19 @@ FREE_EVERY = timedelta(seconds=60)
 # then again this often. A shorter wait is the lock's ordinary turn-taking and is not worth a line.
 LOCK_WAIT_SAID_AFTER = timedelta(minutes=5)
 LOCK_WAIT_SAID_EVERY = timedelta(minutes=10)
+
+# What the reader's own processor time went on (Worker.spent), by kind of work, in the order Server health lists
+# them. The owner, 28 Nov 2026, of a server with a second processor: "here we are cpu sitting at 99 percent again".
+# Measured then on a full-size copy, over four fifths of the reader's processor time was building page lists, which
+# no page could show: the server's samples only said "the background reader".
+READS, CHECKS, LISTS, PLANNING, UPKEEP = "reads", "checks", "page_lists", "planning", "upkeep"
+WORK = {
+    READS: "Reading shops",
+    CHECKS: "Stock checks, pre-order looks and other short jobs",
+    LISTS: "Building the page lists",
+    PLANNING: "Planning what to read",
+    UPKEEP: "Upkeep (heartbeat, samples, dashboard, visits)",
+}
 
 MARKETPLACES = (Retailer.Source.EBAY, Retailer.Source.AMAZON)
 # (requests a second, burst) per shop, by how the shop is read. Marketplaces have their own allowance code.
@@ -634,6 +648,29 @@ class Worker:
         self.last_start = None
         self.last_end = None
         self.last_kind = ""
+        # Seconds of this process's own processor time by kind of work (WORK) since the last sample took them.
+        self.work = dict.fromkeys(WORK, 0.0)
+
+    # What the processor time went on ----------------------------------------------------------
+
+    @contextlib.contextmanager
+    def spent(self, kind):
+        """Count the calling thread's processor time inside the block under ``kind`` (WORK). The time a thread
+        waits (for a shop to answer, for its turn) is not processor time and is not counted."""
+        started = time.thread_time()
+        try:
+            yield
+        finally:
+            used = time.thread_time() - started
+            with self.lock:
+                self.work[kind] = self.work.get(kind, 0.0) + used
+
+    def take_work(self):
+        """{kind: seconds of processor time} since the last take, the kinds that used none left out; then start
+        counting afresh."""
+        with self.lock:
+            taken, self.work = self.work, dict.fromkeys(WORK, 0.0)
+        return {kind: round(seconds, 2) for kind, seconds in taken.items() if seconds >= 0.005}
 
     # Planning ---------------------------------------------------------------------------------
 
@@ -983,16 +1020,17 @@ class Worker:
     def run_job(self, job):
         task = job.task
         try:
-            if task.kind == SHOP_READ:
-                ok = self.read_shop(job)
-            elif task.kind == PULSE:
-                ok = self.pulse_shop(job)
-            elif task.kind == FINDER:
-                ok = self.find_stockists(job)
-            elif task.kind == RELEASE_SCAN:
-                ok = self.scan_release(job)
-            else:
-                ok = self.probe_shop(job)
+            with self.spent(READS if task.kind == SHOP_READ else CHECKS):
+                if task.kind == SHOP_READ:
+                    ok = self.read_shop(job)
+                elif task.kind == PULSE:
+                    ok = self.pulse_shop(job)
+                elif task.kind == FINDER:
+                    ok = self.find_stockists(job)
+                elif task.kind == RELEASE_SCAN:
+                    ok = self.scan_release(job)
+                else:
+                    ok = self.probe_shop(job)
             if not ok:
                 self.note_error()
         except Exception as exc:  # noqa: BLE001 - one job going wrong must not stop the worker
@@ -1286,29 +1324,32 @@ class Worker:
         The heartbeat and the deadlines come first, so a planning pass that fails (a busy database, a bad
         row) neither silences the watchdog nor lets a stuck job hide.
         """
-        if self.last_beat is None or now - self.last_beat >= BEAT_EVERY:
-            self.beat(now)
-        self.check_deadlines(now)
-        self.keep_memory_down(now)
-        self.watch_processors(now)
-        self.keep_server_sampled(now)
+        with self.spent(UPKEEP):
+            if self.last_beat is None or now - self.last_beat >= BEAT_EVERY:
+                self.beat(now)
+            self.check_deadlines(now)
+            self.keep_memory_down(now)
+            self.watch_processors(now)
+            self.keep_server_sampled(now)
         try:
-            if self.held_since is None and (self.last_plan is None or now - self.last_plan >= PLAN_EVERY):
-                self.last_plan = now
-                self.queue = self.plan(now)
-                planned = True
-            else:
-                planned = False
-            self.dispatch(now)
+            with self.spent(PLANNING):
+                if self.held_since is None and (self.last_plan is None or now - self.last_plan >= PLAN_EVERY):
+                    self.last_plan = now
+                    self.queue = self.plan(now)
+                    planned = True
+                else:
+                    planned = False
+                self.dispatch(now)
         except Exception:  # noqa: BLE001 - tried again on the next turn
             logger.exception("The planning pass failed")
             return
         if planned:
             self.notify_safely(now)
-        self.keep_pages_warm(now)
-        self.keep_dashboard_warm(now)
-        self.keep_visits_tidy(now)
-        self.keep_shops_checked(now)
+        self.keep_pages_warm(now)   # counted as building the page lists (LISTS), inside
+        with self.spent(UPKEEP):
+            self.keep_dashboard_warm(now)
+            self.keep_visits_tidy(now)
+            self.keep_shops_checked(now)
 
     def watch_processors(self, now):
         """Every turn: how busy the processors are over the settings' window (the meter), whether new jobs are held
@@ -1358,7 +1399,7 @@ class Worker:
                 jobs = len(self.running)
             server_health.save(reading, now, held=self.held_since is not None, jobs=jobs,
                                shop_requests=self.politeness.requests_since(server_health.SAMPLE_EVERY.total_seconds()),
-                               pages=response_times.collect())
+                               pages=response_times.collect(), reader_work=self.take_work())
             if self.last_prune is None or now - self.last_prune >= server_health.PRUNE_EVERY:
                 self.last_prune = now
                 server_health.prune(now)
@@ -1455,22 +1496,26 @@ class Worker:
             self.shop_thread.start()
 
     def keep_pages_warm(self, now):
-        """Build the cached page lists that are due (cleared by a job's price changes, missing, or nearly
-        RIPRAPTOR_HOME_CACHE_SECONDS old) and replace them in place, so visitors are served a copy while
-        the new one is built and find it fresh soon after. Runs on the main loop, never in a reading thread,
-        and a failure only waits for the next turn: visitors are served the copy they have meanwhile, and
-        build one themselves only when there is none or it passed RIPRAPTOR_LIST_MAX_STALE_SECONDS."""
+        """Build the cached page lists that are due and replace them in place, so visitors are served a copy while
+        the new one is built. Building them all is seconds of processor time, the heaviest thing the reader does, so
+        it is done on a budget: it looks every WARM_CHECK; a list background work changed is due once its copy is
+        RIPRAPTOR_LIST_REBUILD_SECONDS old, however many jobs finished meanwhile (web.listcache.entry_due); and while
+        new jobs are held for the processors it builds only what cannot wait (``patient``). The owner's own edit and
+        a missing list are built at the next turn. Runs on the main loop, never in a reading thread, and a failure
+        only waits for the next turn: visitors are served the copy they have meanwhile, and build one themselves
+        only when there is none or it passed RIPRAPTOR_LIST_MAX_STALE_SECONDS."""
         if not self.warm:
             return
         from web import listcache, warming
 
         try:
-            forced = listcache.cleared().get("forced_at")   # a hard clear raises it too
+            hard = listcache.cleared().get("hard_at")   # the owner's own edit: built at once
             looked_lately = self.last_warm is not None and now - self.last_warm < WARM_CHECK
-            if looked_lately and forced == self.warm_forced and not warming.missing():
+            if looked_lately and hard == self.warm_forced and not warming.missing():
                 return
-            warming.warm_pages()
-            self.last_warm, self.warm_forced = now, forced
+            with self.spent(LISTS):
+                warming.warm_pages(patient=self.held_since is not None)
+            self.last_warm, self.warm_forced = now, hard
         except Exception:  # noqa: BLE001 - tried again on the next turn
             logger.exception("Could not build the cached page lists")
 

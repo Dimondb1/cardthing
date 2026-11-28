@@ -303,6 +303,8 @@ systemctl reload caddy
 # The alerts start at 3 past the tens and the judge at 2 past the fives, so no more than two of these
 # Django processes start in the same minute: on 14 Oct 2026 three at once beside the reader and the
 # site ran a 1 GB server out of memory.
+# Every command runs at a lower priority than the website (RIPRAPTOR_NICE, read as each command starts), so a visitor's
+# page is served first when a scheduled job and the website both want a processor.
 # Every command runs under timeout, set to its budget plus five minutes: a command that hangs
 # while holding a lock would otherwise make every later run behind it give up silently.
 # The snapshot, the delivery check and tidy_all put timeout inside flock, so time spent waiting
@@ -314,6 +316,7 @@ systemctl reload caddy
 # Claude looks for the RRPs of products without one daily at 7:15, on its own lock (find_rrps).
 # deploy/crontab carries the same lines; catalogue/tests_ops.py fails when they differ.
 echo "PYTHONUNBUFFERED=1
+RIPRAPTOR_NICE=10
 0 * * * *  cd $DIR && set -a && . ./.env && set +a && timeout -k 60 3300 flock -w 1800 /tmp/ripraptor-import.lock .venv/bin/python manage.py import_prices --due --if-worker-dead 30 >> /var/log/ripraptor-import.log 2>&1
 5 * * * *  cd $DIR && set -a && . ./.env && set +a && flock -n /tmp/ripraptor-tidy.lock flock -w 1800 /tmp/ripraptor-import.lock timeout -k 60 1500 .venv/bin/python manage.py tidy_all >> /var/log/ripraptor-import.log 2>&1
 15 0 * * * cd $DIR && set -a && . ./.env && set +a && flock /tmp/ripraptor-import.lock timeout -k 60 1800 .venv/bin/python manage.py snapshot_daily_prices >> /var/log/ripraptor-import.log 2>&1
@@ -341,6 +344,15 @@ touch /var/log/ripraptor-import.log && chown ripraptor /var/log/ripraptor-import
 # The background reader. A shop never read before has no next read, so on its first start it reads
 # every shop; nothing else needs starting. It is restarted after the code and the cache are updated.
 cp deploy/ripraptor-worker.service /etc/systemd/system/ripraptor-worker.service
+# The reader's processor ceiling (CPUQuota in the unit: 50, half of one processor, unless .env says otherwise).
+# RIPRAPTOR_WORKER_CPU_PERCENT is a whole number of percent of one processor, 10 to 400; anything else is left out.
+WORKER_CPU="$(env_value RIPRAPTOR_WORKER_CPU_PERCENT)"
+case "$WORKER_CPU" in
+  ''|*[!0-9]*) ;;
+  *) if [ "$WORKER_CPU" -ge 10 ] && [ "$WORKER_CPU" -le 400 ]; then
+       sed -i "s/^CPUQuota=.*/CPUQuota=${WORKER_CPU}%/" /etc/systemd/system/ripraptor-worker.service
+     fi ;;
+esac
 systemctl daemon-reload
 systemctl enable -q ripraptor-worker
 systemctl restart ripraptor-worker
@@ -352,3 +364,4 @@ echo "  cd $DIR && sudo -u ripraptor bash -c 'set -a; . ./.env; set +a; .venv/bi
 echo "Prices are being read now; watch with: journalctl -fu ripraptor-worker"
 RIPRAPTOR_WORKER_THREADS="$(env_value RIPRAPTOR_WORKER_THREADS)"
 echo "The background reader runs ${RIPRAPTOR_WORKER_THREADS:-4} jobs at once on this server's $(( $(awk '/^MemTotal:/ {print $2}' /proc/meminfo) / 1024 )) MB of memory."
+echo "It may use up to $(sed -n 's/^CPUQuota=//p' /etc/systemd/system/ripraptor-worker.service) of one of this server's $(nproc) processors."

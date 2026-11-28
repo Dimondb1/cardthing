@@ -6,6 +6,12 @@ minute (catalogue/server_health.py, catalogue/response_times.py) and its last he
 editors. The owner, 25 Nov 2026: "the server is running at 99% cpu how do we ensure that we monitor this from the
 ripraptor admin"; 26 Nov 2026: "historical CPU usage, scraping activity and website response times".
 
+It also says what the reader's own processor time went on, by kind of work (reading shops, stock checks, building the
+page lists, planning, upkeep: Worker.spent), what the hourly tidy's last run cost step by step (tidy_all keeps its
+figures in the cache), and the log gives each ten minutes' share by program, so a busy spell can be put down to the
+reader, the website or a scheduled job after the fact. The owner, 28 Nov 2026, of a server
+with a second processor: "here we are cpu sitting at 99 percent again"; the log then could not say who.
+
 Six queries: the latest sample, the last 24 hours, two for how long the processors have been busy, the crawler settings
 and the reader's heartbeat.
 """
@@ -46,10 +52,13 @@ class Slot:
         self.cpu_total, self.peak = 0.0, 0.0
         self.pages, self.page_ms_total, self.slowest, self.slow = 0, 0, 0, 0
         self.requests, self.held, self.most_jobs = 0, 0, 0
+        self.programs = {}   # program -> its shares added up, for share()
 
-    def add(self, cpu, held, jobs, shop_requests, pages, page_ms, slowest, slow):
+    def add(self, cpu, held, jobs, shop_requests, pages, page_ms, slowest, slow, programs=None):
         self.samples += 1
         self.cpu_total += cpu
+        for name, share in (programs or {}).items():
+            self.programs[name] = self.programs.get(name, 0.0) + share
         self.peak = max(self.peak, cpu)
         self.held += bool(held)
         self.most_jobs = max(self.most_jobs, jobs)
@@ -73,6 +82,10 @@ class Slot:
     def requests_a_minute(self):
         return self.requests / self.samples if self.samples else None
 
+    def share(self, program):
+        """The program's average share of all the processors over the slot, in percent."""
+        return self.programs.get(program, 0.0) / self.samples if self.samples else 0.0
+
     def label(self):
         return f"{timezone.localtime(self.start):%H:%M} to {timezone.localtime(self.start + SLOT):%H:%M}"
 
@@ -81,11 +94,28 @@ def slots(rows, now):
     """The last 24 hours in SLOT steps, oldest first. ``rows`` as server_page reads them."""
     start = now - DAY
     found = [Slot(start + SLOT * i) for i in range(int(DAY / SLOT))]
-    for at, cpu, _programs, held, jobs, shop_requests, pages, page_ms, slowest, slow in rows:
+    for at, cpu, programs, held, jobs, shop_requests, pages, page_ms, slowest, slow, _work in rows:
         index = int((at - start) / SLOT)
         if 0 <= index < len(found):
-            found[index].add(cpu, held, jobs, shop_requests, pages, page_ms, slowest, slow)
+            found[index].add(cpu, held, jobs, shop_requests, pages, page_ms, slowest, slow, programs)
     return found
+
+
+def reader_work(samples):
+    """[(words, seconds of processor time a minute, percent of the reader's own)] for each kind of work the reader
+    did over ``samples`` (each a sample's reader_work), the most first; [] when none of them carries any."""
+    from catalogue.worker import WORK
+
+    counted = [work for work in samples if work]
+    totals = {}
+    for work in counted:
+        for kind, seconds in work.items():
+            totals[kind] = totals.get(kind, 0.0) + seconds
+    whole = sum(totals.values())
+    if not whole:
+        return []
+    return [(WORK.get(kind, kind), seconds / len(counted), seconds * 100 / whole)
+            for kind, seconds in sorted(totals.items(), key=lambda item: -item[1])]
 
 
 def rounded_up(value, step):
@@ -163,6 +193,34 @@ def hourly(day_slots):
     return found
 
 
+def minutes_and_seconds(seconds):
+    """How long, in words: "45 seconds", "12 minutes 4 seconds"."""
+    whole = max(0, int(round(seconds)))
+    parts = [(whole // 60, "minute"), (whole % 60, "second")]
+    return " ".join(f"{number} {unit}{'' if number == 1 else 's'}" for number, unit in parts if number) or "0 seconds"
+
+
+def tidy_run(now):
+    """The hourly tidy's last run (tidy_all keeps its figures in the cache), for the page: when it ended, how long
+    it took, its processor seconds and its steps, the heaviest first, those under half a second left out. None
+    when none is kept."""
+    from datetime import datetime
+
+    from catalogue.management.commands.tidy_all import last_run
+
+    kept = last_run()
+    if kept is None:
+        return None
+    try:
+        at = datetime.fromisoformat(kept["at"])
+        steps = sorted(((str(name), float(seconds)) for name, seconds in kept["steps"]), key=lambda step: -step[1])
+        return {"at": clock(at, now), "took": minutes_and_seconds(float(kept["seconds"])),
+                "cpu": minutes_and_seconds(float(kept["cpu"])), "cpu_seconds": float(kept["cpu"]),
+                "steps": [(name, seconds) for name, seconds in steps if seconds >= 0.5]}
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
 def state_for(latest, busy, now, controls):
     if latest is None:
         return "none"
@@ -175,7 +233,7 @@ def state_for(latest, busy, now, controls):
     return "ok"
 
 
-def log_text(now, state, latest, busy, using, day_slots, controls, reader):
+def log_text(now, state, latest, busy, using, day_slots, controls, reader, work=(), tidy=None):
     """Everything on the page as plain text, to paste into a message."""
     lines = [f"Server health at {timezone.localtime(now):%d %b %Y %H:%M} (UK time)", f"State: {state}",
              f"Crawler settings: {controls.summary()}"]
@@ -192,13 +250,22 @@ def log_text(now, state, latest, busy, using, day_slots, controls, reader):
         lines.append(f"Busy for {busy.minutes} minutes, since {clock(busy.since, now)}")
     if using:
         lines.append("Last 15 minutes, by program: " + "; ".join(f"{words} {share:.1f}%" for words, share in using))
+    if work:
+        lines.append("Last 15 minutes, the reader's own processor time by kind of work, seconds a minute: "
+                     + "; ".join(f"{words} {seconds:.1f} ({share:.0f}%)" for words, seconds, share in work))
+    if tidy:
+        lines.append(f"Hourly tidy, last run ended {tidy['at']}: took {tidy['took']}, {tidy['cpu_seconds']:.0f} "
+                     "seconds of processor time; by step, seconds: "
+                     + ("; ".join(f"{name} {seconds:.0f}" for name, seconds in tidy["steps"]) or "none over half a second"))
     lines.append("Last 24 hours, 10 minutes a line: processors average and peak %, pages and their average ms, "
-                 "requests to shops a minute, minutes held")
+                 "requests to shops a minute, minutes held, then the share of the processors by program: reader %, "
+                 "website %, scheduled jobs %")
     for slot in day_slots:
         if slot.samples:
             lines.append(f"  {timezone.localtime(slot.start):%d %b %H:%M}  {slot.average:5.1f}  {slot.peak:5.1f}  "
                          f"{slot.pages:5d}  {slot.page_ms if slot.page_ms is not None else '-':>5}  "
-                         f"{slot.requests_a_minute:5.1f}  {slot.held:2d}")
+                         f"{slot.requests_a_minute:5.1f}  {slot.held:2d}  {slot.share(server_health.READER):5.1f}  "
+                         f"{slot.share(server_health.WEBSITE):5.1f}  {slot.share(server_health.JOBS):5.1f}")
     return "\n".join(lines)
 
 
@@ -232,13 +299,15 @@ def server_page(request):
     latest = ServerSample.objects.order_by("-at").first()
     rows = list(ServerSample.objects.filter(at__gte=now - DAY, at__lte=now).order_by("at")
                 .values_list("at", "cpu", "programs", "held", "jobs", "shop_requests", "pages", "page_ms",
-                             "page_ms_slowest", "pages_slow"))
+                             "page_ms_slowest", "pages_slow", "reader_work"))
     controls = CrawlerSettings.current()
     reader = reader_now(WorkerState.current(), controls, now)
     busy = server_health.busy_now(now) if latest is not None and now - latest.at <= STALE else None
     state = state_for(latest, busy, now, controls)
     recent = [row[2] for row in rows if row[0] >= now - RECENT]
     using = server_health.top_programs(averaged(recent), least=0.1)
+    work = reader_work([row[10] for row in rows if row[0] >= now - RECENT])
+    tidy = tidy_run(now)
     day_slots = slots(rows, now)
     peak = max((row[1] for row in rows), default=None)
     response = render(request, "admin/server_health.html", {
@@ -251,6 +320,8 @@ def server_page(request):
         "busy": busy,
         "busy_since": clock(busy.since, now) if busy else "",
         "using": using,
+        "work": work,
+        "tidy": tidy,
         "charts": charts(day_slots, controls),
         "hours": hourly(day_slots),
         "peak": peak,
@@ -260,7 +331,7 @@ def server_page(request):
         "busy_percent": server_health.BUSY_PERCENT,
         "busy_minutes": int(server_health.BUSY_FOR.total_seconds() // 60),
         "keep_days": server_health.KEEP_DAYS,
-        "log": log_text(now, state, latest, busy, using, day_slots, controls, reader),
+        "log": log_text(now, state, latest, busy, using, day_slots, controls, reader, work, tidy),
     })
     response["Cache-Control"] = "private, no-store"
     response["X-Robots-Tag"] = "noindex, nofollow"
